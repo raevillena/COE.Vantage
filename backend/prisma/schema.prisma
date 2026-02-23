@@ -1,0 +1,151 @@
+// COE.Vantage - Faculty Load Scheduling System
+// PostgreSQL with UUID primary keys
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DEAN
+  CHAIRMAN
+  FACULTY
+  OFFICER
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  role         Role
+  departmentId String?
+  name         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  department Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyLoads FacultyLoad[]
+
+  @@index([role, departmentId])
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String
+  code      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  rooms        Room[]
+  curricula    Curriculum[]
+  subjects     Subject[]
+}
+
+model Room {
+  id           String   @id @default(uuid())
+  name         String
+  capacity     Int
+  hasComputer  Boolean  @default(false)
+  isLab        Boolean  @default(false)
+  hasAC        Boolean  @default(false)
+  departmentId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  facultyLoads FacultyLoad[]
+
+  @@index([departmentId])
+  @@index([departmentId, isLab, capacity])
+}
+
+model AcademicYear {
+  id        String   @id @default(uuid())
+  name      String   // e.g. "2025-2026"
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  facultyLoads FacultyLoad[]
+}
+
+model Curriculum {
+  id           String   @id @default(uuid())
+  name         String
+  code         String?
+  departmentId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department    Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  subjects      Subject[]
+  studentClasses StudentClass[]
+}
+
+model Subject {
+  id           String   @id @default(uuid())
+  code         String
+  name         String
+  units        Int
+  isLab        Boolean  @default(false)
+  curriculumId String?
+  departmentId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  curriculum    Curriculum?  @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+  department    Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyLoads  FacultyLoad[]
+}
+
+model StudentClass {
+  id           String   @id @default(uuid())
+  name         String   // e.g. BSCE-3A
+  yearLevel    Int
+  curriculumId String
+  studentCount Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  curriculum   Curriculum   @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  facultyLoads FacultyLoad[]
+
+  @@index([curriculumId])
+}
+
+// dayOfWeek: 1 = Monday, 7 = Saturday (ISO); or 0-6 in some systems - we use 1-7
+// startTime/endTime: "HH:mm" e.g. "08:00", "09:30"
+model FacultyLoad {
+  id              String   @id @default(uuid())
+  facultyId       String
+  subjectId       String
+  studentClassId String
+  roomId          String
+  dayOfWeek       Int      // 1 = Mon .. 7 = Sat (or 0-6; we use 1-7 for display)
+  startTime       String   // "HH:mm"
+  endTime         String   // "HH:mm"
+  semester        Int      // 1 or 2
+  academicYearId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  faculty      User         @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentClass StudentClass @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
+  room         Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@index([roomId])
+  @@index([studentClassId])
+  @@index([academicYearId])
+  @@index([roomId, dayOfWeek, academicYearId, semester])
+  @@index([facultyId, dayOfWeek, academicYearId, semester])
+  @@index([studentClassId, dayOfWeek, academicYearId, semester])
+}
