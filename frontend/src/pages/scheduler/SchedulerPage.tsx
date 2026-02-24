@@ -3,7 +3,7 @@ import { DndContext, DragOverlay } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, StudentClass, Room } from "../../types/api";
-import type { SubjectDragItem } from "../../components/scheduler/schedulerTypes";
+import type { SubjectDragItem, LoadDragItem } from "../../components/scheduler/schedulerTypes";
 import type { AssignmentFormValues } from "../../components/scheduler/AssignmentForm";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { CurriculumSubjectTree } from "../../components/scheduler/CurriculumSubjectTree";
@@ -48,6 +48,7 @@ export function SchedulerPage() {
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<SubjectDragItem | null>(null);
+  const [activeDragLoad, setActiveDragLoad] = useState<FacultyLoad | null>(null);
   const [overSlotId, setOverSlotId] = useState<string | null>(null);
   const [pendingAssignment, setPendingAssignment] = useState<PendingAssignment | null>(null);
   const [editingLoadId, setEditingLoadId] = useState<string | null>(null);
@@ -92,6 +93,16 @@ export function SchedulerPage() {
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data));
   }, [academicYearId, semester, viewMode, studentClassId, selectedFacultyId]);
 
+  const refreshRoomLoads = useCallback(() => {
+    if (!academicYearId || !selectedRoomId) return;
+    setRoomLoadsLoading(true);
+    const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: selectedRoomId });
+    apiClient
+      .get<FacultyLoad[]>(`/faculty-loads?${params}`)
+      .then(({ data }) => setRoomLoads(data))
+      .finally(() => setRoomLoadsLoading(false));
+  }, [academicYearId, semester, selectedRoomId]);
+
   useEffect(() => {
     if (!academicYearId) {
       setLoads([]);
@@ -121,19 +132,47 @@ export function SchedulerPage() {
   const handleDragEnd = (event: DragEndEvent) => {
     setIsDragging(false);
     setActiveDragItem(null);
+    setActiveDragLoad(null);
     setOverSlotId(null);
     const { active, over } = event;
     if (!over?.id || typeof over.id !== "string") return;
-    const subjectData = active.data.current as SubjectDragItem | undefined;
-    if (!subjectData || subjectData.type !== "subject") return;
     const slot = parseSlotId(over.id);
     if (!slot) return;
+
+    const data = active.data.current as SubjectDragItem | LoadDragItem | undefined;
+    if (data?.type === "load") {
+      const startTime = hourToTimeString(slot.hour);
+      const endTime = hourToTimeString(slot.hour + 1);
+      const load = data.load;
+      apiClient
+        .patch(`/faculty-loads/${load.id}`, {
+          facultyId: load.facultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: load.roomId,
+          dayOfWeek: slot.dayOfWeek,
+          startTime,
+          endTime,
+          semester,
+          academicYearId,
+        })
+        .then(() => {
+          refreshLoads();
+          refreshRoomLoads();
+          setEditingLoadId(null);
+          toast.success("Assignment moved");
+        })
+        .catch(() => toast.error("Failed to move"));
+      return;
+    }
+
+    if (data?.type !== "subject") return;
     const startTime = hourToTimeString(slot.hour);
     const endTime = hourToTimeString(slot.hour + 1);
     setPendingAssignment({
-      subjectId: subjectData.subjectId,
-      subjectCode: subjectData.code,
-      subjectName: subjectData.name,
+      subjectId: data.subjectId,
+      subjectCode: data.code,
+      subjectName: data.name,
       studentClassId: viewMode === "class" ? studentClassId : undefined,
       dayOfWeek: slot.dayOfWeek,
       startTime,
@@ -144,9 +183,17 @@ export function SchedulerPage() {
 
   const handleDragStart = (event: DragStartEvent) => {
     setIsDragging(true);
-    const data = event.active.data.current as SubjectDragItem | undefined;
-    if (data?.type === "subject") setActiveDragItem(data);
-    else setActiveDragItem(null);
+    const data = event.active.data.current as SubjectDragItem | LoadDragItem | undefined;
+    if (data?.type === "subject") {
+      setActiveDragItem(data);
+      setActiveDragLoad(null);
+    } else if (data?.type === "load") {
+      setActiveDragLoad(data.load);
+      setActiveDragItem(null);
+    } else {
+      setActiveDragItem(null);
+      setActiveDragLoad(null);
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -158,8 +205,58 @@ export function SchedulerPage() {
   const handleDragCancel = () => {
     setIsDragging(false);
     setActiveDragItem(null);
+    setActiveDragLoad(null);
     setOverSlotId(null);
   };
+
+  const handleLoadMove = useCallback(
+    (load: FacultyLoad, payload: { dayOfWeek: number; startTime: string; endTime: string }) => {
+      apiClient
+        .patch(`/faculty-loads/${load.id}`, {
+          facultyId: load.facultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: load.roomId,
+          dayOfWeek: payload.dayOfWeek,
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          semester,
+          academicYearId,
+        })
+        .then(() => {
+          refreshLoads();
+          refreshRoomLoads();
+          setEditingLoadId(null);
+          toast.success("Assignment moved");
+        })
+        .catch(() => toast.error("Failed to move"));
+    },
+    [academicYearId, semester, refreshLoads, refreshRoomLoads]
+  );
+
+  const handleLoadResize = useCallback(
+    (load: FacultyLoad, payload: { startTime: string; endTime: string }) => {
+      apiClient
+        .patch(`/faculty-loads/${load.id}`, {
+          facultyId: load.facultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: load.roomId,
+          dayOfWeek: load.dayOfWeek,
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          semester,
+          academicYearId,
+        })
+        .then(() => {
+          refreshLoads();
+          refreshRoomLoads();
+          toast.success("Time updated");
+        })
+        .catch(() => toast.error("Failed to resize"));
+    },
+    [academicYearId, semester, refreshLoads, refreshRoomLoads]
+  );
 
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
   const assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
@@ -303,7 +400,7 @@ export function SchedulerPage() {
               {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground mb-2">Class schedule</h2>}
               {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground mb-2">Faculty schedule</h2>}
             </div>
-            <div className="min-h-0 flex flex-col overflow-hidden">
+            <div className="min-h-0 flex flex-col overflow-hidden w-full min-w-[800px]">
               {loading ? (
                 <div className="flex-1 flex items-center justify-center rounded border border-border bg-surface" aria-busy="true">
                   <Spinner />
@@ -315,8 +412,8 @@ export function SchedulerPage() {
                   </p>
                 </div>
               ) : (
-                <div className="flex-1 overflow-x-auto relative min-h-0">
-                  <div className="relative min-w-[800px] inline-block">
+                <div className="shrink-0 h-[28rem] w-full overflow-x-auto overflow-y-hidden relative">
+                  <div className="relative min-w-[800px] w-full inline-block">
                     <ScheduleGrid
                       loads={loads}
                       wrapInScroll={false}
@@ -326,6 +423,8 @@ export function SchedulerPage() {
                         setEditingLoadId(load.id);
                         setPendingAssignment(null);
                       }}
+                      onLoadMove={academicYearId ? handleLoadMove : undefined}
+                      onLoadResize={academicYearId ? handleLoadResize : undefined}
                     />
                     <ScheduleSlotOverlay
                       active={isDragging}
@@ -373,11 +472,11 @@ export function SchedulerPage() {
                 </div>
               )}
 
-              {/* Room availability: preview assignments for selected room (same year/semester as main schedule) */}
+              {/* Room availability: scrolls when content is long; main class table above has fixed height */}
               {academicYearId && (
-                <div className="shrink-0 border-t border-border pt-3 mt-3">
-                  <h3 className="text-sm font-semibold text-foreground mb-2">Room availability</h3>
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                <div className="flex-1 min-h-0 flex flex-col border-t border-border pt-3 mt-3 overflow-hidden w-full">
+                  <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Room availability</h3>
+                  <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
                     <div className="min-w-[200px]">
                       <label className="sr-only">Room</label>
                       <Select.Root
@@ -405,7 +504,7 @@ export function SchedulerPage() {
                     )}
                   </div>
                   {selectedRoomId && (
-                    <div className="rounded border border-border bg-surface overflow-x-auto">
+                    <div className="flex-1 min-h-0 w-full rounded border border-border bg-surface overflow-auto">
                       {roomLoadsLoading ? (
                         <div className="flex items-center justify-center py-12" aria-busy="true">
                           <Spinner />
@@ -440,6 +539,7 @@ export function SchedulerPage() {
                   editingLoadId={editingLoadId ?? undefined}
                   onSaved={() => {
                     refreshLoads();
+                    refreshRoomLoads();
                     clearAssignmentPanel();
                   }}
                   onCancel={clearAssignmentPanel}
@@ -451,7 +551,7 @@ export function SchedulerPage() {
           </aside>
         </div>
 
-        {/* Custom drag preview: shows the subject card under the cursor while dragging */}
+        {/* Custom drag preview: subject card (from curriculum) or load block (moving assignment) */}
         <DragOverlay dropAnimation={null}>
           {activeDragItem ? (
             <div
@@ -461,6 +561,22 @@ export function SchedulerPage() {
               <span className="font-medium truncate shrink-0">{activeDragItem.code}</span>
               <span className="truncate text-foreground-muted min-w-0">{activeDragItem.name}</span>
               {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
+            </div>
+          ) : activeDragLoad ? (
+            <div
+              className="rounded border-2 border-primary bg-surface px-2 py-1.5 text-xs text-foreground shadow-lg pointer-events-none min-w-[120px] max-w-[200px]"
+              aria-hidden
+            >
+              <div className="font-medium truncate">
+                {[activeDragLoad.subject?.code ?? "—", activeDragLoad.room?.name].filter(Boolean).join(" · ")}
+              </div>
+              {activeDragLoad.faculty?.name && (
+                <div className="truncate text-foreground-muted text-[10px]">
+                  {activeDragLoad.faculty.name.split(/\s+/).length > 1
+                    ? `${activeDragLoad.faculty.name.split(/\s+/)[0].charAt(0)}. ${activeDragLoad.faculty.name.split(/\s+/).pop()}`
+                    : activeDragLoad.faculty.name}
+                </div>
+              )}
             </div>
           ) : null}
         </DragOverlay>
@@ -473,6 +589,7 @@ export function SchedulerPage() {
           onClose={() => setAddModalOpen(false)}
           onSaved={() => {
             refreshLoads();
+            refreshRoomLoads();
             setAddModalOpen(false);
           }}
         />

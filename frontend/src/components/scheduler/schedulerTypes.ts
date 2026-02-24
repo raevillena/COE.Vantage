@@ -6,3 +6,11 @@ export interface SubjectDragItem {
   name: string;
   isLab: boolean;
 }
+
+import type { FacultyLoad } from "../../types/api";
+
+/** Payload when dragging an existing load block to move it to another slot. */
+export interface LoadDragItem {
+  type: "load";
+  load: FacultyLoad;
+}

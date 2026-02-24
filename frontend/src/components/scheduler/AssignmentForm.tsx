@@ -109,6 +109,43 @@ export function AssignmentForm({
   const roomOptions = selectedSubject?.isLab ? rooms.filter((r) => r.isLab) : rooms;
   const { hourStart, hourEnd } = useMemo(() => getCompactHourRange(facultyLoads), [facultyLoads]);
 
+  /** Run conflict preview whenever assignment fields change (auto-check for room/faculty/class conflicts). */
+  useEffect(() => {
+    if (!facultyId || !subjectId || !studentClassId || !roomId || !academicYearId) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setPreview(null);
+    const body = {
+      facultyId,
+      subjectId,
+      studentClassId,
+      roomId,
+      dayOfWeek,
+      startTime,
+      endTime,
+      semester,
+      academicYearId,
+      ...(editingLoadId ? { excludeLoadId: editingLoadId } : {}),
+    };
+    apiClient
+      .post<ConflictPreview>("/faculty-loads/preview", body)
+      .then(({ data }) => {
+        if (!cancelled) setPreview(data);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Conflict check failed");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [facultyId, subjectId, studentClassId, roomId, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId]);
+
   const runPreview = async () => {
     if (!facultyId || !subjectId || !studentClassId || !roomId) {
       toast.error("Fill all required fields");
@@ -302,6 +339,11 @@ export function AssignmentForm({
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
       </div>
+      {(loading && !preview) && (
+        <div className="rounded p-3 text-sm bg-surface-muted text-foreground-muted" role="status">
+          Checking room &amp; faculty conflicts…
+        </div>
+      )}
       {preview && (
         <div
           className={`rounded p-3 text-sm ${hasConflict ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`}
@@ -346,9 +388,6 @@ export function AssignmentForm({
       <div className="flex flex-wrap gap-2 pt-2">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
-        </Button>
-        <Button type="button" variant="secondary" onClick={runPreview} disabled={loading}>
-          Check conflicts
         </Button>
         <Button
           type="button"

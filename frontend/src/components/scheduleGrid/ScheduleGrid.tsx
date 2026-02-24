@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import type { FacultyLoad } from "../../types/api";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -51,6 +53,10 @@ function timeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
+function hourToTimeString(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 function overlaps(a: { startTime: string; endTime: string }, b: { startTime: string; endTime: string }): boolean {
   const aStart = timeToMinutes(a.startTime);
   const aEnd = timeToMinutes(a.endTime);
@@ -84,6 +90,118 @@ function assignLanes(dayLoads: FacultyLoad[]): Map<string, number> {
   return laneByLoadId;
 }
 
+interface ScheduleBlockProps {
+  load: FacultyLoad;
+  subjectIds: string[];
+  timeToPx: (time: string) => number;
+  isConflict: boolean;
+  selected: boolean;
+  hourStart: number;
+  hourEnd: number;
+  onLoadClick?: (load: FacultyLoad) => void;
+  onLoadMove?: (load: FacultyLoad, payload: LoadMovePayload) => void;
+  onLoadResize?: (load: FacultyLoad, payload: LoadResizePayload) => void;
+}
+
+function ScheduleBlock({
+  load,
+  subjectIds,
+  timeToPx,
+  isConflict,
+  selected,
+  hourStart,
+  hourEnd,
+  onLoadClick,
+  onLoadMove,
+  onLoadResize,
+}: ScheduleBlockProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `load-${load.id}`,
+    data: { type: "load" as const, load },
+    disabled: !onLoadMove,
+  });
+
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const column = (e.target as HTMLElement).closest("[data-day-column]") as HTMLElement | null;
+      if (!column || !onLoadResize) return;
+      const startHour = Math.floor(timeToMinutes(load.startTime) / 60);
+
+      const onMouseUp = (upEvent: MouseEvent) => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        const rect = column.getBoundingClientRect();
+        const relY = upEvent.clientY - rect.top;
+        const slotIndex = Math.round(relY / SLOT_HEIGHT);
+        const newEndHour = Math.max(startHour + 1, Math.min(hourEnd, hourStart + slotIndex));
+        const newEndTime = hourToTimeString(newEndHour);
+        if (newEndTime !== load.endTime) {
+          onLoadResize(load, { startTime: load.startTime, endTime: newEndTime });
+        }
+      };
+
+      const onMouseMove = () => {
+        // Optional: could show live preview; for now we only apply on mouseup
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    },
+    [load, hourStart, hourEnd, onLoadResize]
+  );
+
+  const startPx = timeToPx(load.startTime);
+  const endPx = timeToPx(load.endTime);
+  const durationPxVal = endPx - startPx;
+  const top = startPx + 1;
+  const height = Math.max(20, durationPxVal - 2);
+  const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
+  const facultyShort = formatFacultyShortName(load.faculty?.name);
+  const titleParts = [load.subject?.code ?? "—", load.room?.name ?? "", facultyShort, timeTooltip].filter(Boolean);
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(onLoadMove ? { ...attributes, ...listeners } : {})}
+      role={onLoadClick ? "button" : undefined}
+      tabIndex={onLoadClick ? 0 : undefined}
+      onClick={onLoadClick ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
+      onKeyDown={onLoadClick ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
+      title={titleParts.join(" · ")}
+      className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50" : ""}`}
+      style={{ top, height }}
+    >
+      <div className="font-medium truncate min-w-0">
+        {[load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ")}
+      </div>
+      {facultyShort ? <div className="truncate min-w-0 text-foreground-muted text-[10px]">{facultyShort}</div> : null}
+      {onLoadResize && height >= 24 && (
+        <div
+          data-resize-handle
+          className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize border-t border-white/30 hover:bg-white/20"
+          onMouseDown={handleResizeMouseDown}
+          aria-label="Resize time"
+        />
+      )}
+    </div>
+  );
+}
+
+/** New time slot when moving a load (e.g. drop on slot). */
+export interface LoadMovePayload {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+/** New time range when resizing a load. */
+export interface LoadResizePayload {
+  startTime: string;
+  endTime: string;
+}
+
 interface ScheduleGridProps {
   loads: FacultyLoad[];
   conflictLoadIds?: Set<string>;
@@ -93,6 +211,10 @@ interface ScheduleGridProps {
   wrapInScroll?: boolean;
   /** Called when a schedule block is clicked (e.g. to edit in right pane). */
   onLoadClick?: (load: FacultyLoad) => void;
+  /** When set, blocks are draggable to move to another slot; called with load and new slot. */
+  onLoadMove?: (load: FacultyLoad, payload: LoadMovePayload) => void;
+  /** When set, blocks show a resize handle; called with load and new start/end time. */
+  onLoadResize?: (load: FacultyLoad, payload: LoadResizePayload) => void;
   /** Optional time range so the grid only shows these hours (e.g. compact preview with no empty rows). */
   hourStart?: number;
   hourEnd?: number;
@@ -104,6 +226,8 @@ export function ScheduleGrid({
   selectedLoadId = null,
   wrapInScroll = true,
   onLoadClick,
+  onLoadMove,
+  onLoadResize,
   hourStart: hourStartProp,
   hourEnd: hourEndProp,
 }: ScheduleGridProps) {
@@ -139,6 +263,8 @@ export function ScheduleGrid({
           return (
             <div
               key={dayOfWeek}
+              data-day-column
+              data-hour-start={hourStart}
               className="grid border-r border-border gap-x-0.5"
               style={{
                 height: gridHeight,
@@ -148,38 +274,21 @@ export function ScheduleGrid({
             >
               {loadsByLane.map((laneLoads, laneIndex) => (
                 <div key={laneIndex} className="relative min-w-0 overflow-hidden">
-                  {laneLoads.map((load) => {
-                    const startPx = timeToPx(load.startTime);
-                    const endPx = timeToPx(load.endTime);
-                    const durationPxVal = endPx - startPx;
-                    const top = startPx + 1;
-                    const height = Math.max(20, durationPxVal - 2);
-                    const isConflict = conflictLoadIds.has(load.id);
-                    const selected = selectedLoadId === load.id;
-                    const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
-                    const facultyShort = formatFacultyShortName(load.faculty?.name);
-                    const titleParts = [load.subject?.code ?? "—", load.room?.name ?? "", facultyShort, timeTooltip].filter(Boolean);
-                    return (
-                      <div
-                        key={load.id}
-                        role={onLoadClick ? "button" : undefined}
-                        tabIndex={onLoadClick ? 0 : undefined}
-                        onClick={onLoadClick ? () => onLoadClick(load) : undefined}
-                        onKeyDown={onLoadClick ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
-                        title={titleParts.join(" · ")}
-                        className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""}`}
-                        style={{
-                          top,
-                          height,
-                        }}
-                      >
-                        <div className="font-medium truncate min-w-0">
-                          {[load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ")}
-                        </div>
-                        {facultyShort ? <div className="truncate min-w-0 text-foreground-muted text-[10px]">{facultyShort}</div> : null}
-                      </div>
-                    );
-                  })}
+                  {laneLoads.map((load) => (
+                    <ScheduleBlock
+                      key={load.id}
+                      load={load}
+                      subjectIds={subjectIds}
+                      timeToPx={timeToPx}
+                      isConflict={conflictLoadIds.has(load.id)}
+                      selected={selectedLoadId === load.id}
+                      hourStart={hourStart}
+                      hourEnd={hourEnd}
+                      onLoadClick={onLoadClick}
+                      onLoadMove={onLoadMove}
+                      onLoadResize={onLoadResize}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
