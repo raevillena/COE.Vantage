@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { StudentClass } from "../../types/api";
 import toast from "react-hot-toast";
+import { Dialog } from "../../components/ui/dialog";
+import { Button } from "../../components/ui/button";
+import { Select } from "../../components/ui/select";
+import { DropdownMenu } from "../../components/ui/dropdownMenu";
+import { Spinner } from "../../components/ui/spinner";
 
 export function StudentClassesPage() {
   const [list, setList] = useState<StudentClass[]>([]);
@@ -10,6 +15,8 @@ export function StudentClassesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", yearLevel: 1, curriculumId: "", studentCount: 0 });
   const [curricula, setCurricula] = useState<{ id: string; name: string }[]>([]);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -62,49 +69,69 @@ export function StudentClassesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this student class?")) return;
+  const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmId) return;
+    setDeleteLoading(true);
     try {
-      await apiClient.delete(`/student-classes/${id}`);
+      await apiClient.delete(`/student-classes/${deleteConfirmId}`);
       toast.success("Student class deleted");
+      setDeleteConfirmId(null);
       load();
     } catch {
       toast.error("Failed to delete");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-semibold text-slate-800">Student Classes</h1>
-        <button type="button" onClick={openCreate} className="rounded bg-slate-800 text-white px-4 py-2 text-sm font-medium">
-          Add Student Class
-        </button>
+      <div className="mb-4 flex justify-between items-center">
+        <h1 className="text-2xl font-semibold text-foreground">Student Classes</h1>
+        <Button type="button" onClick={openCreate}>Add Student Class</Button>
       </div>
       {loading ? (
-        <p className="text-slate-500">Loading…</p>
+        <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
+          <Spinner />
+        </div>
+      ) : list.length === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="text-foreground-muted mb-4">No student classes yet. Add one to get started.</p>
+          <Button type="button" onClick={openCreate}>Add Student Class</Button>
+        </div>
       ) : (
-        <div className="rounded border border-slate-200 bg-white overflow-hidden">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
+        <div className="rounded border border-border bg-surface overflow-hidden">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-surface-muted">
               <tr>
-                <th className="px-4 py-2 text-left text-sm font-medium text-slate-700">Name</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-slate-700">Year Level</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-slate-700">Student Count</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-slate-700">Curriculum</th>
-                <th className="px-4 py-2 text-right text-sm font-medium text-slate-700">Actions</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year Level</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Student Count</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Curriculum</th>
+                <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {list.map((c) => (
                 <tr key={c.id}>
-                  <td className="px-4 py-2 text-slate-900">{c.name}</td>
-                  <td className="px-4 py-2 text-slate-600">{c.yearLevel}</td>
-                  <td className="px-4 py-2 text-slate-600">{c.studentCount}</td>
-                  <td className="px-4 py-2 text-slate-600">{c.curriculum?.name ?? "—"}</td>
+                  <td className="px-4 py-2 text-foreground">{c.name}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{c.yearLevel}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{c.studentCount}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-right">
-                    <button type="button" onClick={() => openEdit(c)} className="text-slate-600 hover:text-slate-900 mr-2">Edit</button>
-                    <button type="button" onClick={() => handleDelete(c.id)} className="text-red-600 hover:text-red-800">Delete</button>
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger asChild>
+                        <button type="button" className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" aria-label="Actions">
+                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="18" r="1.5" /></svg>
+                        </button>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => handleDeleteClick(c.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Delete</DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
                   </td>
                 </tr>
               ))}
@@ -112,28 +139,48 @@ export function StudentClassesPage() {
           </table>
         </div>
       )}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">{editingId ? "Edit Student Class" : "Add Student Class"}</h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <input required placeholder="Name (e.g. BSCE-3A)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border px-3 py-2" />
-              <input required type="number" min={1} placeholder="Year level" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: Number(e.target.value) }))} className="w-full rounded border px-3 py-2" />
-              <input required type="number" min={0} placeholder="Student count" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: Number(e.target.value) }))} className="w-full rounded border px-3 py-2" />
-              <select value={form.curriculumId} onChange={(e) => setForm((f) => ({ ...f, curriculumId: e.target.value }))} className="w-full rounded border px-3 py-2">
-                <option value="">Select curriculum</option>
-                {curricula.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="rounded border border-slate-300 px-4 py-2">Cancel</button>
-                <button type="submit" className="rounded bg-slate-800 text-white px-4 py-2">Save</button>
-              </div>
-            </form>
+      <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
+        <Dialog.Content title={editingId ? "Edit Student Class" : "Add Student Class"}>
+          <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+            <input required placeholder="Name (e.g. BSCE-3A)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input required type="number" min={1} placeholder="Year level" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input required type="number" min={0} placeholder="Student count" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
+              <Select.Root value={form.curriculumId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, curriculumId: v === "__none__" ? "" : v }))}>
+                <Select.Trigger aria-label="Curriculum">
+                  <Select.Value placeholder="Select curriculum" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="__none__">Select curriculum</Select.Item>
+                  {curricula.map((c) => (
+                    <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Dialog.Close asChild>
+                <Button type="button" variant="secondary">Cancel</Button>
+              </Dialog.Close>
+              <Button type="submit">Save</Button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <Dialog.Content title="Delete student class" description="Are you sure? This will delete this student class. This action cannot be undone.">
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
+              {deleteLoading ? "…" : "Delete"}
+            </Button>
           </div>
-        </div>
-      )}
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   );
 }

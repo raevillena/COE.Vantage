@@ -8,12 +8,23 @@ import { createUserSchema, updateUserSchema } from "./userSchemas.js";
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN"));
 
-router.get("/", list);
-router.get("/:id", getById);
-router.post("/", validate(createUserSchema), create);
-router.patch("/:id", validate(updateUserSchema), update);
-router.delete("/:id", remove);
+/** List users: ADMIN can list all; CHAIRMAN, DEAN, and FACULTY can list when filtering by role=FACULTY (for schedule dropdowns). */
+router.get(
+  "/",
+  (req, res, next) => {
+    const isAdmin = req.user?.role === "ADMIN";
+    const isFacultyOnlyList =
+      req.query.role === "FACULTY" &&
+      (req.user?.role === "CHAIRMAN" || req.user?.role === "DEAN" || req.user?.role === "FACULTY");
+    if (isAdmin || isFacultyOnlyList) return next();
+    return authorize("ADMIN")(req, res, next);
+  },
+  list
+);
+router.get("/:id", authorize("ADMIN"), getById);
+router.post("/", authorize("ADMIN"), validate(createUserSchema), create);
+router.patch("/:id", authorize("ADMIN"), validate(updateUserSchema), update);
+router.delete("/:id", authorize("ADMIN"), remove);
 
 export const userRoutes = router;

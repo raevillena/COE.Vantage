@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+/* COE.Vantage color scheme — professional blue-indigo for engineering/academic use */
+@theme {
+  /* Primary: deep blue (brand, primary actions, active nav) */
+  --color-primary: #1e40af;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-muted: #dbeafe;
+  --color-primary-foreground: #ffffff;
+
+  /* Surface: backgrounds */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-surface-hover: #f1f5f9;
+
+  /* Border and dividers */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  /* Text */
+  --color-foreground: #0f172a;
+  --color-foreground-muted: #64748b;
+  --color-foreground-subtle: #94a3b8;
+
+  /* Semantic */
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-danger-muted: #fef2f2;
+  --color-success: #16a34a;
+  --color-success-muted: #dcfce7;
+  --color-focus-ring: #1e40af;
+}

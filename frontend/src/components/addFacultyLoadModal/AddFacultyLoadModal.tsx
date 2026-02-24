@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { ConflictPreview } from "../../types/api";
 import toast from "react-hot-toast";
+import { Dialog } from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Select } from "../ui/select";
 
 interface AddFacultyLoadModalProps {
   academicYearId: string;
@@ -95,37 +98,76 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-20">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Add Faculty Load</h2>
-        <div className="space-y-3">
-          <select required value={facultyId} onChange={(e) => setFacultyId(e.target.value)} className="w-full rounded border px-3 py-2">
-            <option value="">Faculty</option>
-            {faculties.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-          <select required value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="w-full rounded border px-3 py-2">
-            <option value="">Subject</option>
-            {subjects.map((s) => <option key={s.id} value={s.id}>{s.code} {s.name}</option>)}
-          </select>
-          <select required value={studentClassId} onChange={(e) => setStudentClassId(e.target.value)} className="w-full rounded border px-3 py-2">
-            <option value="">Student Class</option>
-            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select required value={roomId} onChange={(e) => setRoomId(e.target.value)} className="w-full rounded border px-3 py-2">
-            <option value="">Room</option>
-            {rooms.map((r) => <option key={r.id} value={r.id}>{r.name} {r.isLab ? "(Lab)" : ""}</option>)}
-          </select>
-          <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))} className="w-full rounded border px-3 py-2">
-            {[1, 2, 3, 4, 5, 6].map((d) => (
-              <option key={d} value={d}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d - 1]}</option>
-            ))}
-          </select>
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content title="Add Faculty Load" className="max-h-[90vh] overflow-y-auto">
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
+            <Select.Root value={facultyId || "__none__"} onValueChange={(v) => setFacultyId(v === "__none__" ? "" : v)}>
+              <Select.Trigger aria-label="Faculty">
+                <Select.Value placeholder="Select faculty" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="__none__">Select faculty</Select.Item>
+                {faculties.map((f) => <Select.Item key={f.id} value={f.id}>{f.name}</Select.Item>)}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Subject</label>
+            <Select.Root value={subjectId || "__none__"} onValueChange={(v) => setSubjectId(v === "__none__" ? "" : v)}>
+              <Select.Trigger aria-label="Subject">
+                <Select.Value placeholder="Select subject" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="__none__">Select subject</Select.Item>
+                {subjects.map((s) => <Select.Item key={s.id} value={s.id}>{s.code} {s.name}</Select.Item>)}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Student Class</label>
+            <Select.Root value={studentClassId || "__none__"} onValueChange={(v) => setStudentClassId(v === "__none__" ? "" : v)}>
+              <Select.Trigger aria-label="Student class">
+                <Select.Value placeholder="Select class" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="__none__">Select class</Select.Item>
+                {classes.map((c) => <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>)}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
+            <Select.Root value={roomId || "__none__"} onValueChange={(v) => setRoomId(v === "__none__" ? "" : v)}>
+              <Select.Trigger aria-label="Room">
+                <Select.Value placeholder="Select room" />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="__none__">Select room</Select.Item>
+                {rooms.map((r) => <Select.Item key={r.id} value={r.id}>{r.name} {r.isLab ? " (Lab)" : ""}</Select.Item>)}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Day</label>
+            <Select.Root value={String(dayOfWeek)} onValueChange={(v) => setDayOfWeek(Number(v))}>
+              <Select.Trigger aria-label="Day of week">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                {[1, 2, 3, 4, 5, 6].map((d) => (
+                  <Select.Item key={d} value={String(d)}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d - 1]}</Select.Item>
+                ))}
+              </Select.Content>
+            </Select.Root>
+          </div>
           <div className="flex gap-2">
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="flex-1 rounded border px-3 py-2" />
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="flex-1 rounded border px-3 py-2" />
+            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
           </div>
           {preview && (
-            <div className={`rounded p-3 text-sm ${hasConflict ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
+            <div className={`rounded p-3 text-sm ${hasConflict ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`} role="alert">
               {hasConflict ? (
                 <>
                   {preview.facultyConflict && <div>Faculty has another class at this time.</div>}
@@ -140,14 +182,16 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <button type="button" onClick={onClose} className="rounded border border-slate-300 px-4 py-2">Cancel</button>
-          <button type="button" onClick={runPreview} disabled={loading} className="rounded border border-slate-400 px-4 py-2">Check conflicts</button>
-          <button type="button" onClick={handleSave} disabled={loading || (preview !== null && Boolean(hasConflict))} className="rounded bg-slate-800 text-white px-4 py-2 disabled:opacity-50">
+        <div className="mt-4 flex justify-end gap-2">
+          <Dialog.Close asChild>
+            <Button type="button" variant="secondary">Cancel</Button>
+          </Dialog.Close>
+          <Button type="button" variant="secondary" onClick={runPreview} disabled={loading}>Check conflicts</Button>
+          <Button type="button" onClick={handleSave} disabled={loading || (preview !== null && Boolean(hasConflict))}>
             {loading ? "…" : "Save"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }

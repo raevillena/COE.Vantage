@@ -1,3 +1,9 @@
+import dotenv from "dotenv";
+
+// Load .env from backend root; then .env.local so local overrides (e.g. for dev).
+dotenv.config();
+dotenv.config({ path: ".env.local", override: true });
+
 import { z } from "zod";
 
 const envSchema = z.object({
