@@ -84,3 +84,20 @@ export interface ConflictPreview {
   capacityIssue: boolean;
   labRoomMismatch: boolean;
 }
+
+/** Build a short conflict summary for toasts (e.g. "Room is in use. Faculty has another class."). */
+export function getConflictSummary(preview: ConflictPreview): string {
+  const parts: string[] = [];
+  if (preview.roomConflict) parts.push("Room is in use at this time");
+  if (preview.facultyConflict) parts.push("Faculty has another class at this time");
+  if (preview.studentConflict) parts.push("Student class has another class at this time");
+  if (preview.capacityIssue) parts.push("Room capacity is less than class size");
+  if (preview.labRoomMismatch) parts.push("Lab subject must use a lab room");
+  return parts.length ? parts.join(". ") : "Conflicts detected";
+}
+
+/** Get user-friendly error message from API error (e.g. move/resize/save). */
+export function getApiErrorMessage(err: unknown, fallback: string): string {
+  const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return (typeof msg === "string" && msg.trim()) ? msg.trim() : fallback;
+}

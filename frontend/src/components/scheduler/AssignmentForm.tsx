@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { ConflictPreview, FacultyLoad } from "../../types/api";
+import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { Button } from "../ui/button";
 import { Select } from "../ui/select";
@@ -49,7 +50,23 @@ interface AssignmentFormProps {
   academicYearId: string;
   semester: number;
   initialValues: Partial<AssignmentFormValues>;
+  /** Stable key that changes only when switching to a different assignment (edit vs pending). Stops sync from overwriting user's faculty/room selection on re-renders. */
+  formKey: string;
+  /** When editing a load, true only after the load has been fetched (so initialValues match the clicked block). Avoids syncing stale previous-load data on click. */
+  initialValuesReady?: boolean;
   editingLoadId?: string | null;
+  /** Live day/time from pending block (drag/resize) while adding a new assignment. Keeps the form's time fields in sync. */
+  liveTime?: {
+    dayOfWeek?: number;
+    startTime?: string;
+    endTime?: string;
+  };
+  /** When set, overrides faculty schedule so it stays in sync with main grid after move/resize. */
+  facultyLoadsOverride?: FacultyLoad[] | null;
+  /** Called when faculty selection changes (for main grid availability overlay). */
+  onFacultyIdChange?: (facultyId: string) => void;
+  /** Called when room selection changes (for main grid availability overlay). */
+  onRoomIdChange?: (roomId: string) => void;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -58,7 +75,13 @@ export function AssignmentForm({
   academicYearId,
   semester,
   initialValues,
+  formKey,
+  initialValuesReady = true,
   editingLoadId,
+  liveTime,
+  facultyLoadsOverride,
+  onFacultyIdChange,
+  onRoomIdChange,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
@@ -78,7 +101,9 @@ export function AssignmentForm({
   const [facultyLoads, setFacultyLoads] = useState<FacultyLoad[]>([]);
   const [facultyScheduleOpen, setFacultyScheduleOpen] = useState(true);
 
+  // Sync from initialValues when formKey changes and data is ready. For edit mode, wait until the fetched load matches (initialValuesReady) so we don't show the previous block's data on click.
   useEffect(() => {
+    if (!initialValuesReady) return;
     setFacultyId(initialValues.facultyId ?? "");
     setSubjectId(initialValues.subjectId ?? "");
     setStudentClassId(initialValues.studentClassId ?? "");
@@ -87,7 +112,23 @@ export function AssignmentForm({
     setStartTime(initialValues.startTime ?? "08:00");
     setEndTime(initialValues.endTime ?? "09:00");
     setPreview(null);
-  }, [initialValues]);
+  }, [formKey, initialValuesReady]);
+
+  // While adding a new assignment (no editingLoadId), keep the form's day/time in sync with the pending block
+  // when it is dragged or resized on the main grid.
+  useEffect(() => {
+    if (editingLoadId) return;
+    if (!liveTime) return;
+    if (liveTime.dayOfWeek != null && liveTime.dayOfWeek !== dayOfWeek) {
+      setDayOfWeek(liveTime.dayOfWeek);
+    }
+    if (liveTime.startTime && liveTime.startTime !== startTime) {
+      setStartTime(liveTime.startTime);
+    }
+    if (liveTime.endTime && liveTime.endTime !== endTime) {
+      setEndTime(liveTime.endTime);
+    }
+  }, [editingLoadId, liveTime?.dayOfWeek, liveTime?.startTime, liveTime?.endTime, dayOfWeek, startTime, endTime]);
 
   useEffect(() => {
     apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
@@ -107,7 +148,8 @@ export function AssignmentForm({
 
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const roomOptions = selectedSubject?.isLab ? rooms.filter((r) => r.isLab) : rooms;
-  const { hourStart, hourEnd } = useMemo(() => getCompactHourRange(facultyLoads), [facultyLoads]);
+  const displayFacultyLoads = facultyLoadsOverride ?? facultyLoads;
+  const { hourStart, hourEnd } = useMemo(() => getCompactHourRange(displayFacultyLoads), [displayFacultyLoads]);
 
   /** Run conflict preview whenever assignment fields change (auto-check for room/faculty/class conflicts). */
   useEffect(() => {
@@ -136,7 +178,7 @@ export function AssignmentForm({
         if (!cancelled) setPreview(data);
       })
       .catch(() => {
-        if (!cancelled) toast.error("Conflict check failed");
+        if (!cancelled) toast.error("Could not check for conflicts. Try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -169,7 +211,7 @@ export function AssignmentForm({
       const { data } = await apiClient.post<ConflictPreview>("/faculty-loads/preview", body);
       setPreview(data);
     } catch {
-      toast.error("Preview failed");
+      toast.error("Could not check for conflicts. Try again.");
     } finally {
       setLoading(false);
     }
@@ -188,8 +230,8 @@ export function AssignmentForm({
       await runPreview();
       return;
     }
-    if (hasConflict) {
-      toast.error("Fix conflicts before saving");
+    if (hasConflict && preview) {
+      toast.error(`${getConflictSummary(preview)}. Fix before saving.`);
       return;
     }
     setLoading(true);
@@ -223,8 +265,7 @@ export function AssignmentForm({
       }
       onSaved();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
-      toast.error(msg);
+      toast.error(getApiErrorMessage(err, "Save failed"));
     } finally {
       setLoading(false);
     }
@@ -237,8 +278,8 @@ export function AssignmentForm({
       await apiClient.delete(`/faculty-loads/${editingLoadId}`);
       toast.success("Load removed");
       onSaved();
-    } catch {
-      toast.error("Delete failed");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Delete failed"));
     } finally {
       setLoading(false);
     }
@@ -248,7 +289,7 @@ export function AssignmentForm({
     <div className="flex flex-col min-h-0 flex-1 gap-3">
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
-        <Select.Root value={facultyId || "__none__"} onValueChange={(v) => setFacultyId(v === "__none__" ? "" : v)}>
+        <Select.Root value={facultyId || "__none__"} onValueChange={(v) => { const id = v === "__none__" ? "" : v; setFacultyId(id); onFacultyIdChange?.(id); }}>
           <Select.Trigger aria-label="Faculty" className="w-full">
             <Select.Value placeholder="Select faculty" />
           </Select.Trigger>
@@ -296,7 +337,7 @@ export function AssignmentForm({
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
-        <Select.Root value={roomId || "__none__"} onValueChange={(v) => setRoomId(v === "__none__" ? "" : v)}>
+        <Select.Root value={roomId || "__none__"} onValueChange={(v) => { const id = v === "__none__" ? "" : v; setRoomId(id); onRoomIdChange?.(id); }}>
           <Select.Trigger aria-label="Room" className="w-full">
             <Select.Value placeholder="Select room" />
           </Select.Trigger>
@@ -375,7 +416,7 @@ export function AssignmentForm({
           {facultyScheduleOpen && (
             <div className="border-t border-border flex-1 min-h-0 overflow-auto">
               <ScheduleGrid
-                loads={facultyLoads}
+                loads={displayFacultyLoads}
                 readOnly
                 wrapInScroll={false}
                 hourStart={hourStart}

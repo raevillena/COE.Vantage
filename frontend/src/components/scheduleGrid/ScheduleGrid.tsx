@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { FacultyLoad } from "../../types/api";
 
@@ -7,6 +7,8 @@ const HOUR_START = 7;
 const HOUR_END = 21;
 /** Row height per hour so two lines (subject + room) fit without being cut off */
 const SLOT_HEIGHT = 44;
+/** Header row height; must match scheduleGridConstants.GRID_HEADER_HEIGHT so ScheduleSlotOverlay aligns. */
+const HEADER_ROW_HEIGHT = 48;
 
 /** Format hour (0–23) as 12-hour time e.g. "8:00 AM", "12:00 PM" */
 function formatHour12(hour24: number): string {
@@ -57,6 +59,13 @@ function hourToTimeString(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00`;
 }
 
+/** Format minutes from midnight as "HH:mm" (for 30-min resize). */
+function minutesToTimeString(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function overlaps(a: { startTime: string; endTime: string }, b: { startTime: string; endTime: string }): boolean {
   const aStart = timeToMinutes(a.startTime);
   const aEnd = timeToMinutes(a.endTime);
@@ -98,9 +107,14 @@ interface ScheduleBlockProps {
   selected: boolean;
   hourStart: number;
   hourEnd: number;
+  /** Unique prefix for draggable id so main vs room grid don't conflict (e.g. "main" or "room"). */
+  draggableIdPrefix?: string;
   onLoadClick?: (load: FacultyLoad) => void;
   onLoadMove?: (load: FacultyLoad, payload: LoadMovePayload) => void;
   onLoadResize?: (load: FacultyLoad, payload: LoadResizePayload) => void;
+  /** Optional callbacks so parent can react to resize lifecycle (e.g. show overlays). */
+  onLoadResizeStart?: (load: FacultyLoad) => void;
+  onLoadResizeEnd?: (load: FacultyLoad) => void;
 }
 
 function ScheduleBlock({
@@ -111,15 +125,21 @@ function ScheduleBlock({
   selected,
   hourStart,
   hourEnd,
+  draggableIdPrefix,
   onLoadClick,
   onLoadMove,
   onLoadResize,
+  onLoadResizeStart,
+  onLoadResizeEnd,
 }: ScheduleBlockProps) {
+  const draggableId = draggableIdPrefix ? `${draggableIdPrefix}-load-${load.id}` : `load-${load.id}`;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `load-${load.id}`,
+    id: draggableId,
     data: { type: "load" as const, load },
     disabled: !onLoadMove,
   });
+
+  const [resizePreviewEndMinutes, setResizePreviewEndMinutes] = useState<number | null>(null);
 
   const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -127,36 +147,47 @@ function ScheduleBlock({
       e.stopPropagation();
       const column = (e.target as HTMLElement).closest("[data-day-column]") as HTMLElement | null;
       if (!column || !onLoadResize) return;
-      const startHour = Math.floor(timeToMinutes(load.startTime) / 60);
+      onLoadResizeStart?.(load);
+      const startMinutes = timeToMinutes(load.startTime);
+      const gridEndMinutes = hourEnd * 60;
+
+      const computeEndMinutes = (clientY: number) => {
+        const rect = column.getBoundingClientRect();
+        const relY = clientY - rect.top;
+        const timeMinutes = hourStart * 60 + (relY / SLOT_HEIGHT) * 60;
+        const snapped = Math.round(timeMinutes / 15) * 15;
+        return Math.max(startMinutes + 15, Math.min(gridEndMinutes, snapped));
+      };
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        setResizePreviewEndMinutes(computeEndMinutes(moveEvent.clientY));
+      };
 
       const onMouseUp = (upEvent: MouseEvent) => {
         window.removeEventListener("mousemove", onMouseMove);
         window.removeEventListener("mouseup", onMouseUp);
-        const rect = column.getBoundingClientRect();
-        const relY = upEvent.clientY - rect.top;
-        const slotIndex = Math.round(relY / SLOT_HEIGHT);
-        const newEndHour = Math.max(startHour + 1, Math.min(hourEnd, hourStart + slotIndex));
-        const newEndTime = hourToTimeString(newEndHour);
+        const endMinutes = computeEndMinutes(upEvent.clientY);
+        setResizePreviewEndMinutes(null);
+        const newEndTime = minutesToTimeString(endMinutes);
         if (newEndTime !== load.endTime) {
           onLoadResize(load, { startTime: load.startTime, endTime: newEndTime });
         }
-      };
-
-      const onMouseMove = () => {
-        // Optional: could show live preview; for now we only apply on mouseup
+        onLoadResizeEnd?.(load);
       };
 
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
     },
-    [load, hourStart, hourEnd, onLoadResize]
+    [load, hourStart, hourEnd, onLoadResize, onLoadResizeStart, onLoadResizeEnd]
   );
 
   const startPx = timeToPx(load.startTime);
-  const endPx = timeToPx(load.endTime);
-  const durationPxVal = endPx - startPx;
+  const endMinutesForHeight = resizePreviewEndMinutes ?? timeToMinutes(load.endTime);
+  const endPxForHeight = (endMinutesForHeight - hourStart * 60) * (SLOT_HEIGHT / 60);
+  const durationPxVal = endPxForHeight - startPx;
   const top = startPx + 1;
   const height = Math.max(20, durationPxVal - 2);
+  const isResizing = resizePreviewEndMinutes !== null;
   const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
   const facultyShort = formatFacultyShortName(load.faculty?.name);
   const titleParts = [load.subject?.code ?? "—", load.room?.name ?? "", facultyShort, timeTooltip].filter(Boolean);
@@ -170,21 +201,74 @@ function ScheduleBlock({
       onClick={onLoadClick ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
       onKeyDown={onLoadClick ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
       title={titleParts.join(" · ")}
-      className={`absolute left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50" : ""}`}
+      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={{ top, height }}
     >
       <div className="font-medium truncate min-w-0">
         {[load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ")}
       </div>
-      {facultyShort ? <div className="truncate min-w-0 text-foreground-muted text-[10px]">{facultyShort}</div> : null}
+      <div className="truncate min-w-0 text-foreground-muted text-[10px]">
+        {[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
+      </div>
       {onLoadResize && height >= 24 && (
         <div
           data-resize-handle
-          className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize border-t border-white/30 hover:bg-white/20"
+          className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center border-t border-foreground-muted/50 hover:border-foreground-muted hover:bg-black/10 rounded-b"
+          onPointerDown={(e) => {
+            // Prevent dnd-kit from starting a drag (it uses pointer events). Resize still
+            // runs via onMouseDown. Only stop propagation so the drag handle never sees the event.
+            e.stopPropagation();
+          }}
           onMouseDown={handleResizeMouseDown}
+          title="Drag to change duration"
           aria-label="Resize time"
-        />
+        >
+          <span className="text-[10px] text-foreground-muted/80 select-none">⋯</span>
+        </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Same box and contents as ScheduleBlock, with fixed height. Used for drag overlay
+ * so the preview matches the actual block size and content (no generic card).
+ */
+export function LoadBlockPreview({
+  load,
+  subjectIds,
+  heightPx,
+  dropTimeLabel,
+  timeRangeLabel,
+  className = "",
+}: {
+  load: FacultyLoad;
+  subjectIds: string[];
+  heightPx: number;
+  /** When dragging over a slot, show this beside the name (e.g. "Drop at 9:15 AM"). */
+  dropTimeLabel?: string | null;
+  /** When dragging over a slot, show this as the time range on line 2 (e.g. "9:15 AM – 10:15 AM"). */
+  timeRangeLabel?: string | null;
+  className?: string;
+}) {
+  const facultyShort = formatFacultyShortName(load.faculty?.name);
+  const line1 = [load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ");
+  const timeRange = timeRangeLabel ?? `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
+  return (
+    <div
+      aria-hidden
+      className={`rounded px-1 py-0.5 text-xs overflow-hidden box-border min-w-[100px] ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} shadow-xl ${className}`}
+      style={{ height: Math.max(20, heightPx) }}
+    >
+      <div className="font-medium truncate min-w-0">
+        {line1}
+        {dropTimeLabel && (
+          <span className="text-primary font-normal"> · {dropTimeLabel}</span>
+        )}
+      </div>
+      <div className="truncate min-w-0 text-foreground-muted text-[10px]">
+        {[facultyShort, timeRange].filter(Boolean).join(" · ")}
+      </div>
     </div>
   );
 }
@@ -215,9 +299,14 @@ interface ScheduleGridProps {
   onLoadMove?: (load: FacultyLoad, payload: LoadMovePayload) => void;
   /** When set, blocks show a resize handle; called with load and new start/end time. */
   onLoadResize?: (load: FacultyLoad, payload: LoadResizePayload) => void;
+  /** Optional callbacks when a resize starts/ends. */
+  onLoadResizeStart?: (load: FacultyLoad) => void;
+  onLoadResizeEnd?: (load: FacultyLoad) => void;
   /** Optional time range so the grid only shows these hours (e.g. compact preview with no empty rows). */
   hourStart?: number;
   hourEnd?: number;
+  /** Unique prefix for draggable ids so multiple grids in one page don't conflict (e.g. "main", "room"). */
+  draggableIdPrefix?: string;
 }
 
 export function ScheduleGrid({
@@ -228,8 +317,11 @@ export function ScheduleGrid({
   onLoadClick,
   onLoadMove,
   onLoadResize,
+  onLoadResizeStart,
+  onLoadResizeEnd,
   hourStart: hourStartProp,
   hourEnd: hourEndProp,
+  draggableIdPrefix,
 }: ScheduleGridProps) {
   const subjectIds = [...new Set(loads.map((l) => l.subjectId))];
   const hourStart = hourStartProp ?? HOUR_START;
@@ -239,11 +331,11 @@ export function ScheduleGrid({
   const timeToPx = (time: string) => (timeToMinutes(time) - hourStart * 60) * (SLOT_HEIGHT / 60);
 
   const gridEl = (
-    <div className="grid min-w-[800px] rounded border border-border bg-surface" style={{ gridTemplateColumns: "4.5rem repeat(6, 1fr)", gridTemplateRows: `auto ${gridHeight}px` }}>
-        {/* Header row: time label + weekday headers */}
-        <div className="border-b border-border bg-surface-muted p-2 font-medium text-foreground-muted" />
+    <div className="relative grid min-w-[800px] rounded border border-border bg-surface" style={{ gridTemplateColumns: "4.5rem repeat(6, 1fr)", gridTemplateRows: `${HEADER_ROW_HEIGHT}px ${gridHeight}px` }}>
+        {/* Header row: time label + weekday headers (fixed height so ScheduleSlotOverlay aligns) */}
+        <div className="border-b border-border bg-surface-muted p-2 font-medium text-foreground-muted flex items-center" style={{ height: HEADER_ROW_HEIGHT, minHeight: 0 }} />
         {DAYS.map((d) => (
-          <div key={d} className="border-b border-l border-border bg-surface-muted p-2 text-center font-medium text-foreground">{d}</div>
+          <div key={d} className="border-b border-l border-border bg-surface-muted p-2 text-center font-medium text-foreground flex items-center justify-center" style={{ height: HEADER_ROW_HEIGHT, minHeight: 0 }}>{d}</div>
         ))}
         {/* Body: single row with time column + 6 day columns so columns align with header */}
         <div className="relative border-r border-border" style={{ height: gridHeight, gridColumn: "1" }}>
@@ -284,9 +376,12 @@ export function ScheduleGrid({
                       selected={selectedLoadId === load.id}
                       hourStart={hourStart}
                       hourEnd={hourEnd}
+                      draggableIdPrefix={draggableIdPrefix}
                       onLoadClick={onLoadClick}
                       onLoadMove={onLoadMove}
                       onLoadResize={onLoadResize}
+                      onLoadResizeStart={onLoadResizeStart}
+                      onLoadResizeEnd={onLoadResizeEnd}
                     />
                   ))}
                 </div>

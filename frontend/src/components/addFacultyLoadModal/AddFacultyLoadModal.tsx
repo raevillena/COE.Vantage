@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { ConflictPreview } from "../../types/api";
+import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -56,7 +57,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
       });
       setPreview(data);
     } catch {
-      toast.error("Preview failed");
+      toast.error("Could not check for conflicts. Try again.");
     } finally {
       setLoading(false);
     }
@@ -69,8 +70,8 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
       await runPreview();
       return;
     }
-    if (hasConflict) {
-      toast.error("Fix conflicts before saving");
+    if (hasConflict && preview) {
+      toast.error(`${getConflictSummary(preview)}. Fix before saving.`);
       return;
     }
     setLoading(true);
@@ -90,8 +91,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
       onSaved();
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
-      toast.error(msg);
+      toast.error(getApiErrorMessage(err, "Save failed"));
     } finally {
       setLoading(false);
     }

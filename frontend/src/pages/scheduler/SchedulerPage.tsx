@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, StudentClass, Room } from "../../types/api";
+import { getApiErrorMessage } from "../../types/api";
 import type { SubjectDragItem, LoadDragItem } from "../../components/scheduler/schedulerTypes";
 import type { AssignmentFormValues } from "../../components/scheduler/AssignmentForm";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
@@ -10,15 +11,22 @@ import { CurriculumSubjectTree } from "../../components/scheduler/CurriculumSubj
 import {
   ScheduleSlotOverlay,
   parseSlotId,
+  slotStartTime,
   type PendingAssignmentBlock,
 } from "../../components/scheduler/ScheduleSlotOverlay";
+import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOverlay";
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
 import toast from "react-hot-toast";
-import { hourToTimeString } from "../../components/scheduler/scheduleGridConstants";
+import {
+  timeToMinutes,
+  minutesToTimeString,
+  SLOT_HEIGHT,
+} from "../../components/scheduler/scheduleGridConstants";
+import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
 
 type ViewMode = "class" | "faculty";
 
@@ -33,6 +41,82 @@ interface PendingAssignment {
   endTime?: string;
   facultyId?: string;
   roomId?: string;
+}
+
+interface MoveConflictState {
+  load: FacultyLoad;
+  targetDayOfWeek: number;
+  targetStartTime: string;
+  targetEndTime: string;
+  facultyConflict: boolean;
+  roomConflict: boolean;
+}
+
+const SUGGESTION_HOUR_START = 7;
+const SUGGESTION_HOUR_END = 18;
+const SUGGESTION_SLOT_MINUTES = 60;
+
+function isIntervalFree(
+  dayOfWeek: number,
+  startMinutes: number,
+  endMinutes: number,
+  classLoads: FacultyLoad[],
+  facultyLoads: FacultyLoad[],
+  roomLoads: FacultyLoad[]
+): boolean {
+  const overlaps = (load: FacultyLoad) => {
+    if (load.dayOfWeek !== dayOfWeek) return false;
+    const loadStart = timeToMinutes(load.startTime);
+    const loadEnd = timeToMinutes(load.endTime);
+    return loadEnd > startMinutes && loadStart < endMinutes;
+  };
+  return (
+    !classLoads.some(overlaps) &&
+    !facultyLoads.some(overlaps) &&
+    !roomLoads.some(overlaps)
+  );
+}
+
+function suggestFirstFreeSlot(
+  classLoads: FacultyLoad[],
+  facultyLoads: FacultyLoad[],
+  roomLoads: FacultyLoad[]
+): { dayOfWeek: number; startTime: string; endTime: string } | null {
+  const stepMinutes = 15;
+  const duration = SUGGESTION_SLOT_MINUTES;
+  const days: number[] = [1, 2, 3, 4, 5, 6];
+
+  for (const day of days) {
+    for (
+      let start = SUGGESTION_HOUR_START * 60;
+      start + duration <= SUGGESTION_HOUR_END * 60;
+      start += stepMinutes
+    ) {
+      const end = start + duration;
+      if (isIntervalFree(day, start, end, classLoads, facultyLoads, roomLoads)) {
+        return {
+          dayOfWeek: day,
+          startTime: minutesToTimeString(start),
+          endTime: minutesToTimeString(end),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function slotConflictsWithLoads(
+  dayOfWeek: number,
+  startTime: string,
+  endTime: string,
+  classLoads: FacultyLoad[],
+  facultyLoads: FacultyLoad[],
+  roomLoads: FacultyLoad[]
+): boolean {
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  if (!start || !end || end <= start) return true;
+  return !isIntervalFree(dayOfWeek, start, end, classLoads, facultyLoads, roomLoads);
 }
 
 export function SchedulerPage() {
@@ -60,6 +144,18 @@ export function SchedulerPage() {
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [roomLoads, setRoomLoads] = useState<FacultyLoad[]>([]);
   const [roomLoadsLoading, setRoomLoadsLoading] = useState(false);
+  const [overlayFacultyId, setOverlayFacultyId] = useState("");
+  const [overlayRoomId, setOverlayRoomId] = useState("");
+  const [overlayFacultyLoads, setOverlayFacultyLoads] = useState<FacultyLoad[]>([]);
+  const [overlayRoomLoads, setOverlayRoomLoads] = useState<FacultyLoad[]>([]);
+  const [pendingAssignmentDragged, setPendingAssignmentDragged] = useState(false);
+  const [resizingLoadId, setResizingLoadId] = useState<string | null>(null);
+  const [moveConflict, setMoveConflict] = useState<MoveConflictState | null>(null);
+
+  /** Require 8px movement before starting a drag so clicks on blocks are treated as clicks, not drags. */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   useEffect(() => {
     apiClient.get("/academic-years").then(({ data }) => {
@@ -140,10 +236,69 @@ export function SchedulerPage() {
     if (!slot) return;
 
     const data = active.data.current as SubjectDragItem | LoadDragItem | undefined;
-    if (data?.type === "load") {
-      const startTime = hourToTimeString(slot.hour);
-      const endTime = hourToTimeString(slot.hour + 1);
+    const activeId = typeof active.id === "string" ? active.id : "";
+    if (data?.type === "load" && activeId.startsWith("main-load-")) {
       const load = data.load;
+      // Preserve original duration when moving; snap start to 15-min slot
+      const startTime = slotStartTime(slot);
+      const durationMinutes = Math.max(
+        15,
+        timeToMinutes(load.endTime) - timeToMinutes(load.startTime)
+      );
+      const endTime = minutesToTimeString(
+        timeToMinutes(startTime) + durationMinutes
+      );
+      // If the target slot is busy according to current overlays (ignoring this load itself),
+      // show a conflict prompt instead of moving immediately.
+      const intervalOverlaps = (startA: string, endA: string, startB: string, endB: string) => {
+        const aStart = timeToMinutes(startA);
+        const aEnd = timeToMinutes(endA);
+        const bStart = timeToMinutes(startB);
+        const bEnd = timeToMinutes(endB);
+        return aStart < bEnd && aEnd > bStart;
+      };
+      const facultyConflict =
+        overlayFacultyId &&
+        load.facultyId &&
+        overlayFacultyId === load.facultyId &&
+        overlayFacultyLoads.some(
+          (l) =>
+            l.id !== load.id &&
+            l.dayOfWeek === slot.dayOfWeek &&
+            intervalOverlaps(startTime, endTime, l.startTime, l.endTime)
+        );
+      const roomConflict =
+        overlayRoomId &&
+        load.roomId &&
+        overlayRoomId === load.roomId &&
+        overlayRoomLoads.some(
+          (l) =>
+            l.id !== load.id &&
+            l.dayOfWeek === slot.dayOfWeek &&
+            intervalOverlaps(startTime, endTime, l.startTime, l.endTime)
+        );
+      if (facultyConflict || roomConflict) {
+        setMoveConflict({
+          load,
+          targetDayOfWeek: slot.dayOfWeek,
+          targetStartTime: startTime,
+          targetEndTime: endTime,
+          facultyConflict: Boolean(facultyConflict),
+          roomConflict: Boolean(roomConflict),
+        });
+        return;
+      }
+      const updated = {
+        ...load,
+        dayOfWeek: slot.dayOfWeek,
+        startTime,
+        endTime,
+      };
+      setLoads((prev) => prev.map((l) => (l.id === load.id ? updated : l)));
+      setRoomLoads((prev) => prev.map((l) => (l.id === load.id ? updated : l)));
+      if (load.id === editingLoadId) {
+        setEditingLoad((prev) => (prev ? { ...prev, ...updated } : null));
+      }
       apiClient
         .patch(`/faculty-loads/${load.id}`, {
           facultyId: load.facultyId,
@@ -157,39 +312,50 @@ export function SchedulerPage() {
           academicYearId,
         })
         .then(() => {
+          toast.success("Assignment moved");
+          refreshOverlayForLoad(updated);
+        })
+        .catch((err) => {
+          toast.error(getApiErrorMessage(err, "Move failed"));
           refreshLoads();
           refreshRoomLoads();
-          setEditingLoadId(null);
-          toast.success("Assignment moved");
-        })
-        .catch(() => toast.error("Failed to move"));
+          if (load.id === editingLoadId) {
+            setEditingLoad(null);
+            setEditingLoadId(null);
+          }
+        });
       return;
     }
 
     if (data?.type !== "subject") return;
-    const startTime = hourToTimeString(slot.hour);
-    const endTime = hourToTimeString(slot.hour + 1);
+    // New assignment: start with no fixed day/time so we don't place a default block on the grid.
+    // User will pick faculty/room and choose a time (with overlays showing busy slots) before saving.
     setPendingAssignment({
       subjectId: data.subjectId,
       subjectCode: data.code,
       subjectName: data.name,
       studentClassId: viewMode === "class" ? studentClassId : undefined,
-      dayOfWeek: slot.dayOfWeek,
-      startTime,
-      endTime,
     });
+    setPendingAssignmentDragged(false);
     setEditingLoadId(null);
+    setOverlayFacultyId("");
+    setOverlayRoomId("");
   };
 
   const handleDragStart = (event: DragStartEvent) => {
     setIsDragging(true);
     const data = event.active.data.current as SubjectDragItem | LoadDragItem | undefined;
+    const activeId = typeof event.active.id === "string" ? event.active.id : "";
     if (data?.type === "subject") {
       setActiveDragItem(data);
       setActiveDragLoad(null);
-    } else if (data?.type === "load") {
+    } else if (data?.type === "load" && activeId.startsWith("main-load-")) {
       setActiveDragLoad(data.load);
       setActiveDragItem(null);
+      // While dragging an existing load, show availability overlay for that load's faculty/room
+      // so the user can see busy slots while moving it.
+      setOverlayFacultyId(data.load.facultyId ?? "");
+      setOverlayRoomId(data.load.roomId ?? "");
     } else {
       setActiveDragItem(null);
       setActiveDragLoad(null);
@@ -198,7 +364,7 @@ export function SchedulerPage() {
 
   const handleDragOver = (event: DragOverEvent) => {
     const id = event.over?.id;
-    if (typeof id === "string" && /^slot-\d+-\d+$/.test(id)) setOverSlotId(id);
+    if (typeof id === "string" && /^slot-\d+-\d+(-\d+)?$/.test(id)) setOverSlotId(id);
     else setOverSlotId(null);
   };
 
@@ -207,7 +373,92 @@ export function SchedulerPage() {
     setActiveDragItem(null);
     setActiveDragLoad(null);
     setOverSlotId(null);
+    // If we're not in the "add new" flow, hide overlay again after drag ends.
+    if (!pendingAssignment) {
+      setOverlayFacultyId("");
+      setOverlayRoomId("");
+      setOverlayFacultyLoads([]);
+      setOverlayRoomLoads([]);
+    }
   };
+
+  const refreshOverlayForLoad = useCallback(
+    (load: FacultyLoad) => {
+      if (overlayFacultyId && load.facultyId && overlayFacultyId === load.facultyId) {
+        setOverlayFacultyLoads((prev) => {
+          const exists = prev.some((l) => l.id === load.id);
+          if (exists) {
+            return prev.map((l) => (l.id === load.id ? load : l));
+          }
+          return [...prev, load];
+        });
+      }
+      if (overlayRoomId && load.roomId && overlayRoomId === load.roomId) {
+        setOverlayRoomLoads((prev) => {
+          const exists = prev.some((l) => l.id === load.id);
+          if (exists) {
+            return prev.map((l) => (l.id === load.id ? load : l));
+          }
+          return [...prev, load];
+        });
+      }
+    },
+    [overlayFacultyId, overlayRoomId]
+  );
+
+  const handleResolveFacultyConflict = useCallback(
+    async (newFacultyId: string) => {
+      if (!moveConflict || !academicYearId) return;
+      const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
+      try {
+        await apiClient.patch(`/faculty-loads/${load.id}`, {
+          facultyId: newFacultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: load.roomId,
+          dayOfWeek: targetDayOfWeek,
+          startTime: targetStartTime,
+          endTime: targetEndTime,
+          semester,
+          academicYearId,
+        });
+        toast.success("Faculty updated");
+        setMoveConflict(null);
+        refreshLoads();
+        refreshRoomLoads();
+      } catch (err) {
+        toast.error(getApiErrorMessage(err, "Update failed"));
+      }
+    },
+    [moveConflict, academicYearId, semester, refreshLoads, refreshRoomLoads]
+  );
+
+  const handleResolveRoomConflict = useCallback(
+    async (newRoomId: string) => {
+      if (!moveConflict || !academicYearId) return;
+      const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
+      try {
+        await apiClient.patch(`/faculty-loads/${load.id}`, {
+          facultyId: load.facultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: newRoomId,
+          dayOfWeek: targetDayOfWeek,
+          startTime: targetStartTime,
+          endTime: targetEndTime,
+          semester,
+          academicYearId,
+        });
+        toast.success("Room updated");
+        setMoveConflict(null);
+        refreshLoads();
+        refreshRoomLoads();
+      } catch (err) {
+        toast.error(getApiErrorMessage(err, "Update failed"));
+      }
+    },
+    [moveConflict, academicYearId, semester, refreshLoads, refreshRoomLoads]
+  );
 
   const handleLoadMove = useCallback(
     (load: FacultyLoad, payload: { dayOfWeek: number; startTime: string; endTime: string }) => {
@@ -226,16 +477,29 @@ export function SchedulerPage() {
         .then(() => {
           refreshLoads();
           refreshRoomLoads();
+          refreshOverlayForLoad({ ...load, ...payload });
           setEditingLoadId(null);
           toast.success("Assignment moved");
         })
-        .catch(() => toast.error("Failed to move"));
+        .catch((err) => toast.error(getApiErrorMessage(err, "Move failed")));
     },
-    [academicYearId, semester, refreshLoads, refreshRoomLoads]
+    [academicYearId, semester, refreshLoads, refreshRoomLoads, refreshOverlayForLoad]
   );
 
   const handleLoadResize = useCallback(
     (load: FacultyLoad, payload: { startTime: string; endTime: string }) => {
+      const updated = { ...load, startTime: payload.startTime, endTime: payload.endTime };
+      setLoads((prev) =>
+        prev.map((l) => (l.id === load.id ? updated : l))
+      );
+      setRoomLoads((prev) =>
+        prev.map((l) => (l.id === load.id ? updated : l))
+      );
+      if (load.id === editingLoadId) {
+        setEditingLoad((prev) =>
+          prev ? { ...prev, startTime: payload.startTime, endTime: payload.endTime } : null
+        );
+      }
       apiClient
         .patch(`/faculty-loads/${load.id}`, {
           facultyId: load.facultyId,
@@ -249,13 +513,16 @@ export function SchedulerPage() {
           academicYearId,
         })
         .then(() => {
+          toast.success("Time updated");
+          refreshOverlayForLoad(updated);
+        })
+        .catch((err) => {
+          toast.error(getApiErrorMessage(err, "Resize failed"));
           refreshLoads();
           refreshRoomLoads();
-          toast.success("Time updated");
-        })
-        .catch(() => toast.error("Failed to resize"));
+        });
     },
-    [academicYearId, semester, refreshLoads, refreshRoomLoads]
+    [academicYearId, semester, editingLoadId, refreshLoads, refreshRoomLoads]
   );
 
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
@@ -281,8 +548,129 @@ export function SchedulerPage() {
 
   const clearAssignmentPanel = () => {
     setPendingAssignment(null);
+    setPendingAssignmentDragged(false);
     setEditingLoadId(null);
+    setMoveConflict(null);
+    setOverlayFacultyId("");
+    setOverlayRoomId("");
+    setOverlayFacultyLoads([]);
+    setOverlayRoomLoads([]);
   };
+
+  useEffect(() => {
+    if (!overlayFacultyId || !academicYearId) {
+      setOverlayFacultyLoads([]);
+      return;
+    }
+    const params = new URLSearchParams({ academicYearId, semester: String(semester), facultyId: overlayFacultyId });
+    apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setOverlayFacultyLoads(data)).catch(() => setOverlayFacultyLoads([]));
+  }, [academicYearId, semester, overlayFacultyId]);
+
+  useEffect(() => {
+    if (!overlayRoomId || !academicYearId) {
+      setOverlayRoomLoads([]);
+      return;
+    }
+    const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: overlayRoomId });
+    apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setOverlayRoomLoads(data)).catch(() => setOverlayRoomLoads([]));
+  }, [academicYearId, semester, overlayRoomId]);
+
+  // When adding a new assignment and a faculty has been selected, suggest the first free 1-hour slot
+  // that works for the current class (in class view) and the selected faculty. This sets day/time so
+  // the pending block becomes visible on the grid.
+  useEffect(() => {
+    if (!pendingAssignment) return;
+    if (pendingAssignment.dayOfWeek != null && pendingAssignment.startTime && pendingAssignment.endTime) return;
+    if (pendingAssignmentDragged) return;
+    if (!overlayFacultyId || overlayFacultyLoads.length === 0) return;
+
+    let classLoadsForSuggestion: FacultyLoad[] = [];
+    if (
+      viewMode === "class" &&
+      studentClassId &&
+      pendingAssignment.studentClassId &&
+      pendingAssignment.studentClassId === studentClassId
+    ) {
+      classLoadsForSuggestion = loads;
+    }
+
+    const suggestion = suggestFirstFreeSlot(
+      classLoadsForSuggestion,
+      overlayFacultyLoads,
+      [] // no room constraint yet
+    );
+    if (!suggestion) return;
+
+    setPendingAssignment((prev) => {
+      if (!prev) return prev;
+      if (prev.dayOfWeek != null && prev.startTime && prev.endTime) return prev;
+      if (prev.subjectId !== pendingAssignment.subjectId) return prev;
+      return {
+        ...prev,
+        dayOfWeek: suggestion.dayOfWeek,
+        startTime: suggestion.startTime,
+        endTime: suggestion.endTime,
+      };
+    });
+  }, [pendingAssignment, pendingAssignmentDragged, overlayFacultyId, overlayFacultyLoads, viewMode, studentClassId, loads]);
+
+  // When a room is selected, ensure the current suggested slot is also free for that room.
+  // If not, search again including room loads and move the pending block to a fully free slot.
+  useEffect(() => {
+    if (!pendingAssignment) return;
+    if (
+      pendingAssignment.dayOfWeek == null ||
+      !pendingAssignment.startTime ||
+      !pendingAssignment.endTime
+    )
+      return;
+    if (!overlayRoomId || overlayRoomLoads.length === 0) return;
+    if (pendingAssignmentDragged) return;
+
+    let classLoadsForSuggestion: FacultyLoad[] = [];
+    if (
+      viewMode === "class" &&
+      studentClassId &&
+      pendingAssignment.studentClassId &&
+      pendingAssignment.studentClassId === studentClassId
+    ) {
+      classLoadsForSuggestion = loads;
+    }
+
+    const conflicts = slotConflictsWithLoads(
+      pendingAssignment.dayOfWeek,
+      pendingAssignment.startTime,
+      pendingAssignment.endTime,
+      classLoadsForSuggestion,
+      overlayFacultyLoads,
+      overlayRoomLoads
+    );
+    if (!conflicts) return;
+
+    const suggestion = suggestFirstFreeSlot(
+      classLoadsForSuggestion,
+      overlayFacultyLoads,
+      overlayRoomLoads
+    );
+    if (!suggestion) return;
+
+    setPendingAssignment((prev) => {
+      if (!prev) return prev;
+      if (
+        prev.dayOfWeek !== pendingAssignment.dayOfWeek ||
+        prev.startTime !== pendingAssignment.startTime ||
+        prev.endTime !== pendingAssignment.endTime
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        dayOfWeek: suggestion.dayOfWeek,
+        startTime: suggestion.startTime,
+        endTime: suggestion.endTime,
+      };
+    });
+  }, [pendingAssignment, pendingAssignmentDragged, overlayRoomId, overlayRoomLoads, overlayFacultyLoads, viewMode, studentClassId, loads]);
 
   const showGrid = academicYearId && (viewMode === "class" ? studentClassId : viewMode === "faculty" ? selectedFacultyId : false);
 
@@ -378,6 +766,7 @@ export function SchedulerPage() {
       </div>
 
       <DndContext
+        sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
@@ -412,19 +801,40 @@ export function SchedulerPage() {
                   </p>
                 </div>
               ) : (
-                <div className="shrink-0 h-[28rem] w-full overflow-x-auto overflow-y-hidden relative">
-                  <div className="relative min-w-[800px] w-full inline-block">
+                <div className="shrink-0 min-h-0 w-full overflow-auto relative" style={{ maxHeight: "42rem" }}>
+                  <div className="relative min-w-[800px] w-full">
                     <ScheduleGrid
                       loads={loads}
                       wrapInScroll={false}
                       selectedLoadId={editingLoadId}
                       hourEnd={scheduleHourEnd}
+                      draggableIdPrefix="main"
                       onLoadClick={(load) => {
                         setEditingLoadId(load.id);
                         setPendingAssignment(null);
+                        setOverlayFacultyId("");
+                        setOverlayRoomId("");
+                        setOverlayFacultyLoads([]);
+                        setOverlayRoomLoads([]);
+                        if (load.roomId) setSelectedRoomId(load.roomId);
                       }}
                       onLoadMove={academicYearId ? handleLoadMove : undefined}
                       onLoadResize={academicYearId ? handleLoadResize : undefined}
+                      onLoadResizeStart={(load) => {
+                        setResizingLoadId(load.id);
+                        setOverlayFacultyId(load.facultyId ?? "");
+                        setOverlayRoomId(load.roomId ?? "");
+                      }}
+                      onLoadResizeEnd={() => {
+                        setResizingLoadId(null);
+                        // If we're not adding a new assignment and not dragging, hide overlay after resize ends.
+                        if (!pendingAssignment && !activeDragLoad) {
+                          setOverlayFacultyId("");
+                          setOverlayRoomId("");
+                          setOverlayFacultyLoads([]);
+                          setOverlayRoomLoads([]);
+                        }
+                      }}
                     />
                     <ScheduleSlotOverlay
                       active={isDragging}
@@ -447,7 +857,95 @@ export function SchedulerPage() {
                         if (pendingAssignment.subjectName) block.subjectName = pendingAssignment.subjectName;
                         return block;
                       })()}
+                      onPendingMove={(payload) => {
+                        setPendingAssignment((prev) => (prev ? { ...prev, ...payload } : prev));
+                        setPendingAssignmentDragged(true);
+                      }}
                     />
+                    {(pendingAssignment !== null || activeDragLoad || resizingLoadId) && (overlayFacultyId || overlayRoomId) && (
+                      <AvailabilityOverlay
+                        facultyLoads={overlayFacultyLoads}
+                        roomLoads={overlayRoomLoads}
+                        hourEnd={scheduleHourEnd}
+                      />
+                    )}
+                    {moveConflict && (
+                      <div className="absolute inset-0 z-30 flex items-start justify-center pointer-events-none">
+                        <div className="mt-10 max-w-sm rounded-lg border border-border bg-surface shadow-lg p-3 text-xs text-foreground pointer-events-auto">
+                          <div className="font-semibold mb-1">Cannot drop here</div>
+                          <div className="mb-2">
+                            This time conflicts with the{" "}
+                            {moveConflict.facultyConflict && moveConflict.roomConflict
+                              ? "faculty and room schedule"
+                              : moveConflict.facultyConflict
+                              ? "faculty schedule"
+                              : "room schedule"}
+                            .
+                          </div>
+                          <div className="mb-2 text-foreground-muted">
+                            Day {moveConflict.targetDayOfWeek}, {moveConflict.targetStartTime}–
+                            {moveConflict.targetEndTime}
+                          </div>
+                          {moveConflict.facultyConflict && (
+                            <div className="mb-2">
+                              <label className="mb-1 block text-[11px] font-medium text-foreground">
+                                Change faculty
+                              </label>
+                              <Select.Root
+                                value="__none__"
+                                onValueChange={(v) => {
+                                  if (v === "__none__") return;
+                                  handleResolveFacultyConflict(v);
+                                }}
+                              >
+                                <Select.Trigger aria-label="New faculty" className="w-full">
+                                  <Select.Value placeholder="Select new faculty" />
+                                </Select.Trigger>
+                                <Select.Content>
+                                  <Select.Item value="__none__">Select faculty</Select.Item>
+                                  {faculties.map((f) => (
+                                    <Select.Item key={f.id} value={f.id}>
+                                      {f.name}
+                                    </Select.Item>
+                                  ))}
+                                </Select.Content>
+                              </Select.Root>
+                            </div>
+                          )}
+                          {moveConflict.roomConflict && (
+                            <div className="mb-2">
+                              <label className="mb-1 block text-[11px] font-medium text-foreground">
+                                Change room
+                              </label>
+                              <Select.Root
+                                value="__none__"
+                                onValueChange={(v) => {
+                                  if (v === "__none__") return;
+                                  handleResolveRoomConflict(v);
+                                }}
+                              >
+                                <Select.Trigger aria-label="New room" className="w-full">
+                                  <Select.Value placeholder="Select new room" />
+                                </Select.Trigger>
+                                <Select.Content>
+                                  <Select.Item value="__none__">Select room</Select.Item>
+                                  {rooms.map((r) => (
+                                    <Select.Item key={r.id} value={r.id}>
+                                      {r.name}
+                                    </Select.Item>
+                                  ))}
+                                </Select.Content>
+                              </Select.Root>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <Button type="button" variant="secondary" onClick={() => setMoveConflict(null)}>
+                              Close
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {!showLateHours && (
                       <button
                         type="button"
@@ -515,6 +1013,7 @@ export function SchedulerPage() {
                           readOnly
                           wrapInScroll={false}
                           hourEnd={scheduleHourEnd}
+                          draggableIdPrefix="room"
                         />
                       )}
                     </div>
@@ -536,7 +1035,30 @@ export function SchedulerPage() {
                   academicYearId={academicYearId}
                   semester={semester}
                   initialValues={assignmentInitialValues}
+                  formKey={editingLoadId ?? pendingAssignment?.subjectId ?? ""}
+                  initialValuesReady={editingLoadId ? editingLoad?.id === editingLoadId : true}
                   editingLoadId={editingLoadId ?? undefined}
+                  liveTime={
+                    !editingLoadId && pendingAssignment && pendingAssignment.dayOfWeek != null &&
+                    pendingAssignment.startTime && pendingAssignment.endTime
+                      ? {
+                          dayOfWeek: pendingAssignment.dayOfWeek,
+                          startTime: pendingAssignment.startTime,
+                          endTime: pendingAssignment.endTime,
+                        }
+                      : undefined
+                  }
+                  facultyLoadsOverride={
+                    editingLoad?.facultyId
+                      ? loads.filter((l) => l.facultyId === editingLoad.facultyId)
+                      : undefined
+                  }
+                  onFacultyIdChange={(id) => {
+                    setOverlayFacultyId(id);
+                  }}
+                  onRoomIdChange={(id) => {
+                    setOverlayRoomId(id);
+                  }}
                   onSaved={() => {
                     refreshLoads();
                     refreshRoomLoads();
@@ -563,21 +1085,48 @@ export function SchedulerPage() {
               {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
             </div>
           ) : activeDragLoad ? (
-            <div
-              className="rounded border-2 border-primary bg-surface px-2 py-1.5 text-xs text-foreground shadow-lg pointer-events-none min-w-[120px] max-w-[200px]"
-              aria-hidden
-            >
-              <div className="font-medium truncate">
-                {[activeDragLoad.subject?.code ?? "—", activeDragLoad.room?.name].filter(Boolean).join(" · ")}
-              </div>
-              {activeDragLoad.faculty?.name && (
-                <div className="truncate text-foreground-muted text-[10px]">
-                  {activeDragLoad.faculty.name.split(/\s+/).length > 1
-                    ? `${activeDragLoad.faculty.name.split(/\s+/)[0].charAt(0)}. ${activeDragLoad.faculty.name.split(/\s+/).pop()}`
-                    : activeDragLoad.faculty.name}
+            (() => {
+              let dropTimeLabel: string | null = null;
+              let timeRangeLabel: string | null = null;
+              if (overSlotId) {
+                const slot = parseSlotId(overSlotId);
+                if (slot) {
+                  const dropStartMins = timeToMinutes(slotStartTime(slot));
+                  const durationMins = Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime));
+                  const dropEndMins = dropStartMins + durationMins;
+                  const format12 = (mins: number) => {
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    const hour12 = h % 12 || 12;
+                    const ampm = h < 12 ? "AM" : "PM";
+                    return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+                  };
+                  dropTimeLabel = `Drop at ${format12(dropStartMins)}`;
+                  timeRangeLabel = `${format12(dropStartMins)} – ${format12(dropEndMins)}`;
+                }
+              }
+              return (
+                <div className="pointer-events-none flex flex-col items-center gap-1">
+                  <LoadBlockPreview
+                    load={activeDragLoad}
+                    subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
+                    heightPx={Math.max(
+                      20,
+                      ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
+                        SLOT_HEIGHT -
+                        2
+                    )}
+                    dropTimeLabel={dropTimeLabel}
+                    timeRangeLabel={timeRangeLabel}
+                  />
+                  {dropTimeLabel && (
+                    <span className="text-[10px] font-medium text-primary bg-primary/15 px-2 py-0.5 rounded">
+                      {dropTimeLabel}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()
           ) : null}
         </DragOverlay>
       </DndContext>
