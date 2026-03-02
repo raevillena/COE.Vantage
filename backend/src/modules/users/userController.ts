@@ -20,12 +20,29 @@ export async function create(req: Request, res: Response): Promise<void> {
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
-  const body = req.body as UpdateUserBody;
+  const body = req.body as UpdateUserBody & { password?: string };
+  // Admins must not set another user's password; only email-based reset is allowed.
+  if ("password" in body) delete body.password;
   const user = await userService.updateUser(req.params.id, body);
   res.json(user);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await userService.deleteUser(req.params.id);
+  await userService.softDeleteUser(req.params.id);
+  res.status(204).send();
+}
+
+export async function listTrash(req: Request, res: Response): Promise<void> {
+  const list = await userService.listTrashUsers();
+  res.json(list);
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await userService.restoreUser(req.params.id);
+  res.status(204).send();
+}
+
+export async function permanentDelete(req: Request, res: Response): Promise<void> {
+  await userService.permanentDeleteUser(req.params.id);
   res.status(204).send();
 }

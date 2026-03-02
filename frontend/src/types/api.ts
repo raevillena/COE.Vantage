@@ -4,6 +4,7 @@ export interface Department {
   id: string;
   name: string;
   code: string | null;
+  deletedAt?: string | null;
 }
 
 export interface Room {
@@ -15,6 +16,7 @@ export interface Room {
   hasAC: boolean;
   departmentId: string;
   department?: { id: string; name: string; code: string | null };
+  deletedAt?: string | null;
 }
 
 export interface Curriculum {
@@ -23,6 +25,18 @@ export interface Curriculum {
   code: string | null;
   departmentId: string | null;
   department?: { id: string; name: string; code: string | null } | null;
+  deletedAt?: string | null;
+}
+
+/** Extracted or to-apply subject row from curriculum import (no id). */
+export interface ExtractedSubject {
+  yearLevel: number;
+  semester?: number;
+  code: string;
+  name: string;
+  units: number;
+  prerequisites?: string;
+  isLab?: boolean;
 }
 
 export interface Subject {
@@ -31,8 +45,13 @@ export interface Subject {
   name: string;
   units: number;
   isLab: boolean;
+   /** Recommended year level within its curriculum; nullable when not assigned. */
+  yearLevel?: number | null;
   curriculumId: string | null;
   departmentId: string | null;
+  curriculum?: { id: string; name: string; code: string | null } | null;
+  department?: { id: string; name: string; code: string | null } | null;
+  deletedAt?: string | null;
 }
 
 export interface StudentClass {
@@ -42,12 +61,14 @@ export interface StudentClass {
   curriculumId: string;
   studentCount: number;
   curriculum?: { id: string; name: string; code: string | null };
+  deletedAt?: string | null;
 }
 
 export interface AcademicYear {
   id: string;
   name: string;
   isActive: boolean;
+  deletedAt?: string | null;
 }
 
 export interface UserListItem {
@@ -57,6 +78,7 @@ export interface UserListItem {
   role: Role;
   departmentId: string | null;
   department?: { name: string; code: string | null } | null;
+  deletedAt?: string | null;
 }
 
 export interface FacultyLoad {

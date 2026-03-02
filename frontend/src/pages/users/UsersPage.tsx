@@ -18,6 +18,20 @@ export function UsersPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [resetEmailLoading, setResetEmailLoading] = useState<string | null>(null);
+
+  const handleSendResetEmail = async (email: string) => {
+    setResetEmailLoading(email);
+    try {
+      await apiClient.post("/auth/send-password-reset-email", { email });
+      toast.success("Password reset email sent to " + email);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to send";
+      toast.error(msg);
+    } finally {
+      setResetEmailLoading(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -57,7 +71,6 @@ export function UsersPage() {
           name: form.name,
           role: form.role,
           departmentId: form.departmentId || null,
-          ...(form.password ? { password: form.password } : {}),
         });
         toast.success("User updated");
       } else {
@@ -79,7 +92,7 @@ export function UsersPage() {
     setDeleteLoading(true);
     try {
       await apiClient.delete(`/users/${deleteConfirmId}`);
-      toast.success("User deleted");
+      toast.success("User moved to trash");
       setDeleteConfirmId(null);
       load();
     } catch {
@@ -132,7 +145,13 @@ export function UsersPage() {
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
                         <DropdownMenu.Item onSelect={() => openEdit(u)}>Edit</DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => handleDeleteClick(u.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Delete</DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          onSelect={() => handleSendResetEmail(u.email)}
+                          disabled={resetEmailLoading === u.email}
+                        >
+                          {resetEmailLoading === u.email ? "Sending…" : "Send password reset email"}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => handleDeleteClick(u.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </td>
@@ -147,8 +166,7 @@ export function UsersPage() {
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input required placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            {!editingId && <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />}
-            {editingId && <input type="password" placeholder="New password (leave blank to keep)" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />}
+            {!editingId && <input type="password" required placeholder="Password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />}
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Role</label>
               <Select.Root value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
@@ -189,13 +207,13 @@ export function UsersPage() {
       </Dialog.Root>
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
-        <Dialog.Content title="Delete user" description="Are you sure? This will delete this user. This action cannot be undone.">
+        <Dialog.Content title="Move user to trash" description="This user will be moved to Trash. They will not be able to sign in until restored. You can restore or permanently delete from the Trash page.">
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? "…" : "Delete"}
+              {deleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

@@ -76,7 +76,7 @@ export function StudentClassesPage() {
     setDeleteLoading(true);
     try {
       await apiClient.delete(`/student-classes/${deleteConfirmId}`);
-      toast.success("Student class deleted");
+      toast.success("Student class moved to trash");
       setDeleteConfirmId(null);
       load();
     } catch {
@@ -129,7 +129,7 @@ export function StudentClassesPage() {
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
                         <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => handleDeleteClick(c.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Delete</DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => handleDeleteClick(c.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </td>
@@ -170,13 +170,13 @@ export function StudentClassesPage() {
       </Dialog.Root>
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
-        <Dialog.Content title="Delete student class" description="Are you sure? This will delete this student class. This action cannot be undone.">
+        <Dialog.Content title="Move student class to trash" description="This student class will be moved to Trash. An admin can restore it or permanently delete it from the Trash page.">
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? "…" : "Delete"}
+              {deleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

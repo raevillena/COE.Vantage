@@ -26,6 +26,21 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await roomService.deleteRoom(req.params.id);
+  await roomService.softDeleteRoom(req.params.id);
+  res.status(204).send();
+}
+
+export async function listTrash(req: Request, res: Response): Promise<void> {
+  const list = await roomService.listTrashRooms();
+  res.json(list);
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await roomService.restoreRoom(req.params.id);
+  res.status(204).send();
+}
+
+export async function permanentDelete(req: Request, res: Response): Promise<void> {
+  await roomService.permanentDeleteRoom(req.params.id);
   res.status(204).send();
 }

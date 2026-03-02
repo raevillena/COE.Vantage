@@ -3,9 +3,15 @@ import jwt from "jsonwebtoken";
 import { randomUUID } from "crypto";
 import { prisma } from "../../prisma/client.js";
 import { setRefreshToken, getRefreshToken, deleteRefreshToken } from "../../config/redis.js";
+import {
+  setPasswordResetToken,
+  getPasswordResetToken,
+  deletePasswordResetToken,
+} from "../../config/redis.js";
 import { env } from "../../config/env.js";
+import { sendPasswordResetEmail as sendEmail } from "../../utils/email.js";
 import { badRequest, unauthorized } from "../../utils/errors.js";
-import type { LoginBody, RegisterBody } from "./authSchemas.js";
+import type { LoginBody, RegisterBody, RequestPasswordResetBody, ResetPasswordBody } from "./authSchemas.js";
 
 /** Payload we store in the access token (sub = userId). */
 export interface AccessPayload {
@@ -56,7 +62,7 @@ export async function revokeRefreshToken(token: string): Promise<void> {
 
 export async function login(body: LoginBody): Promise<{ accessToken: string; refreshToken: string; user: { id: string; email: string; role: string; name: string; departmentId: string | null } }> {
   const user = await prisma.user.findUnique({ where: { email: body.email } });
-  if (!user) throw unauthorized("Invalid email or password");
+  if (!user || user.isDeleted) throw unauthorized("Invalid email or password");
   const valid = await bcrypt.compare(body.password, user.passwordHash);
   if (!valid) throw unauthorized("Invalid email or password");
 
@@ -109,4 +115,47 @@ export async function register(body: RegisterBody): Promise<{ id: string; email:
     select: { id: true, email: true, role: true, name: true, departmentId: true },
   });
   return user;
+}
+
+/** Build the reset link for a token (used in email and dev log). */
+function buildResetLink(token: string): string {
+  const base = env.RESET_PASSWORD_BASE_URL ?? env.FRONTEND_ORIGIN;
+  return `${base.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+/** Authenticated user requests password reset: verify current password, create token, send email. */
+export async function requestPasswordReset(
+  userId: string,
+  body: RequestPasswordResetBody
+): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.isDeleted) throw unauthorized("User not found");
+  const valid = await bcrypt.compare(body.currentPassword, user.passwordHash);
+  if (!valid) throw unauthorized("Current password is incorrect");
+  const token = randomUUID();
+  await setPasswordResetToken(token, userId);
+  const link = buildResetLink(token);
+  await sendEmail(user.email, link);
+}
+
+/** Admin sends password reset email to a user by email address. */
+export async function sendPasswordResetEmailForUser(email: string): Promise<void> {
+  const user = await prisma.user.findFirst({ where: { email, isDeleted: false } });
+  if (!user) throw badRequest("No user found with that email");
+  const token = randomUUID();
+  await setPasswordResetToken(token, user.id);
+  const link = buildResetLink(token);
+  await sendEmail(user.email, link);
+}
+
+/** Public: reset password using token from email. */
+export async function resetPassword(body: ResetPasswordBody): Promise<void> {
+  const userId = await getPasswordResetToken(body.token);
+  if (!userId) throw unauthorized("Invalid or expired reset link");
+  const passwordHash = await bcrypt.hash(body.newPassword, 12);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+  await deletePasswordResetToken(body.token);
 }

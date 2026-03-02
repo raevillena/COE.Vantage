@@ -7,8 +7,11 @@ import { Button } from "../../components/ui/button";
 import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 
 export function RoomsPage() {
+  const user = useAppSelector((s) => s.auth.user);
+  const canDeleteRoom = user?.role === "ADMIN" || user?.role === "DEAN";
   const [list, setList] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -76,7 +79,7 @@ export function RoomsPage() {
     setDeleteLoading(true);
     try {
       await apiClient.delete(`/rooms/${deleteConfirmId}`);
-      toast.success("Room deleted");
+      toast.success("Room moved to trash");
       setDeleteConfirmId(null);
       load();
     } catch {
@@ -129,7 +132,9 @@ export function RoomsPage() {
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
                         <DropdownMenu.Item onSelect={() => openEdit(r)}>Edit</DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => handleDeleteClick(r.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Delete</DropdownMenu.Item>
+                        {canDeleteRoom && (
+                          <DropdownMenu.Item onSelect={() => handleDeleteClick(r.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
+                        )}
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </td>
@@ -181,13 +186,13 @@ export function RoomsPage() {
       </Dialog.Root>
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
-        <Dialog.Content title="Delete room" description="Are you sure? This will delete this room. This action cannot be undone.">
+        <Dialog.Content title="Move room to trash" description="This room will be moved to Trash. You can restore it from the Trash page, or an admin can permanently delete it there.">
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? "…" : "Delete"}
+              {deleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

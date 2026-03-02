@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "FacultyLoad_studentClassId_dayOfWeek_academicYearId_semester_id" RENAME TO "FacultyLoad_studentClassId_dayOfWeek_academicYearId_semeste_idx";

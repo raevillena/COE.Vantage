@@ -55,10 +55,6 @@ function timeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
-function hourToTimeString(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
-}
-
 /** Format minutes from midnight as "HH:mm" (for 30-min resize). */
 function minutesToTimeString(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60) % 24;

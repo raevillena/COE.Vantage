@@ -61,7 +61,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <NavItem to="/schedules/rooms" onClose={onClose}>Room availability</NavItem>
         </div>
 
-        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
+        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "OFFICER") && (
           <>
             <Separator.Root className="my-2 h-px bg-border" />
             <div className="space-y-1">
@@ -69,13 +69,23 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 Management
               </div>
               <NavItem to="/rooms" onClose={onClose}>Rooms</NavItem>
-              <NavItem to="/curriculum" onClose={onClose}>Curriculum</NavItem>
-              <NavItem to="/subjects" onClose={onClose}>Subjects</NavItem>
-              <NavItem to="/student-classes" onClose={onClose}>Student classes</NavItem>
-              {user?.role === "ADMIN" && (
+              {(user?.role === "ADMIN" || user?.role === "OFFICER" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
                 <>
-                  <NavItem to="/users" onClose={onClose}>Users</NavItem>
-                  <NavItem to="/academic-years" onClose={onClose}>Academic years</NavItem>
+                  <NavItem to="/departments" onClose={onClose}>Departments</NavItem>
+                  <NavItem to="/curriculum" onClose={onClose}>Curriculum</NavItem>
+                  {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
+                    <>
+                      <NavItem to="/subjects" onClose={onClose}>Subjects</NavItem>
+                      <NavItem to="/student-classes" onClose={onClose}>Student classes</NavItem>
+                    </>
+                  )}
+                  {user?.role === "ADMIN" && (
+                    <>
+                      <NavItem to="/users" onClose={onClose}>Users</NavItem>
+                      <NavItem to="/academic-years" onClose={onClose}>Academic years</NavItem>
+                      <NavItem to="/trash" onClose={onClose}>Trash</NavItem>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -88,6 +98,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             Reports
           </div>
           <NavItem to="/reports" onClose={onClose}>Reports</NavItem>
+        </div>
+
+        <Separator.Root className="my-2 h-px bg-border" />
+        <div className="space-y-1">
+          <NavItem to="/profile" onClose={onClose}>Profile</NavItem>
+          <NavItem to="/about" onClose={onClose}>About</NavItem>
         </div>
       </nav>
     </aside>

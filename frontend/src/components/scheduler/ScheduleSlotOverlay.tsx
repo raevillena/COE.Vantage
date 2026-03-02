@@ -186,7 +186,6 @@ export function ScheduleSlotOverlay({
                 if (!column || !root) return;
                 const dayColumns = Array.from(root.children).slice(1) as HTMLElement[];
                 if (!dayColumns.length) return;
-                const firstRect = dayColumns[0].getBoundingClientRect();
                 const gridStartMinutes = hourStart * 60;
                 const gridEndMinutes = hourEnd * 60;
 

@@ -15,10 +15,9 @@ export function RoomAvailabilityPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    apiClient.get("/academic-years").then(({ data }) => {
+    apiClient.get("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      const active = data.find((y: AcademicYear) => y.isActive);
-      if (active) setAcademicYearId(active.id);
+      if (data.length >= 1) setAcademicYearId(data[0].id);
     });
     apiClient.get("/rooms").then(({ data }) => setRooms(data));
   }, []);

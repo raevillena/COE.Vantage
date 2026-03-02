@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { list, getById, create, update, remove } from "./userController.js";
+import { list, getById, create, update, remove, listTrash, restore, permanentDelete } from "./userController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -22,9 +22,14 @@ router.get(
   },
   list
 );
+router.get("/trash", authorize("ADMIN"), listTrash);
+router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
+
 router.get("/:id", authorize("ADMIN"), getById);
 router.post("/", authorize("ADMIN"), validate(createUserSchema), create);
 router.patch("/:id", authorize("ADMIN"), validate(updateUserSchema), update);
 router.delete("/:id", authorize("ADMIN"), remove);
+
+router.post("/:id/restore", authorize("ADMIN"), restore);
 
 export const userRoutes = router;

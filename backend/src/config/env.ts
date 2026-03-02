@@ -16,6 +16,16 @@ const envSchema = z.object({
   ACCESS_TOKEN_EXPIRY: z.string().default("15m"),
   REFRESH_TOKEN_EXPIRY: z.string().default("7d"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:5173"),
+  /** Base URL for password reset links (e.g. https://app.example.com). Defaults to FRONTEND_ORIGIN. */
+  RESET_PASSWORD_BASE_URL: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  /** Optional SMTP for sending password reset emails. If not set, reset link is logged to console (dev). */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional().transform((v) => (v ? Number(v) : undefined)),
+  SMTP_SECURE: z.string().optional().transform((v) => v === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

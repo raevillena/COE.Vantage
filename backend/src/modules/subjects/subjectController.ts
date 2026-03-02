@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import * as subjectService from "./subjectService.js";
-import type { CreateSubjectBody, UpdateSubjectBody } from "./subjectSchemas.js";
+import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody } from "./subjectSchemas.js";
+
+function caller(req: Request) {
+  return req.user ? { role: req.user.role, departmentId: req.user.departmentId } : undefined;
+}
 
 export async function list(_req: Request, res: Response): Promise<void> {
   const list = await subjectService.listSubjects();
@@ -25,6 +29,32 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await subjectService.deleteSubject(req.params.id);
+  await subjectService.softDeleteSubject(req.params.id);
   res.status(204).send();
+}
+
+export async function listTrash(req: Request, res: Response): Promise<void> {
+  const list = await subjectService.listTrashSubjects();
+  res.json(list);
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await subjectService.restoreSubject(req.params.id);
+  res.status(204).send();
+}
+
+export async function permanentDelete(req: Request, res: Response): Promise<void> {
+  await subjectService.permanentDeleteSubject(req.params.id);
+  res.status(204).send();
+}
+
+export async function getPrioritizedFaculty(req: Request, res: Response): Promise<void> {
+  const list = await subjectService.getPrioritizedFaculty(req.params.id);
+  res.json(list);
+}
+
+export async function putPrioritizedFaculty(req: Request, res: Response): Promise<void> {
+  const body = req.body as PutPrioritizedFacultyBody;
+  const list = await subjectService.setPrioritizedFaculty(req.params.id, body.facultyIds, caller(req));
+  res.json(list);
 }

@@ -69,7 +69,7 @@ export function AcademicYearsPage() {
     setDeleteLoading(true);
     try {
       await apiClient.delete(`/academic-years/${deleteConfirmId}`);
-      toast.success("Academic year deleted");
+      toast.success("Academic year moved to trash");
       setDeleteConfirmId(null);
       load();
     } catch {
@@ -118,7 +118,7 @@ export function AcademicYearsPage() {
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
                         <DropdownMenu.Item onSelect={() => openEdit(y)}>Edit</DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => handleDeleteClick(y.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Delete</DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => handleDeleteClick(y.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </td>
@@ -147,13 +147,13 @@ export function AcademicYearsPage() {
       </Dialog.Root>
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
-        <Dialog.Content title="Delete academic year" description="Are you sure? This will delete this academic year. This action cannot be undone.">
+        <Dialog.Content title="Move academic year to trash" description="This academic year will be moved to Trash. You can restore it from the Trash page, or permanently delete it there.">
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">Cancel</Button>
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
-              {deleteLoading ? "…" : "Delete"}
+              {deleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

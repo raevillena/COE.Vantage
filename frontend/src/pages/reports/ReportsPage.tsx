@@ -20,10 +20,9 @@ export function ReportsPage() {
   const [roomId, setRoomId] = useState("");
 
   useEffect(() => {
-    apiClient.get("/academic-years").then(({ data }) => {
+    apiClient.get("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      const active = data.find((y: AcademicYear) => y.isActive);
-      if (active) setAcademicYearId(active.id);
+      if (data.length >= 1) setAcademicYearId(data[0].id);
     });
     apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));

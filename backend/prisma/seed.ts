@@ -64,7 +64,7 @@ async function main() {
   for (const u of usersData) {
     const created = await prisma.user.upsert({
       where: { email: u.email },
-      update: {},
+      update: { passwordHash },
       create: {
         email: u.email,
         passwordHash,
@@ -147,36 +147,40 @@ async function main() {
     data: { name: "Bachelor of Science in Electronics Engineering", code: "BSEE", departmentId: deptEce.id },
   });
 
-  // 6. Subjects — BSCE curriculum (broad spread; some lab)
+  // 6. Subjects — BSCE curriculum (broad spread; some lab), with example year levels
   const bsceSubjectsData = [
-    { code: "MATH101", name: "Engineering Mathematics I", units: 3, isLab: false },
-    { code: "MATH102", name: "Engineering Mathematics II", units: 3, isLab: false },
-    { code: "MATH203", name: "Differential Equations", units: 3, isLab: false },
-    { code: "MATH204", name: "Probability and Statistics", units: 3, isLab: false },
-    { code: "PHY101", name: "Physics for Engineers", units: 4, isLab: false },
-    { code: "PHY102", name: "Physics for Engineers II", units: 3, isLab: false },
-    { code: "PHY101L", name: "Physics Lab", units: 1, isLab: true },
-    { code: "CHEM101", name: "General Chemistry", units: 3, isLab: false },
-    { code: "CHEM101L", name: "Chemistry Lab", units: 1, isLab: true },
-    { code: "ENG101", name: "Engineering Drawing", units: 2, isLab: false },
-    { code: "ENG102", name: "Computer-Aided Drafting", units: 2, isLab: true },
-    { code: "CE101", name: "Introduction to Civil Engineering", units: 2, isLab: false },
-    { code: "CE201", name: "Surveying", units: 3, isLab: false },
-    { code: "CE201L", name: "Surveying Lab", units: 1, isLab: true },
-    { code: "CE202", name: "Mechanics of Deformable Bodies", units: 3, isLab: false },
-    { code: "CE203", name: "Engineering Geology", units: 3, isLab: false },
-    { code: "CE301", name: "Structural Theory", units: 3, isLab: false },
-    { code: "CE302", name: "Structural Analysis", units: 3, isLab: false },
-    { code: "CE303", name: "Hydraulics", units: 3, isLab: false },
-    { code: "CE303L", name: "Hydraulics Lab", units: 1, isLab: true },
-    { code: "CE304", name: "Geotechnical Engineering", units: 3, isLab: false },
-    { code: "CE305", name: "Reinforced Concrete Design", units: 3, isLab: false },
-    { code: "CE306", name: "Steel Design", units: 3, isLab: false },
-    { code: "CE401", name: "Highway Engineering", units: 3, isLab: false },
-    { code: "CE402", name: "Water Resources Engineering", units: 3, isLab: false },
-    { code: "CE403", name: "Construction Management", units: 3, isLab: false },
-    { code: "CE404", name: "Civil Engineering Design Project", units: 2, isLab: false },
-    { code: "CE405", name: "CE Laws and Ethics", units: 2, isLab: false },
+    // Year 1
+    { code: "MATH101", name: "Engineering Mathematics I", units: 3, isLab: false, yearLevel: 1 },
+    { code: "PHY101", name: "Physics for Engineers", units: 4, isLab: false, yearLevel: 1 },
+    { code: "PHY101L", name: "Physics Lab", units: 1, isLab: true, yearLevel: 1 },
+    { code: "CHEM101", name: "General Chemistry", units: 3, isLab: false, yearLevel: 1 },
+    { code: "CHEM101L", name: "Chemistry Lab", units: 1, isLab: true, yearLevel: 1 },
+    { code: "ENG101", name: "Engineering Drawing", units: 2, isLab: false, yearLevel: 1 },
+    { code: "CE101", name: "Introduction to Civil Engineering", units: 2, isLab: false, yearLevel: 1 },
+    // Year 2
+    { code: "MATH102", name: "Engineering Mathematics II", units: 3, isLab: false, yearLevel: 2 },
+    { code: "MATH203", name: "Differential Equations", units: 3, isLab: false, yearLevel: 2 },
+    { code: "MATH204", name: "Probability and Statistics", units: 3, isLab: false, yearLevel: 2 },
+    { code: "PHY102", name: "Physics for Engineers II", units: 3, isLab: false, yearLevel: 2 },
+    { code: "ENG102", name: "Computer-Aided Drafting", units: 2, isLab: true, yearLevel: 2 },
+    { code: "CE201", name: "Surveying", units: 3, isLab: false, yearLevel: 2 },
+    { code: "CE201L", name: "Surveying Lab", units: 1, isLab: true, yearLevel: 2 },
+    { code: "CE202", name: "Mechanics of Deformable Bodies", units: 3, isLab: false, yearLevel: 2 },
+    { code: "CE203", name: "Engineering Geology", units: 3, isLab: false, yearLevel: 2 },
+    // Year 3
+    { code: "CE301", name: "Structural Theory", units: 3, isLab: false, yearLevel: 3 },
+    { code: "CE302", name: "Structural Analysis", units: 3, isLab: false, yearLevel: 3 },
+    { code: "CE303", name: "Hydraulics", units: 3, isLab: false, yearLevel: 3 },
+    { code: "CE303L", name: "Hydraulics Lab", units: 1, isLab: true, yearLevel: 3 },
+    { code: "CE304", name: "Geotechnical Engineering", units: 3, isLab: false, yearLevel: 3 },
+    { code: "CE305", name: "Reinforced Concrete Design", units: 3, isLab: false, yearLevel: 3 },
+    { code: "CE306", name: "Steel Design", units: 3, isLab: false, yearLevel: 3 },
+    // Year 4
+    { code: "CE401", name: "Highway Engineering", units: 3, isLab: false, yearLevel: 4 },
+    { code: "CE402", name: "Water Resources Engineering", units: 3, isLab: false, yearLevel: 4 },
+    { code: "CE403", name: "Construction Management", units: 3, isLab: false, yearLevel: 4 },
+    { code: "CE404", name: "Civil Engineering Design Project", units: 2, isLab: false, yearLevel: 4 },
+    { code: "CE405", name: "CE Laws and Ethics", units: 2, isLab: false, yearLevel: 4 },
   ];
   const bsceSubjects: { id: string; code: string }[] = [];
   for (const s of bsceSubjectsData) {
@@ -190,32 +194,36 @@ async function main() {
   const subjChemLab = bsceSubjects.find((s) => s.code === "CHEM101L")!;
   const subjSurvey = bsceSubjects.find((s) => s.code === "CE201")!;
 
-  // 6b. Subjects — BSEE curriculum
+  // 6b. Subjects — BSEE curriculum, with example year levels
   const bseeSubjectsData = [
-    { code: "MATH101", name: "Engineering Mathematics I", units: 3, isLab: false },
-    { code: "MATH102", name: "Engineering Mathematics II", units: 3, isLab: false },
-    { code: "MATH203", name: "Differential Equations", units: 3, isLab: false },
-    { code: "PHY101", name: "Physics for Engineers", units: 4, isLab: false },
-    { code: "PHY101L", name: "Physics Lab", units: 1, isLab: true },
-    { code: "ECE101", name: "Circuit Analysis", units: 3, isLab: false },
-    { code: "ECE101L", name: "Circuit Analysis Lab", units: 1, isLab: true },
-    { code: "ECE102", name: "Electronics Engineering Drawings", units: 2, isLab: true },
-    { code: "ECE201", name: "Electronic Devices and Circuits", units: 3, isLab: false },
-    { code: "ECE201L", name: "Electronic Devices and Circuits Lab", units: 1, isLab: true },
-    { code: "ECE202", name: "Signals and Systems", units: 3, isLab: false },
-    { code: "ECE203", name: "Digital Logic Circuits", units: 3, isLab: false },
-    { code: "ECE203L", name: "Digital Logic Circuits Lab", units: 1, isLab: true },
-    { code: "ECE301", name: "Communications Engineering I", units: 3, isLab: false },
-    { code: "ECE302", name: "Communications Engineering II", units: 3, isLab: false },
-    { code: "ECE303", name: "Electromagnetic Fields", units: 3, isLab: false },
-    { code: "ECE304", name: "Microprocessors", units: 3, isLab: false },
-    { code: "ECE304L", name: "Microprocessors Lab", units: 1, isLab: true },
-    { code: "ECE305", name: "Control Systems", units: 3, isLab: false },
-    { code: "CPE101", name: "Computer Programming", units: 3, isLab: true },
-    { code: "CPE201", name: "Data Structures and Algorithms", units: 3, isLab: true },
-    { code: "ECE401", name: "Electronics Engineering Design", units: 2, isLab: false },
-    { code: "ECE402", name: "Data Communications", units: 3, isLab: false },
-    { code: "ECE403", name: "ECE Laws and Ethics", units: 2, isLab: false },
+    // Year 1
+    { code: "MATH101", name: "Engineering Mathematics I", units: 3, isLab: false, yearLevel: 1 },
+    { code: "PHY101", name: "Physics for Engineers", units: 4, isLab: false, yearLevel: 1 },
+    { code: "PHY101L", name: "Physics Lab", units: 1, isLab: true, yearLevel: 1 },
+    { code: "ECE101", name: "Circuit Analysis", units: 3, isLab: false, yearLevel: 1 },
+    { code: "ECE101L", name: "Circuit Analysis Lab", units: 1, isLab: true, yearLevel: 1 },
+    { code: "ECE102", name: "Electronics Engineering Drawings", units: 2, isLab: true, yearLevel: 1 },
+    { code: "CPE101", name: "Computer Programming", units: 3, isLab: true, yearLevel: 1 },
+    // Year 2
+    { code: "MATH102", name: "Engineering Mathematics II", units: 3, isLab: false, yearLevel: 2 },
+    { code: "MATH203", name: "Differential Equations", units: 3, isLab: false, yearLevel: 2 },
+    { code: "ECE201", name: "Electronic Devices and Circuits", units: 3, isLab: false, yearLevel: 2 },
+    { code: "ECE201L", name: "Electronic Devices and Circuits Lab", units: 1, isLab: true, yearLevel: 2 },
+    { code: "ECE202", name: "Signals and Systems", units: 3, isLab: false, yearLevel: 2 },
+    { code: "ECE203", name: "Digital Logic Circuits", units: 3, isLab: false, yearLevel: 2 },
+    { code: "ECE203L", name: "Digital Logic Circuits Lab", units: 1, isLab: true, yearLevel: 2 },
+    { code: "CPE201", name: "Data Structures and Algorithms", units: 3, isLab: true, yearLevel: 2 },
+    // Year 3
+    { code: "ECE301", name: "Communications Engineering I", units: 3, isLab: false, yearLevel: 3 },
+    { code: "ECE302", name: "Communications Engineering II", units: 3, isLab: false, yearLevel: 3 },
+    { code: "ECE303", name: "Electromagnetic Fields", units: 3, isLab: false, yearLevel: 3 },
+    { code: "ECE304", name: "Microprocessors", units: 3, isLab: false, yearLevel: 3 },
+    { code: "ECE304L", name: "Microprocessors Lab", units: 1, isLab: true, yearLevel: 3 },
+    { code: "ECE305", name: "Control Systems", units: 3, isLab: false, yearLevel: 3 },
+    // Year 4
+    { code: "ECE401", name: "Electronics Engineering Design", units: 2, isLab: false, yearLevel: 4 },
+    { code: "ECE402", name: "Data Communications", units: 3, isLab: false, yearLevel: 4 },
+    { code: "ECE403", name: "ECE Laws and Ethics", units: 2, isLab: false, yearLevel: 4 },
   ];
   const bseeSubjects: { id: string; code: string }[] = [];
   for (const s of bseeSubjectsData) {

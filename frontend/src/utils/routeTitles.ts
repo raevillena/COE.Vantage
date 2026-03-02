@@ -7,11 +7,15 @@ export const routeTitles: Record<string, string> = {
   "/subjects": "Manage Subjects",
   "/student-classes": "Manage Student Classes",
   "/academic-years": "Academic Years",
+  "/departments": "Manage Departments",
   "/scheduler": "Scheduler",
   "/schedules/faculty": "Faculty Schedule",
   "/schedules/student-class": "Class Schedule",
   "/schedules/rooms": "Room Availability",
   "/reports": "Reports",
+  "/trash": "Trash",
+  "/profile": "Profile",
+  "/about": "About",
 };
 
 export function getPageTitle(pathname: string): string {

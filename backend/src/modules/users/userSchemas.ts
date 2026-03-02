@@ -23,7 +23,6 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   body: z.object({
     email: z.string().email().optional(),
-    password: z.string().min(8).optional(),
     name: z.string().min(1).optional(),
     role: roleEnum.optional(),
     departmentId: z.string().uuid().optional().nullable(),

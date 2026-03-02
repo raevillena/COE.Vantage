@@ -3,14 +3,12 @@ import { z } from "zod";
 export const createDepartmentSchema = z.object({
   body: z.object({
     name: z.string().min(1, "Name required"),
-    code: z.string().optional(),
   }),
 });
 
 export const updateDepartmentSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
-    code: z.string().optional().nullable(),
   }),
   params: z.object({ id: z.string().uuid() }),
 });

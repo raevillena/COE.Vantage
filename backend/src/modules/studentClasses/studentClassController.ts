@@ -25,6 +25,21 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await studentClassService.deleteStudentClass(req.params.id);
+  await studentClassService.softDeleteStudentClass(req.params.id);
+  res.status(204).send();
+}
+
+export async function listTrash(req: Request, res: Response): Promise<void> {
+  const list = await studentClassService.listTrashStudentClasses();
+  res.json(list);
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await studentClassService.restoreStudentClass(req.params.id);
+  res.status(204).send();
+}
+
+export async function permanentDelete(req: Request, res: Response): Promise<void> {
+  await studentClassService.permanentDeleteStudentClass(req.params.id);
   res.status(204).send();
 }

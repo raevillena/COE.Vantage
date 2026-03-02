@@ -151,6 +151,53 @@ export function SchedulerPage() {
   const [pendingAssignmentDragged, setPendingAssignmentDragged] = useState(false);
   const [resizingLoadId, setResizingLoadId] = useState<string | null>(null);
   const [moveConflict, setMoveConflict] = useState<MoveConflictState | null>(null);
+  const [autoScheduling, setAutoScheduling] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const currentClass =
+    viewMode === "class" && studentClassId
+      ? studentClasses.find((c) => c.id === studentClassId)
+      : undefined;
+  const currentCurriculumId = currentClass?.curriculumId ?? "";
+  const currentYearLevel = currentClass?.yearLevel ?? undefined;
+
+  const handleAutoSchedule = async () => {
+    if (!academicYearId || !studentClassId) return;
+    setAutoScheduling(true);
+    try {
+      await apiClient.post("/faculty-loads/auto-assign", {
+        academicYearId,
+        semester,
+        studentClassId,
+      });
+      await Promise.all([refreshLoads(), refreshRoomLoads()]);
+      toast.success("Auto-scheduled remaining subjects for this class");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Auto-schedule failed"));
+    } finally {
+      setAutoScheduling(false);
+    }
+  };
+
+  const handleResetSchedule = async () => {
+    if (!academicYearId || !studentClassId) return;
+    const confirmed = window.confirm("This will remove all loads for this class in the selected academic year and semester. Continue?");
+    if (!confirmed) return;
+    setResetting(true);
+    try {
+      await apiClient.post("/faculty-loads/reset", {
+        academicYearId,
+        semester,
+        studentClassId,
+      });
+      await Promise.all([refreshLoads(), refreshRoomLoads()]);
+      toast.success("Schedule reset for this class");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Reset failed"));
+    } finally {
+      setResetting(false);
+    }
+  };
 
   /** Require 8px movement before starting a drag so clicks on blocks are treated as clicks, not drags. */
   const sensors = useSensors(
@@ -158,10 +205,9 @@ export function SchedulerPage() {
   );
 
   useEffect(() => {
-    apiClient.get("/academic-years").then(({ data }) => {
+    apiClient.get("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      const active = data.find((y: AcademicYear) => y.isActive);
-      if (active) setAcademicYearId(active.id);
+      if (data.length >= 1) setAcademicYearId(data[0].id);
     });
     apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
     apiClient.get("/student-classes").then(({ data }) => setStudentClasses(data));
@@ -722,6 +768,16 @@ export function SchedulerPage() {
             </Select.Content>
           </Select.Root>
         </div>
+        {viewMode === "class" && academicYearId && studentClassId && (
+          <>
+            <Button type="button" variant="secondary" onClick={handleAutoSchedule} disabled={autoScheduling}>
+              {autoScheduling ? "Auto-scheduling…" : "Auto-schedule remaining"}
+            </Button>
+            <Button type="button" variant="danger" onClick={handleResetSchedule} disabled={resetting}>
+              {resetting ? "Resetting…" : "Reset schedule"}
+            </Button>
+          </>
+        )}
         {viewMode === "class" && (
           <div className="min-w-[180px]">
             <label className="mb-1 block text-sm font-medium text-foreground">Student Class</label>
@@ -779,7 +835,13 @@ export function SchedulerPage() {
         >
           <aside className="flex flex-col border-r border-border p-3 min-h-0 overflow-hidden">
             <div className="flex-1 min-h-0 overflow-auto">
-              <CurriculumSubjectTree />
+              <CurriculumSubjectTree
+                {...({
+                  curriculumId: viewMode === "class" ? currentCurriculumId || undefined : undefined,
+                  yearLevel: viewMode === "class" ? currentYearLevel : undefined,
+                  classLoads: viewMode === "class" ? loads : undefined,
+                } as any)}
+              />
             </div>
           </aside>
 

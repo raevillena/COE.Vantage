@@ -25,19 +25,25 @@ model User {
   role         Role
   departmentId String?
   name         String
+  isDeleted    Boolean    @default(false)
+  deletedAt    DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   department Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   facultyLoads FacultyLoad[]
+  subjectFacultyPriorities SubjectFacultyPriority[]
 
   @@index([role, departmentId])
+  @@index([isDeleted])
 }
 
 model Department {
   id        String   @id @default(uuid())
   name      String
   code      String?
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -45,6 +51,7 @@ model Department {
   rooms        Room[]
   curricula    Curriculum[]
   subjects     Subject[]
+  @@index([isDeleted])
 }
 
 model Room {
@@ -55,6 +62,8 @@ model Room {
   isLab        Boolean  @default(false)
   hasAC        Boolean  @default(false)
   departmentId String
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -63,16 +72,20 @@ model Room {
 
   @@index([departmentId])
   @@index([departmentId, isLab, capacity])
+  @@index([isDeleted])
 }
 
 model AcademicYear {
   id        String   @id @default(uuid())
   name      String   // e.g. "2025-2026"
   isActive  Boolean  @default(false)
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   facultyLoads FacultyLoad[]
+  @@index([isDeleted])
 }
 
 model Curriculum {
@@ -80,12 +93,15 @@ model Curriculum {
   name         String
   code         String?
   departmentId String?
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   department    Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   subjects      Subject[]
   studentClasses StudentClass[]
+  @@index([isDeleted])
 }
 
 model Subject {
@@ -94,14 +110,19 @@ model Subject {
   name         String
   units        Int
   isLab        Boolean  @default(false)
+  yearLevel    Int?
   curriculumId String?
   departmentId String?
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   curriculum    Curriculum?  @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
   department    Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   facultyLoads  FacultyLoad[]
+  subjectFacultyPriorities SubjectFacultyPriority[]
+  @@index([isDeleted])
 }
 
 model StudentClass {
@@ -110,6 +131,8 @@ model StudentClass {
   yearLevel    Int
   curriculumId String
   studentCount Int
+  isDeleted    Boolean  @default(false)
+  deletedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -117,6 +140,7 @@ model StudentClass {
   facultyLoads FacultyLoad[]
 
   @@index([curriculumId])
+  @@index([isDeleted])
 }
 
 // dayOfWeek: 1 = Monday, 7 = Saturday (ISO); or 0-6 in some systems - we use 1-7
@@ -148,4 +172,19 @@ model FacultyLoad {
   @@index([roomId, dayOfWeek, academicYearId, semester])
   @@index([facultyId, dayOfWeek, academicYearId, semester])
   @@index([studentClassId, dayOfWeek, academicYearId, semester])
+}
+
+model SubjectFacultyPriority {
+  id         String   @id @default(uuid())
+  subjectId  String
+  facultyId  String
+  priority   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  subject  Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  faculty  User    @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, facultyId])
+  @@index([subjectId])
+  @@index([facultyId])
 }

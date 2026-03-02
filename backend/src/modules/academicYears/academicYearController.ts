@@ -2,8 +2,14 @@ import type { Request, Response } from "express";
 import * as academicYearService from "./academicYearService.js";
 import type { CreateAcademicYearBody, UpdateAcademicYearBody } from "./academicYearSchemas.js";
 
-export async function list(_req: Request, res: Response): Promise<void> {
+export async function list(req: Request, res: Response): Promise<void> {
   const list = await academicYearService.listAcademicYears();
+  res.json(list);
+}
+
+/** List only active academic years (for schedules/reports). No role restriction beyond auth. */
+export async function listActive(_req: Request, res: Response): Promise<void> {
+  const list = await academicYearService.listActiveAcademicYears();
   res.json(list);
 }
 
@@ -30,6 +36,21 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await academicYearService.deleteAcademicYear(req.params.id);
+  await academicYearService.softDeleteAcademicYear(req.params.id);
+  res.status(204).send();
+}
+
+export async function listTrash(req: Request, res: Response): Promise<void> {
+  const list = await academicYearService.listTrashAcademicYears();
+  res.json(list);
+}
+
+export async function restore(req: Request, res: Response): Promise<void> {
+  await academicYearService.restoreAcademicYear(req.params.id);
+  res.status(204).send();
+}
+
+export async function permanentDelete(req: Request, res: Response): Promise<void> {
+  await academicYearService.permanentDeleteAcademicYear(req.params.id);
   res.status(204).send();
 }
