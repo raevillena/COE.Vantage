@@ -110,7 +110,8 @@ model Subject {
   name         String
   units        Int
   isLab        Boolean  @default(false)
-  yearLevel    Int?
+  yearLevel    Int?     // 1-5
+  semester     Int?     // 1 = 1st sem, 2 = 2nd sem, 3 = mid year
   curriculumId String?
   departmentId String?
   isDeleted    Boolean  @default(false)

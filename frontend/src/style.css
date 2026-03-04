@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* COE.Vantage color scheme — professional blue-indigo for engineering/academic use */
 @theme {
   /* Primary: deep blue (brand, primary actions, active nav) */
@@ -29,4 +31,37 @@
   --color-success: #16a34a;
   --color-success-muted: #dcfce7;
   --color-focus-ring: #1e40af;
+}
+
+/* Dark theme overrides: applied when the root <html> element has the `dark` class. */
+:root.dark {
+  /* Surfaces: deep slate backgrounds with subtle layering */
+  --color-surface: #020617; /* slate-950 */
+  --color-surface-muted: #020617;
+  --color-surface-hover: #0f172a; /* slate-900 */
+
+  /* Borders: slightly lighter than background for gentle separation */
+  --color-border: #1e293b; /* slate-800 */
+  --color-border-strong: #334155; /* slate-700 */
+
+  /* Text: light-on-dark, with muted/subtle variants */
+  --color-foreground: #e2e8f0; /* slate-200 */
+  --color-foreground-muted: #94a3b8; /* slate-400 */
+  --color-foreground-subtle: #64748b; /* slate-500 */
+
+  /* Primary: slightly brighter blue accents that read well on dark */
+  --color-primary: #60a5fa; /* blue-400 */
+  --color-primary-hover: #3b82f6; /* blue-500 */
+  --color-primary-muted: #1d4ed8; /* blue-700 background for active items */
+  --color-primary-foreground: #0b1120; /* near-black text on primary surfaces */
+
+  /* Semantic status colors tuned for dark backgrounds */
+  --color-danger: #f97373;
+  --color-danger-hover: #ef4444;
+  --color-danger-muted: #7f1d1d;
+  --color-success: #22c55e;
+  --color-success-muted: #064e3b;
+
+  /* Focus ring: bright enough to stand out on dark surfaces */
+  --color-focus-ring: #93c5fd; /* blue-300 */
 }

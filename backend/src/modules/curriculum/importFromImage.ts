@@ -249,19 +249,25 @@ export async function applyImport(
     });
     const isLab =
       sub.isLab ?? (/lab|laboratory/i.test(sub.name) || /lab|laboratory/i.test(sub.code));
+    const yearLevel = sub.yearLevel >= 1 && sub.yearLevel <= 5 ? sub.yearLevel : null;
+    const semester =
+      typeof sub.semester === "number" && sub.semester >= 1 && sub.semester <= 3
+        ? sub.semester
+        : null;
     const data = {
       code: sub.code.trim(),
       name: sub.name.trim(),
       units: Math.max(0, Math.floor(Number(sub.units) || 0)),
       isLab,
-      yearLevel: sub.yearLevel >= 1 && sub.yearLevel <= 5 ? sub.yearLevel : null,
+      yearLevel,
+      semester,
       curriculumId,
     };
     try {
       if (existing) {
         await prisma.subject.update({
           where: { id: existing.id },
-          data: { name: data.name, units: data.units, isLab: data.isLab, yearLevel: data.yearLevel },
+          data: { name: data.name, units: data.units, isLab: data.isLab, yearLevel: data.yearLevel, semester: data.semester },
         });
         updated++;
       } else {

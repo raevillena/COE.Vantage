@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
+import { Select } from "../../components/ui/select";
+import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
@@ -71,6 +73,7 @@ function ChangePasswordForm() {
 export function UserProfilePage() {
   const user = useAppSelector((s) => s.auth.user);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
+  const { paletteId, palettes, setPaletteId } = useSchedulePalette();
 
   useEffect(() => {
     if (!user?.departmentId) return;
@@ -121,6 +124,36 @@ export function UserProfilePage() {
           Request a password reset link to your email. You will set the new password yourself; administrators cannot see or set your password.
         </p>
         <ChangePasswordForm />
+      </section>
+
+      <section className="mt-8 max-w-xl">
+        <h2 className="text-lg font-medium text-foreground mb-3">Schedule color palette</h2>
+        <p className="text-sm text-foreground-muted mb-4">
+          Choose how subjects are colored in the scheduler. This only affects your view on this device.
+        </p>
+        <div className="max-w-xs">
+          <label className="mb-1 block text-sm font-medium text-foreground">
+            Palette
+          </label>
+          <Select.Root
+            value={paletteId}
+            onValueChange={(value) => setPaletteId(value as SchedulePaletteId)}
+          >
+            <Select.Trigger>
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content>
+              {palettes.map((p) => (
+                <Select.Item key={p.id} value={p.id}>
+                  {p.label}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select.Root>
+          <p className="mt-1 text-xs text-foreground-muted">
+            {palettes.find((p) => p.id === paletteId)?.description}
+          </p>
+        </div>
       </section>
 
       <p className="mt-6 text-sm text-foreground-muted">

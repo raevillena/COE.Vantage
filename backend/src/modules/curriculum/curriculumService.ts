@@ -112,3 +112,17 @@ export async function permanentDeleteCurriculum(id: string) {
   if (!c.isDeleted) throw badRequest("Only curricula in Trash can be permanently deleted");
   await prisma.curriculum.delete({ where: { id } });
 }
+
+/** Unassign all subjects from this curriculum (set curriculumId and yearLevel to null). Subjects remain in the system. */
+export async function clearCurriculum(id: string, caller?: CurriculumCaller) {
+  const c = await prisma.curriculum.findUnique({ where: { id } });
+  if (!c) throw notFound("Curriculum not found");
+  if (c.isDeleted) throw badRequest("Cannot clear a deleted curriculum.");
+  if (caller?.role === "CHAIRMAN" && c.departmentId !== caller.departmentId) {
+    throw forbidden("You can only clear curricula for your own department.");
+  }
+  await prisma.subject.updateMany({
+    where: { curriculumId: id, isDeleted: false },
+    data: { curriculumId: null, yearLevel: null },
+  });
+}

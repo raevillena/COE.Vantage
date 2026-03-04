@@ -71,15 +71,24 @@ export function SubjectsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = form.name.trim();
+    if (!nameTrimmed) {
+      toast.error("Name is required");
+      return;
+    }
+    if (form.units < 0) {
+      toast.error("Units cannot be negative");
+      return;
+    }
     try {
       // When creating, derive code from name (slug) so user doesn't have to type it; when editing, omit code to keep existing.
       const code =
         editingId
           ? undefined
-          : (form.name.trim().replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").toUpperCase() || `SUB-${Date.now()}`).slice(0, 32);
+          : (nameTrimmed.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").toUpperCase() || `SUB-${Date.now()}`).slice(0, 32);
       const payload = {
         ...(code !== undefined && { code }),
-        name: form.name,
+        name: nameTrimmed,
         units: form.units,
         isLab: form.isLab,
         yearLevel: form.yearLevel ? Number(form.yearLevel) : null,
@@ -239,8 +248,8 @@ export function SubjectsPage() {
                 {list.find((s) => s.id === editingId)?.code ?? "—"}
               </p>
             )}
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input required type="number" min={0} placeholder="Units" value={form.units} onChange={(e) => setForm((f) => ({ ...f, units: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input type="number" min={0} placeholder="Units" value={form.units} onChange={(e) => setForm((f) => ({ ...f, units: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={form.isLab} onChange={(e) => setForm((f) => ({ ...f, isLab: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />
               <span>Lab subject</span>

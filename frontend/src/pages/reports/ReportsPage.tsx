@@ -152,6 +152,19 @@ export function ReportsPage() {
             Download PDF
           </Button>
         </div>
+        <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+          <h2 className="font-medium text-foreground mb-2">College workload (Excel)</h2>
+          <p className="text-sm text-foreground-muted mb-3">
+            Complete faculty workload for the college for the selected academic year and semester.
+          </p>
+          <Button
+            type="button"
+            disabled={!academicYearId}
+            onClick={() => downloadReport("/reports/college-workload", "college-workload.xlsx")}
+          >
+            Download Excel
+          </Button>
+        </div>
       </div>
       <p className="mt-4 text-sm text-foreground-muted">Reports require authentication. Download opens in a new request with your cookies.</p>
     </div>

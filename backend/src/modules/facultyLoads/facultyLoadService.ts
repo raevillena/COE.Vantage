@@ -409,8 +409,8 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
     }
 
     // Remaining minutes: place as single continuous blocks (one block per session, no splitting).
-    // Max block size: 3 hr for labs, 3 hr for lectures (one session = one block).
-    const maxBlockMinutes = 180;
+    // Allow up to 5 hr per block so 4- or 5-unit subjects can use a single continuous block when space allows.
+    const maxBlockMinutes = 300;
     while (remaining > 0) {
       const blockMinutes = Math.min(remaining, maxBlockMinutes);
       let placed = false;

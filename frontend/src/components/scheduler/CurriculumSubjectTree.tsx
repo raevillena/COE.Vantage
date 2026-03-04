@@ -22,12 +22,13 @@ function DraggableSubject({ subject, status = "none", label }: SubjectItemProps)
     id: `subject-${subject.id}`,
     data: item,
   });
+  // Solid status colors so full/partial/none are easy to read (full = green, partial = amber, none = rose).
   const stateClass =
     status === "full"
-      ? "border-emerald-500/70 bg-emerald-50"
+      ? "border-emerald-500 dark:border-emerald-500/70 bg-emerald-200 dark:bg-emerald-800/90"
       : status === "partial"
-      ? "border-amber-400/70 bg-amber-50"
-      : "border-rose-300/60 bg-rose-50";
+      ? "border-amber-500 dark:border-amber-500/70 bg-amber-200 dark:bg-amber-800/90"
+      : "border-rose-500 dark:border-rose-500/70 bg-rose-200 dark:bg-rose-800/90";
   return (
     <div
       ref={setNodeRef}
@@ -71,14 +72,20 @@ function formatYearLabel(yearLevel: number): string {
   return `${yearLevel}${suffix} year`;
 }
 
+/** 1 = 1st Sem, 2 = 2nd Sem, 3 = Mid Year. When set with curriculumId/yearLevel, only subjects for this semester are shown. */
+const SEMESTER_LABELS: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3: "Mid Year" };
+
 export interface CurriculumSubjectTreeProps {
   curriculumId?: string;
   yearLevel?: number;
+  /** When set with curriculumId + yearLevel, filters subjects to this semester (1, 2, or 3). Schedule differs per semester. */
+  semester?: number;
   /** Loads for the current class view, used to compute scheduled minutes per subject. */
   classLoads?: FacultyLoad[];
 }
 
-export function CurriculumSubjectTree({ curriculumId, yearLevel, classLoads }: CurriculumSubjectTreeProps) {
+export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
+  const { curriculumId, yearLevel, semester, classLoads } = props;
   const [curricula, setCurricula] = useState<Curriculum[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -88,14 +95,14 @@ export function CurriculumSubjectTree({ curriculumId, yearLevel, classLoads }: C
     apiClient.get<Subject[]>("/subjects").then(({ data }) => setSubjects(data));
   }, []);
 
-  // When switching curriculum/year context, default-expand the Year group; keep Others collapsed.
+  // When switching curriculum/year/semester context, default-expand the Year group; keep Others collapsed.
   useEffect(() => {
     if (curriculumId && yearLevel != null) {
       setExpandedIds(new Set(["year-main"]));
     } else {
       setExpandedIds(new Set());
     }
-  }, [curriculumId, yearLevel]);
+  }, [curriculumId, yearLevel, semester]);
 
   const byCurriculum = useMemo(() => groupSubjectsByCurriculum(subjects), [subjects]);
   const minutesBySubject = useMemo(() => {
@@ -140,15 +147,24 @@ export function CurriculumSubjectTree({ curriculumId, yearLevel, classLoads }: C
 
   const selectedCurriculum = curriculumId ? curricula.find((c) => c.id === curriculumId) : undefined;
 
-  // When curriculumId and yearLevel are provided (class view), show a focused tree for that curriculum:
+  // When curriculumId and yearLevel are provided (class view), show a focused tree for that curriculum and semester:
   if (selectedCurriculum && yearLevel != null) {
     const allForCurriculum = byCurriculum.get(selectedCurriculum.id) ?? [];
-    const mainYear = allForCurriculum.filter((s) => s.yearLevel === yearLevel);
-    const others = allForCurriculum.filter((s) => s.yearLevel == null || s.yearLevel !== yearLevel);
+    // Filter by semester when set: show subjects for this semester, or subjects with no semester (show in all)
+    const forSemester = (s: Subject) =>
+      semester == null || s.semester == null || s.semester === semester;
+    const mainYear = allForCurriculum.filter(
+      (s) => s.yearLevel === yearLevel && forSemester(s)
+    );
+    const others = allForCurriculum.filter(
+      (s) => (s.yearLevel == null || s.yearLevel !== yearLevel) && forSemester(s)
+    );
+    const semesterLabel = semester != null ? SEMESTER_LABELS[semester] ?? `Sem ${semester}` : null;
     return (
       <div className="flex flex-col h-full min-h-0">
         <h2 className="text-sm font-semibold text-foreground mb-2 px-1">
-          Subjects · {selectedCurriculum.name} ({formatYearLabel(yearLevel)})
+          Subjects · {selectedCurriculum.name} ({formatYearLabel(yearLevel)}
+          {semesterLabel ? ` · ${semesterLabel}` : ""})
         </h2>
         <div className="flex-1 overflow-y-auto space-y-2">
           <div className="rounded border border-border bg-surface-muted/50 overflow-hidden">

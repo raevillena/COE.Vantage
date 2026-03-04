@@ -52,16 +52,25 @@ export function RoomsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = form.name.trim();
+    if (!nameTrimmed) {
+      toast.error("Name is required");
+      return;
+    }
+    if (form.capacity < 1) {
+      toast.error("Capacity must be at least 1");
+      return;
+    }
     if (!form.departmentId) {
       toast.error("Select a department");
       return;
     }
     try {
       if (editingId) {
-        await apiClient.patch(`/rooms/${editingId}`, form);
+        await apiClient.patch(`/rooms/${editingId}`, { ...form, name: nameTrimmed });
         toast.success("Room updated");
       } else {
-        await apiClient.post("/rooms", form);
+        await apiClient.post("/rooms", { ...form, name: nameTrimmed });
         toast.success("Room created");
       }
       setModalOpen(false);
@@ -147,8 +156,8 @@ export function RoomsPage() {
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Room" : "Add Room"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input required type="number" min={1} placeholder="Capacity" value={form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input type="number" min={1} placeholder="Capacity" value={form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
               <Select.Root value={form.departmentId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}>

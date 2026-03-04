@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { FacultyLoad } from "../../types/api";
+import { useSchedulePalette } from "../../context/SchedulePaletteContext";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOUR_START = 7;
@@ -37,11 +38,10 @@ function formatTime12(time: string): string {
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-const COLORS = ["bg-blue-200", "bg-emerald-200", "bg-amber-200", "bg-violet-200", "bg-rose-200", "bg-cyan-200"];
-
-function colorClass(subjectId: string, ids: string[]) {
+/** Map a subject id to a background color from the active palette. */
+function colorClass(subjectId: string, ids: string[], colors: string[]) {
   const i = ids.indexOf(subjectId);
-  return COLORS[i % COLORS.length] ?? "bg-primary-muted";
+  return colors[i % colors.length] ?? "bg-primary-muted";
 }
 
 /** Parse "HH:mm" or "HH:mm:ss" to minutes since midnight. Handles ISO-ish strings by taking only the time part. */
@@ -128,6 +128,7 @@ function ScheduleBlock({
   onLoadResizeStart,
   onLoadResizeEnd,
 }: ScheduleBlockProps) {
+  const { palette } = useSchedulePalette();
   const draggableId = draggableIdPrefix ? `${draggableIdPrefix}-load-${load.id}` : `load-${load.id}`;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: draggableId,
@@ -197,13 +198,13 @@ function ScheduleBlock({
       onClick={onLoadClick ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
       onKeyDown={onLoadClick ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
       title={titleParts.join(" · ")}
-      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={{ top, height }}
     >
-      <div className="font-medium truncate min-w-0">
+      <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ")}
       </div>
-      <div className="truncate min-w-0 text-foreground-muted text-[10px]">
+      <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
       </div>
       {onLoadResize && height >= 24 && (
@@ -219,7 +220,7 @@ function ScheduleBlock({
           title="Drag to change duration"
           aria-label="Resize time"
         >
-          <span className="text-[10px] text-foreground-muted/80 select-none">⋯</span>
+          <span className="text-[10px] text-gray-600 dark:text-gray-400 select-none">⋯</span>
         </div>
       )}
     </div>
@@ -247,22 +248,23 @@ export function LoadBlockPreview({
   timeRangeLabel?: string | null;
   className?: string;
 }) {
+  const { palette } = useSchedulePalette();
   const facultyShort = formatFacultyShortName(load.faculty?.name);
   const line1 = [load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ");
   const timeRange = timeRangeLabel ?? `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
   return (
     <div
       aria-hidden
-      className={`rounded px-1 py-0.5 text-xs overflow-hidden box-border min-w-[100px] ${colorClass(load.subjectId, subjectIds)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} shadow-xl ${className}`}
+      className={`rounded px-1 py-0.5 text-xs overflow-hidden box-border min-w-[100px] ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} shadow-xl ${className}`}
       style={{ height: Math.max(20, heightPx) }}
     >
-      <div className="font-medium truncate min-w-0">
+      <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {line1}
         {dropTimeLabel && (
           <span className="text-primary font-normal"> · {dropTimeLabel}</span>
         )}
       </div>
-      <div className="truncate min-w-0 text-foreground-muted text-[10px]">
+      <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {[facultyShort, timeRange].filter(Boolean).join(" · ")}
       </div>
     </div>

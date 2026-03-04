@@ -88,3 +88,9 @@ export async function getCurriculumSubjects(req: Request, res: Response): Promis
   const subjects = await subjectService.listSubjectsByCurriculumId(req.params.id);
   res.json(subjects);
 }
+
+/** Clear curriculum: unassign all subjects (they remain in the system). */
+export async function clearCurriculum(req: Request, res: Response): Promise<void> {
+  await curriculumService.clearCurriculum(req.params.id, caller(req));
+  res.status(204).send();
+}

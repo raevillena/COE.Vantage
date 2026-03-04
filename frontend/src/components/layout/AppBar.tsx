@@ -4,6 +4,7 @@ import { logout } from "../../store/authSlice";
 import { apiClient } from "../../api/apiClient";
 import { Avatar } from "../ui/avatar";
 import { DropdownMenu } from "../ui/dropdownMenu";
+import { useTheme } from "../../context/ThemeContext";
 interface AppBarProps {
   pageTitle: string;
   onMenuClick?: () => void;
@@ -13,6 +14,7 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
   const dispatch = useAppDispatch();
   const user = useAppSelector((s) => s.auth.user);
   const navigate = useNavigate();
+   const { preference, resolvedTheme, setPreference } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -22,6 +24,21 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
       navigate("/login");
     }
   };
+
+  const handleCycleTheme = () => {
+    const next =
+      preference === "light" ? "dark" : preference === "dark" ? "system" : "light";
+    setPreference(next);
+  };
+
+  const themeLabel =
+    preference === "system"
+      ? "System"
+      : preference === "light"
+      ? "Light"
+      : "Dark";
+
+  const themeIcon = resolvedTheme === "dark" ? "🌙" : "☀️";
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-surface px-4 shadow-sm">
@@ -45,6 +62,15 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
         {pageTitle}
       </span>
       <div className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleCycleTheme}
+          className="hidden h-9 items-center gap-1 rounded-md px-2 text-xs font-medium text-foreground-muted hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 sm:flex"
+          aria-label={`Switch color theme (currently ${themeLabel})`}
+        >
+          <span aria-hidden>{themeIcon}</span>
+          <span>{themeLabel}</span>
+        </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button

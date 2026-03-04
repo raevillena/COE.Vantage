@@ -49,16 +49,29 @@ export function StudentClassesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = form.name.trim();
+    if (!nameTrimmed) {
+      toast.error("Name is required");
+      return;
+    }
+    if (form.yearLevel < 1 || form.yearLevel > 5) {
+      toast.error("Year level must be between 1 and 5");
+      return;
+    }
+    if (form.studentCount < 0) {
+      toast.error("Student count cannot be negative");
+      return;
+    }
     if (!form.curriculumId) {
       toast.error("Select a curriculum");
       return;
     }
     try {
       if (editingId) {
-        await apiClient.patch(`/student-classes/${editingId}`, form);
+        await apiClient.patch(`/student-classes/${editingId}`, { ...form, name: nameTrimmed });
         toast.success("Student class updated");
       } else {
-        await apiClient.post("/student-classes", form);
+        await apiClient.post("/student-classes", { ...form, name: nameTrimmed });
         toast.success("Student class created");
       }
       setModalOpen(false);
@@ -142,9 +155,18 @@ export function StudentClassesPage() {
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Student Class" : "Add Student Class"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input required placeholder="Name (e.g. BSCE-3A)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input required type="number" min={1} placeholder="Year level" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input required type="number" min={0} placeholder="Student count" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <div>
+              <label htmlFor="student-class-name" className="mb-1 block text-sm font-medium text-foreground">Name</label>
+              <input id="student-class-name" placeholder="e.g. BSCE-3A" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            </div>
+            <div>
+              <label htmlFor="student-class-year" className="mb-1 block text-sm font-medium text-foreground">Year level</label>
+              <input id="student-class-year" type="number" min={1} max={5} placeholder="1–5" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            </div>
+            <div>
+              <label htmlFor="student-class-count" className="mb-1 block text-sm font-medium text-foreground">Student count</label>
+              <input id="student-class-count" type="number" min={0} placeholder="0" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
               <Select.Root value={form.curriculumId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, curriculumId: v === "__none__" ? "" : v }))}>

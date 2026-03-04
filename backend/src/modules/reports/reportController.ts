@@ -64,3 +64,33 @@ export async function roomReport(req: Request, res: Response): Promise<void> {
   doc.pipe(res);
   doc.end();
 }
+
+export async function collegeWorkloadReport(req: Request, res: Response): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester ?? 1);
+  if (!academicYearId) {
+    res.status(400).json({ message: "academicYearId query is required" });
+    return;
+  }
+  const user = req.user!;
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN") {
+    throw forbidden("Not allowed to view this report");
+  }
+
+  const { academicYearName, loads } = await reportService.getCollegeFacultyLoadsForReport(
+    academicYearId,
+    semester,
+  );
+  const buffer = await reportService.buildCollegeWorkloadWorkbook(loads, academicYearName, semester);
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  const safeName = academicYearName || academicYearId;
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="college-workload-${safeName}-S${semester}.xlsx"`,
+  );
+  res.send(Buffer.from(buffer));
+}

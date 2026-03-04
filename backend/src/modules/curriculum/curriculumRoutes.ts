@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { list, getById, create, update, remove, listTrash, restore, permanentDelete, extractFromImage, applyImport, getCurriculumSubjects } from "./curriculumController.js";
+import { list, getById, create, update, remove, listTrash, restore, permanentDelete, extractFromImage, applyImport, getCurriculumSubjects, clearCurriculum } from "./curriculumController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -17,6 +17,7 @@ router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
 router.get("/", list);
 router.get("/:id/subjects", getCurriculumSubjects);
+router.post("/:id/clear", authorize("ADMIN", "CHAIRMAN"), clearCurriculum);
 router.get("/:id", getById);
 router.post("/", authorize("ADMIN", "CHAIRMAN"), validate(createCurriculumSchema), create);
 router.patch("/:id", authorize("ADMIN", "CHAIRMAN"), validate(updateCurriculumSchema), update);

@@ -29,7 +29,7 @@ const Content = React.forwardRef<
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
-      className={`relative z-50 max-h-60 min-w-[8rem] overflow-hidden rounded border border-border bg-surface shadow-md data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1 ${className}`}
+      className={`relative z-50 max-h-60 min-w-[8rem] overflow-hidden rounded border border-border bg-surface text-foreground shadow-md data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1 ${className}`}
       position={position}
       {...props}
     >
@@ -49,7 +49,7 @@ const Item = React.forwardRef<
 >(({ className = "", children, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
-    className={`relative flex w-full cursor-default select-none items-center rounded py-2 pl-3 pr-8 text-sm outline-none focus:bg-surface-hover focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${className}`}
+    className={`relative flex w-full cursor-default select-none items-center rounded py-2 pl-3 pr-8 text-sm text-foreground outline-none focus:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${className}`}
     {...props}
   >
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

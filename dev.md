@@ -229,13 +229,13 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 ---
 
-### 7. Curriculum by Year Level & Subject Filtering
+### 7. Curriculum by Year Level, Semester & Subject Filtering
 
 **Data model**
 
-- `Subject` (Prisma) now has `yearLevel Int?` to represent the recommended year within its curriculum.
-- `StudentClass` already has `yearLevel` and `curriculumId`, which we now use to automatically scope subjects.
-- `frontend/src/types/api.ts` `Subject` interface includes `yearLevel?: number | null`.
+- `Subject` (Prisma) has `yearLevel Int?` (recommended year within curriculum) and `semester Int?` (1 = 1st Sem, 2 = 2nd Sem, 3 = Mid Year).
+- `StudentClass` has `yearLevel` and `curriculumId`; we use these plus the selected semester to scope subjects.
+- `frontend/src/types/api.ts` `Subject` includes `yearLevel?: number | null` and `semester?: number | null`.
 
 **Seeder updates**
 
@@ -256,19 +256,17 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 - In `SchedulerPage`:
   - Derives `currentClass` when `viewMode === "class"` and `studentClassId` is selected.
-  - Exposes `currentCurriculumId = currentClass?.curriculumId` and `currentYearLevel = currentClass?.yearLevel`.
-  - Passes these into `CurriculumSubjectTree`:
-    - `curriculumId` and `yearLevel`.
-    - `scheduledSubjectIds` from `loads` so the tree knows which subjects are already scheduled in the current view.
+  - Exposes `currentCurriculumId`, `currentYearLevel`, and a **semester** state (1, 2, or 3) from a dropdown (1st Sem / 2nd Sem / Mid Year).
+  - Passes into `CurriculumSubjectTree`: `curriculumId`, `yearLevel`, `semester`, and `classLoads` (for scheduled minutes).
+  - The tree filters subjects by the selected semester when all three are set.
 
 **CurriculumSubjectTree behavior**
 
+- **Props:** `curriculumId?`, `yearLevel?`, `semester?` (1/2/3), `classLoads?` (for status highlighting).
 - When **no** `curriculumId`/`yearLevel` (faculty view or no class selected):
-  - Keeps original behavior:
-    - Group subjects by `curriculumId`.
-    - Show an `Ungrouped` section for subjects without a curriculum.
+  - Group subjects by `curriculumId`; show `Ungrouped` for subjects without a curriculum.
 - When `curriculumId` and `yearLevel` are set (class view):
-  - Filters subjects to the selected curriculum.
+  - If `semester` is set, filters subjects to that semester (1st Sem / 2nd Sem / Mid Year) as well.
   - Splits them into:
     - **Main year group**: `subject.yearLevel === yearLevel`.
     - **Others**: same curriculum but `yearLevel` is `null` or different.
@@ -325,7 +323,7 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 - Room selection: capacity ≥ class size, respects `isLab` preference, least-loaded.
 - Time slot search: 08:00–17:00, 15‑min increments, avoids faculty lunch (12:00–13:00) when possible.
 - **3‑unit lectures:** Prefer MWF (Monday/Wednesday/Friday) — one 1 hr block on each day at the same time — or TTH (Tuesday/Thursday) — one 1.5 hr block on each day at the same time. Tried in that order; if neither fits, falls back to one 3 hr block.
-- **Continuous blocks:** Each assignment uses one block per meeting (no splitting). For non‑3‑unit subjects, the scheduler places a single block of up to 3 hours per session (e.g. 2‑unit lecture = one 2 hr block; 3‑unit lab = one 3 hr block per session). Lab separation: if two 3‑hr labs on the same day, at least 1 hr break between.
+- **Continuous blocks:** Each assignment uses one block per meeting (no splitting). The scheduler can place a single block of **up to 5 hours** per session (e.g. 4‑unit lecture = one 4 hr block; 3‑unit lab = one 3 hr block). For 3‑unit lectures only, MWF or TTH patterns are preferred when they fit; otherwise single blocks are used. Lab separation: if two 3‑hr labs on the same day, at least 1 hr break between.
 
 **Reset schedule**
 
@@ -369,7 +367,7 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 **Goal**
 
-- On the Curriculum page, for a selected curriculum, build the curriculum by dragging subjects from a pool into year-level drop zones (Year 1 … Year 5, Ungrouped).
+- On the Curriculum page, for a selected curriculum, build the curriculum by dragging subjects from a pool into **year + semester** drop zones (e.g. Year 1–5 and Ungrouped, with semester grouping where applicable).
 
 **Route & access**
 
@@ -379,11 +377,9 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 **Page: CurriculumBuildPage**
 
 - **Left:** Subject pool — subjects not in this curriculum (`curriculumId !== selected id`). Each item is draggable. The pool area is also a droppable zone: dropping a subject from the tree here removes it from the curriculum (`PATCH /subjects/:id` with `curriculumId: null`, `yearLevel: null`).
-- **Right:** Curriculum tree — droppable zones for **Year 1** … **Year 5** and **Ungrouped** (yearLevel null). Each zone lists subjects in that year; subjects in the tree are draggable so they can be moved between years.
-- **Data:** Loads `GET /curriculum/:id`, `GET /curriculum/:id/subjects`, `GET /subjects`. Pool = filter all subjects by `curriculumId !== curriculumId`.
-- **Drop handling:** Uses `@dnd-kit` (DndContext, useDraggable, useDroppable). On drop:
-  - Onto pool → remove from curriculum (PATCH with nulls).
-  - Onto year N or Ungrouped → PATCH `/subjects/:id` with `curriculumId` and `yearLevel` (null for Ungrouped).
+- **Right:** Curriculum tree — droppable zones by **year level** and **semester** (Year 1 … Year 5, Ungrouped). Each zone lists subjects; subjects in the tree are draggable so they can be moved between years/semesters.
+- **Data:** Loads curriculum, its subjects, and all subjects. Pool = subjects not in this curriculum. Subject `yearLevel` and `semester` are sent on PATCH.
+- **Drop handling:** Uses `@dnd-kit`. On drop onto pool → remove from curriculum (PATCH with nulls). Onto year/semester zone → PATCH with `curriculumId`, `yearLevel`, and `semester`.
 - Single curriculum per subject: adding to a curriculum = moving the subject (no cloning).
 
 ---
@@ -396,4 +392,189 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 - **Edit subject:** Code is not editable. The existing code is shown as read-only text (e.g. "Code: MATH101"). Update payload does not send `code`, so the stored code is unchanged.
 - Table still shows the Code column for identification.
 
+---
+
+### 12. Import Curriculum from IUSIS (Laravel HTML)
+
+**Goal**
+
+- Paste HTML exported from the Laravel IUSIS curriculum view and parse it into subjects (with codes, names, units, lab flag, year level, semester).
+
+**Behavior**
+
+- Curriculum page (or import flow) offers an "Import from IUSIS" action that opens a dialog.
+- User pastes raw HTML from the Laravel curriculum page.
+- Parser detects:
+  - Rows for each subject (code, name, units, lab, etc.).
+  - **Semester:** "First Semester" / "Second Semester" / "Mid Year" (or similar) and sets `semester` to 1, 2, or 3.
+- Import review table shows parsed subjects with semester column; user can confirm and apply.
+- Apply creates/updates subjects and optionally assigns them to the current curriculum with `yearLevel` and `semester` set.
+- Curriculum viewer and builder support semester (column and grouping).
+
+---
+
+### 13. Clear Curriculum
+
+**Goal**
+
+- Allow removing all subject–curriculum associations for a curriculum in one action (e.g. before re-importing).
+
+**Behavior**
+
+- Curriculum list or detail has a "Clear curriculum" (or similar) action.
+- Backend: endpoint (e.g. `POST /curriculum/:id/clear` or `DELETE /curriculum/:id/subjects`) that sets `curriculumId` (and optionally `yearLevel`, `semester`) to null for all subjects that currently belong to that curriculum.
+- After clear, the curriculum has no subjects; subjects remain in the system and can be re-assigned or imported again.
+
+---
+
+### 14. Schedule Grid: Subject Colors
+
+**Behavior**
+
+- `ScheduleGrid` uses a fixed palette of **12 distinct colors** (one per subject) so blocks are easier to distinguish at a glance.
+- Color is derived from subject id or index (e.g. modulo into the palette). Defined in `ScheduleGrid.tsx` (e.g. `SUBJECT_COLORS`, `colorClass`).
+
+---
+
+### 15. Forms: Validation and Labels
+
+**Validation**
+
+- We avoid HTML `required` on inputs so that fields can be left blank while editing without immediate browser validation.
+- Validation runs **on submit**: validators check required fields and business rules; errors are shown (e.g. inline or toast) and the form is not submitted until valid.
+- Applied across CRUD forms: Student Classes, Curriculum, Departments, Rooms, Academic Years, Subjects, Users.
+
+**Labels**
+
+- Forms use visible **labels** (not only placeholders) for fields so the purpose of each field is clear even when the field already has a value (e.g. Student Class form).
+
+---
+
+### 16. Theme (Light / Dark / System)
+
+**Mechanics**
+
+- Tailwind v4 is configured via CSS in `src/style.css` using `@theme` for semantic tokens like `--color-surface`, `--color-foreground`, `--color-border`, etc.
+- We added `@custom-variant dark (&:where(.dark, .dark *));` so `dark:*` utilities can be used based on a `.dark` class on the root.
+- Light palette is the default `@theme` block; dark mode overrides the same CSS variables inside `:root.dark { ... }`, so classes like `bg-surface` / `text-foreground` automatically switch when dark mode is active.
+
+**Bootstrap (no FOUC)**
+
+- `index.html` includes a small inline `<script>` in `<head>` that runs before React:
+  - Reads `localStorage.theme` (`\"light\" | \"dark\" | \"system\"`).
+  - Falls back to `\"system\"` when unset or invalid.
+  - Applies / removes the `dark` class on `<html>` based on the stored preference + `prefers-color-scheme: dark`.
+- This prevents a flash of the wrong theme between first paint and React hydration.
+
+**Runtime theme context**
+
+- `src/context/ThemeContext.tsx` exports a `ThemeProvider` and `useTheme()` hook.
+- `ThemePreference` is one of `\"light\" | \"dark\" | \"system\"` (user preference); `ResolvedTheme` is `\"light\" | \"dark\"` (what is actually shown).
+- The provider:
+  - Initializes from `localStorage.theme` (or `\"system\"`).
+  - Computes `resolvedTheme` using `matchMedia(\"(prefers-color-scheme: dark)\")` when in `\"system\"` mode.
+  - Writes updates back to `localStorage` and keeps `document.documentElement.classList` in sync (adds/removes `.dark`).
+  - When following system, listens for OS theme changes and updates `resolvedTheme` + root class accordingly.
+- `main.tsx` wraps the app in `<ThemeProvider>` so any component can read or change the theme.
+
+**Toggle UI**
+
+- `AppBar` uses `useTheme()` to show a small theme toggle button in the top-right.
+- The button cycles `ThemePreference` in order: Light → Dark → System → Light.
+- It shows:
+  - An icon: ☀️ for resolved light, 🌙 for resolved dark.
+  - A label: `Light`, `Dark`, or `System` (current preference).
+- This lets users explicitly choose a theme or follow their OS preference at any time.
+
+**Schedule grid colors**
+
+- `ScheduleGrid` keeps a palette of 12 subject colors, now tuned for both themes:
+  - Each entry uses a light + dark class, e.g. `bg-blue-300 dark:bg-blue-600`.
+  - This ensures subject blocks remain distinct and readable on both light and dark surfaces.
+
+---
+
+### 18. Curriculum Builder: Remove & Optimistic Updates
+
+**Remove behavior**
+
+- In `CurriculumBuildPage`:
+  - **Drag to pool**: Dragging a subject from any year/semester/`Ungrouped` zone into the **Subject pool** removes it from the curriculum via `PATCH /subjects/:id` with `curriculumId: null`, `yearLevel: null`, and `semester: null`.
+  - **X button**: Each subject tile in the curriculum tree has an `×` button; clicking it performs the same update to remove the subject from the curriculum.
+
+**Optimistic updates**
+
+- Previously, the builder reloaded all data after every change, which felt slow even when the backend was fast.
+- Now:
+  - On remove (X or drag-to-pool), the subject is immediately removed from `curriculumSubjects` and its entry in `allSubjects` is updated to clear `curriculumId/yearLevel/semester`. The API call runs in the background; on error we reload once.
+  - On move/add (drag from pool into a year/semester, or drag within the tree), the subject’s `yearLevel/semester` (and `curriculumId` when adding) are updated in memory first, then patched via API. Errors trigger a reload to resync.
+- This makes curriculum building feel instant while still keeping the backend as the source of truth.
+
+---
+
+### 19. Whole-College Workload Excel Report
+
+**Endpoint & access**
+
+- `GET /reports/college-workload?academicYearId=...&semester=...` returns an Excel workbook summarizing all faculty loads for a given academic year + semester.
+- Lives in the `reports` module:
+  - Controller: `collegeWorkloadReport` in `backend/src/modules/reports/reportController.ts`.
+  - Service: `getCollegeFacultyLoadsForReport` and `buildCollegeWorkloadWorkbook` in `backend/src/modules/reports/reportService.ts`.
+- Auth:
+  - Only `ADMIN`, `DEAN`, and `CHAIRMAN` can download the whole-college workload.
+- Query parameters:
+  - `academicYearId` (required, must be an active academic year).
+  - `semester` (1, 2, or 3 for Mid Year).
+
+**Excel structure (built with `exceljs`)**
+
+- Workbook has three sheets:
+  - **`Workload`**:
+    - One row per scheduled block (`faculty`, `subject`, `class`, `day`, `time`, `room`, `lab` flag, units).
+    - Useful as a raw export for custom analysis.
+  - **`Totals`**:
+    - One row per faculty with:
+      - `Faculty`
+      - `Total Units` (sum of unique subject-unit combinations per class)
+      - `Subjects` (count of distinct subject+class combinations taught).
+  - **`FacultyDetail`**:
+    - Stacked per-faculty sections matching the manual workload template:
+      - Header row: `Faculty: {Name}`.
+      - Columns: `Course Code`, `Course Title`, `Units`, `Time`, `Day`, `Room / Building`, `Instructor`.
+      - Rows are **grouped per subject + class + time + room**; all meeting days for that group are combined into one `Day` pattern:
+        - Uses tokens `M`, `T`, `W`, `Th`, `F`, `S`, e.g. `MWF`, `TTh`, `MW`, etc.
+      - `Units` shows the subject’s units once per subject/class, not per meeting.
+      - A `Total Units` row at the bottom of each faculty section sums units across unique subject+class combinations for that faculty.
+
+**Frontend integration**
+
+- `ReportsPage.tsx` adds a **College workload (Excel)** card:
+  - Reuses the existing **Academic Year** (active-only) and **Semester** selectors.
+  - Button: `Download Excel` calls `/reports/college-workload` with `academicYearId` and `semester`.
+  - Downloaded filename: `college-workload-{academicYearName}-S{semester}.xlsx` (or AY id fallback).
+
+---
+
+### 17. Schedule Color Palettes (Per User)
+
+**Palette system**
+
+- `src/context/SchedulePaletteContext.tsx` defines named palettes of Tailwind background classes for subject blocks:
+  - Base palettes: `balanced`, `soft`, `vivid`, `cool`, `warm`, `earth`, `ocean`, `forest`.
+  - Dark-tuned variants: `balancedDark`, `softDark`, `vividDark`, `coolDark`, `warmDark`, `earthDark`, `oceanDark`, `forestDark`.
+- Each palette is a list of 12 color classes (with `dark:` variants) used round-robin across subjects.
+- The current palette is stored in `localStorage.schedulePalette` and exposed via `useSchedulePalette()` (`paletteId`, `palette`, `setPaletteId`, and the list of available palettes).
+
+**Usage**
+
+- `ScheduleGrid` no longer hardcodes a `SUBJECT_COLORS` array; instead it calls `useSchedulePalette()` and uses `palette.colors` when computing the block background class.
+- Text inside schedule blocks uses high-contrast neutral text colors (`text-gray-900 dark:text-gray-100` for primary line, `text-gray-700 dark:text-gray-300` for secondary line) so it remains readable regardless of palette.
+
+**Palette selection**
+
+- **Profile page (`UserProfilePage`)**:
+  - Adds a “Schedule color palette” section with a select (`Balanced`, `Soft`, `Vivid`, `Cool`, `Warm`, `Earth`, `Ocean`, `Forest`, plus dark variants).
+  - Changes update `schedulePalette` in localStorage and immediately update colors in all scheduler views.
+- **Scheduler toolbar (`SchedulerPage`)**:
+  - Adds a compact “Block colors” select on the right of the toolbar so users can change the palette while scheduling.
 

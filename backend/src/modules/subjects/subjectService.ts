@@ -17,8 +17,8 @@ export async function listSubjects() {
 export async function listSubjectsByCurriculumId(curriculumId: string) {
   return prisma.subject.findMany({
     where: { curriculumId, isDeleted: false },
-    orderBy: [{ yearLevel: "asc" }, { code: "asc" }],
-    select: { id: true, code: true, name: true, units: true, isLab: true, yearLevel: true },
+    orderBy: [{ yearLevel: "asc" }, { semester: "asc" }, { code: "asc" }],
+    select: { id: true, code: true, name: true, units: true, isLab: true, yearLevel: true, semester: true },
   });
 }
 
@@ -50,6 +50,7 @@ export async function createSubject(body: CreateSubjectBody) {
       units: body.units,
       isLab: body.isLab,
       yearLevel: body.yearLevel ?? undefined,
+      semester: body.semester ?? undefined,
       curriculumId: body.curriculumId ?? undefined,
       departmentId: body.departmentId ?? undefined,
     },
@@ -79,9 +80,12 @@ export async function updateSubject(id: string, body: UpdateSubjectBody) {
       name: body.name,
       units: body.units,
       isLab: body.isLab,
-      yearLevel: body.yearLevel ?? undefined,
-      curriculumId: body.curriculumId ?? undefined,
-      departmentId: body.departmentId ?? undefined,
+      // For updates we respect explicit null (to clear) and undefined (no change),
+      // so do not coerce with ?? here.
+      yearLevel: body.yearLevel,
+      semester: body.semester,
+      curriculumId: body.curriculumId,
+      departmentId: body.departmentId,
     },
     include: {
       curriculum: { select: { id: true, name: true, code: true } },

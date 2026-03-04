@@ -64,17 +64,35 @@ export function UsersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = form.name.trim();
+    const emailTrimmed = form.email.trim();
+    if (!nameTrimmed) {
+      toast.error("Name is required");
+      return;
+    }
+    if (!emailTrimmed) {
+      toast.error("Email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (!editingId && !form.password.trim()) {
+      toast.error("Password is required when creating a user");
+      return;
+    }
     try {
       if (editingId) {
         await apiClient.patch(`/users/${editingId}`, {
-          email: form.email,
-          name: form.name,
+          email: emailTrimmed,
+          name: nameTrimmed,
           role: form.role,
           departmentId: form.departmentId || null,
         });
         toast.success("User updated");
       } else {
-        await apiClient.post("/users", { ...form, departmentId: form.departmentId || null });
+        await apiClient.post("/users", { ...form, name: nameTrimmed, email: emailTrimmed, departmentId: form.departmentId || null });
         toast.success("User created");
       }
       setModalOpen(false);
@@ -164,9 +182,9 @@ export function UsersPage() {
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit User" : "Add User"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            {!editingId && <input type="password" required placeholder="Password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />}
+            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            {!editingId && <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />}
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Role</label>
               <Select.Root value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>

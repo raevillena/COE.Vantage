@@ -9,6 +9,7 @@ import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
+import { parseIusisCurriculumHtml } from "../../utils/parseIusisCurriculumHtml";
 
 export function CurriculumPage() {
   const user = useAppSelector((s) => s.auth.user);
@@ -22,16 +23,20 @@ export function CurriculumPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [clearConfirmCurriculum, setClearConfirmCurriculum] = useState<Curriculum | null>(null);
+  const [clearLoading, setClearLoading] = useState(false);
 
   // Curriculum viewer (read-only subjects list)
   const [viewerCurriculum, setViewerCurriculum] = useState<Curriculum | null>(null);
-  const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null }[]>([]);
+  const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>([]);
   const [viewerLoading, setViewerLoading] = useState(false);
 
-  // Import from image: two-phase flow
+  // Import: image (OCR) or IUSIS paste — shared two-phase flow
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<"image" | "iusis">("image");
   const [importCurriculumId, setImportCurriculumId] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importIusisHtml, setImportIusisHtml] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [extractedRows, setExtractedRows] = useState<ExtractedSubject[]>([]);
   const [applying, setApplying] = useState(false);
@@ -74,7 +79,7 @@ export function CurriculumPage() {
     setViewerSubjects([]);
     setViewerLoading(true);
     try {
-      const { data } = await apiClient.get<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null }[]>(
+      const { data } = await apiClient.get<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>(
         `/curriculum/${c.id}/subjects`
       );
       setViewerSubjects(data ?? []);
@@ -88,8 +93,13 @@ export function CurriculumPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const nameTrimmed = form.name.trim();
+    if (!nameTrimmed) {
+      toast.error("Name is required");
+      return;
+    }
     try {
-      const payload = { name: form.name, departmentId: form.departmentId || null };
+      const payload = { name: nameTrimmed, departmentId: form.departmentId || null };
       if (editingId) {
         await apiClient.patch(`/curriculum/${editingId}`, payload);
         toast.success("Curriculum updated");
@@ -122,13 +132,56 @@ export function CurriculumPage() {
     }
   };
 
-  const openImport = useCallback(() => {
+  const handleClearClick = (c: Curriculum) => setClearConfirmCurriculum(c);
+
+  const handleClearConfirm = async () => {
+    if (!clearConfirmCurriculum) return;
+    const id = clearConfirmCurriculum.id;
+    setClearLoading(true);
+    try {
+      await apiClient.post(`/curriculum/${id}/clear`);
+      toast.success("Curriculum cleared. All subjects were unassigned.");
+      setClearConfirmCurriculum(null);
+      if (viewerCurriculum?.id === id) {
+        setViewerCurriculum(null);
+        setViewerSubjects([]);
+      }
+      load();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to clear";
+      toast.error(msg);
+    } finally {
+      setClearLoading(false);
+    }
+  };
+
+  const openImport = useCallback((mode: "image" | "iusis" = "image") => {
     setImportOpen(true);
+    setImportMode(mode);
     setImportCurriculumId(list[0]?.id ?? "");
     setImportFile(null);
+    setImportIusisHtml("");
     setExtractedRows([]);
     setApplyResult(null);
   }, [list]);
+
+  const handleParseIusis = () => {
+    if (!importIusisHtml.trim()) {
+      toast.error("Paste the IUSIS curriculum HTML first");
+      return;
+    }
+    try {
+      const rows = parseIusisCurriculumHtml(importIusisHtml);
+      if (rows.length === 0) {
+        toast.error("No subjects found. Make sure you pasted the full IUSIS curriculum component HTML.");
+        return;
+      }
+      setExtractedRows(rows);
+      toast.success(`Parsed ${rows.length} subjects. Review below and click Apply import.`);
+    } catch (e) {
+      toast.error("Failed to parse HTML. Check that it’s the full curriculum component.");
+    }
+  };
 
   const handleExtract = async () => {
     if (!importFile) {
@@ -197,7 +250,7 @@ export function CurriculumPage() {
   };
 
   const addExtractedRow = () => {
-    setExtractedRows((prev) => [...prev, { yearLevel: 1, code: "", name: "", units: 3, isLab: false }]);
+    setExtractedRows((prev) => [...prev, { yearLevel: 1, semester: 1, code: "", name: "", units: 3, isLab: false }]);
   };
 
   return (
@@ -206,7 +259,8 @@ export function CurriculumPage() {
         <h1 className="text-2xl font-semibold text-foreground">Curriculum</h1>
         {canEdit && (
           <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={openImport} disabled={list.length === 0}>Import from image</Button>
+            <Button type="button" variant="secondary" onClick={() => openImport("image")} disabled={list.length === 0}>Import from image</Button>
+            <Button type="button" variant="secondary" onClick={() => openImport("iusis")} disabled={list.length === 0}>Import from IUSIS</Button>
             <Button type="button" onClick={openCreate}>Add Curriculum</Button>
           </div>
         )}
@@ -250,6 +304,7 @@ export function CurriculumPage() {
                               <Link to={`/curriculum/${c.id}/build`}>Build</Link>
                             </DropdownMenu.Item>
                             <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
+                            <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
                             <DropdownMenu.Item onSelect={() => handleDeleteClick(c.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                           </>
                         )}
@@ -265,7 +320,7 @@ export function CurriculumPage() {
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Curriculum" : "Add Curriculum"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
               <Select.Root
@@ -300,7 +355,7 @@ export function CurriculumPage() {
         <Dialog.Content
           title={viewerCurriculum ? `${viewerCurriculum.name} — Curriculum` : "Curriculum viewer"}
           description={viewerCurriculum ? (viewerCurriculum.department?.name ? `Department: ${viewerCurriculum.department.name}` : undefined) : undefined}
-          className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
+          className="!max-w-[min(80rem,95vw)] w-[95vw] max-h-[85vh] overflow-hidden flex flex-col"
         >
           <div className="overflow-y-auto min-h-0 mt-2">
             {viewerLoading ? (
@@ -315,6 +370,7 @@ export function CurriculumPage() {
                   <thead className="bg-surface-muted">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Year</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Semester</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Code</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Name</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Units</th>
@@ -325,6 +381,7 @@ export function CurriculumPage() {
                     {viewerSubjects.map((s) => (
                       <tr key={s.id}>
                         <td className="px-3 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{s.semester === 1 ? "1st Sem" : s.semester === 2 ? "2nd Sem" : s.semester === 3 ? "Mid Year" : "—"}</td>
                         <td className="px-3 py-2 text-foreground font-medium">{s.code}</td>
                         <td className="px-3 py-2 text-foreground">{s.name}</td>
                         <td className="px-3 py-2 text-foreground-muted">{s.units}</td>
@@ -357,37 +414,88 @@ export function CurriculumPage() {
         </Dialog.Content>
       </Dialog.Root>
 
+      <Dialog.Root open={clearConfirmCurriculum !== null} onOpenChange={(open) => !open && setClearConfirmCurriculum(null)}>
+        <Dialog.Content
+          title="Clear curriculum"
+          description={clearConfirmCurriculum ? `Remove all subjects from "${clearConfirmCurriculum.name}". Subjects stay in the system and can be reassigned to any curriculum.` : undefined}
+        >
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" variant="secondary" onClick={handleClearConfirm} disabled={clearLoading}>
+              {clearLoading ? "Clearing…" : "Clear curriculum"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
       <Dialog.Root open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setApplyResult(null); }}>
-        <Dialog.Content title="Import curriculum from image" description="Upload a screenshot of a curriculum checklist. Extract subjects, review or edit the table, then apply to save." className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <Dialog.Content title="Import curriculum" description="Import from an image (OCR) or paste HTML from the IUSIS curriculum component. Review and apply to save." className="!max-w-[min(70rem,95vw)] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
           <div className="space-y-4 overflow-y-auto min-h-0">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="min-w-[200px]">
-                <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
-                <Select.Root value={importCurriculumId || "__none__"} onValueChange={(v) => setImportCurriculumId(v === "__none__" ? "" : v)}>
-                  <Select.Trigger aria-label="Curriculum">
-                    <Select.Value placeholder="Select curriculum" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    {list.map((c) => (
-                      <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>
-                    ))}
-                    {list.length === 0 && <Select.Item value="__none__" disabled>No curriculum</Select.Item>}
-                  </Select.Content>
-                </Select.Root>
-              </div>
-              <div className="min-w-[200px]">
-                <label className="mb-1 block text-sm font-medium text-foreground">Image file</label>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="block w-full text-sm text-foreground file:mr-2 file:rounded file:border-0 file:bg-surface-muted file:px-3 file:py-1.5 file:text-sm"
-                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
-              <Button type="button" onClick={handleExtract} disabled={extracting || !importFile}>
-                {extracting ? "Extracting…" : "Extract"}
-              </Button>
+            <div className="flex flex-wrap gap-3 items-center border-b border-border pb-3">
+              <span className="text-sm font-medium text-foreground">Source:</span>
+              <button
+                type="button"
+                onClick={() => { setImportMode("image"); setExtractedRows([]); setApplyResult(null); }}
+                className={`rounded px-3 py-1.5 text-sm font-medium ${importMode === "image" ? "bg-primary text-primary-foreground" : "bg-surface-muted text-foreground-muted hover:bg-surface-hover"}`}
+              >
+                From image
+              </button>
+              <button
+                type="button"
+                onClick={() => { setImportMode("iusis"); setExtractedRows([]); setApplyResult(null); }}
+                className={`rounded px-3 py-1.5 text-sm font-medium ${importMode === "iusis" ? "bg-primary text-primary-foreground" : "bg-surface-muted text-foreground-muted hover:bg-surface-hover"}`}
+              >
+                From IUSIS
+              </button>
             </div>
+            <div className="min-w-[200px]">
+              <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
+              <Select.Root value={importCurriculumId || "__none__"} onValueChange={(v) => setImportCurriculumId(v === "__none__" ? "" : v)}>
+                <Select.Trigger aria-label="Curriculum">
+                  <Select.Value placeholder="Select curriculum" />
+                </Select.Trigger>
+                <Select.Content>
+                  {list.map((c) => (
+                    <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>
+                  ))}
+                  {list.length === 0 && <Select.Item value="__none__" disabled>No curriculum</Select.Item>}
+                </Select.Content>
+              </Select.Root>
+            </div>
+            {importMode === "image" && (
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="min-w-[200px]">
+                  <label className="mb-1 block text-sm font-medium text-foreground">Image file</label>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="block w-full text-sm text-foreground file:mr-2 file:rounded file:border-0 file:bg-surface-muted file:px-3 file:py-1.5 file:text-sm"
+                    onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <Button type="button" onClick={handleExtract} disabled={extracting || !importFile}>
+                  {extracting ? "Extracting…" : "Extract"}
+                </Button>
+              </div>
+            )}
+            {importMode === "iusis" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">Paste IUSIS curriculum HTML</label>
+                <p className="text-xs text-foreground-muted">Copy the full Laravel curriculum component from IUSIS (right‑click → Inspect → copy outer HTML of the curriculum block), then paste below.</p>
+                <textarea
+                  value={importIusisHtml}
+                  onChange={(e) => setImportIusisHtml(e.target.value)}
+                  placeholder="Paste the &lt;div&gt;... curriculum table HTML here"
+                  className="w-full min-h-[120px] rounded border border-border-strong px-3 py-2 text-sm font-mono bg-surface focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  spellCheck={false}
+                />
+                <Button type="button" onClick={handleParseIusis} disabled={!importIusisHtml.trim()}>
+                  Parse HTML
+                </Button>
+              </div>
+            )}
 
             {extractedRows.length > 0 && (
               <>
@@ -403,6 +511,7 @@ export function CurriculumPage() {
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Name</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Units</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Year</th>
+                        <th className="px-2 py-1.5 text-left font-medium text-foreground">Semester</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Lab</th>
                         <th className="px-2 py-1.5 w-10" />
                       </tr>
@@ -424,6 +533,14 @@ export function CurriculumPage() {
                               {[1, 2, 3, 4, 5].map((n) => (
                                 <option key={n} value={n}>Year {n}</option>
                               ))}
+                            </select>
+                          </td>
+                          <td className="px-2 py-1">
+                            <select className="rounded border border-border-strong px-2 py-1 bg-transparent" value={row.semester ?? ""} onChange={(e) => updateExtractedRow(i, "semester", e.target.value ? parseInt(e.target.value, 10) : undefined)}>
+                              <option value="">—</option>
+                              <option value={1}>1st Sem</option>
+                              <option value={2}>2nd Sem</option>
+                              <option value={3}>Mid Year</option>
                             </select>
                           </td>
                           <td className="px-2 py-1">

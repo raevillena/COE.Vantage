@@ -45,8 +45,10 @@ export interface Subject {
   name: string;
   units: number;
   isLab: boolean;
-   /** Recommended year level within its curriculum; nullable when not assigned. */
+  /** Recommended year level within its curriculum; nullable when not assigned. */
   yearLevel?: number | null;
+  /** 1 = 1st sem, 2 = 2nd sem, 3 = mid year; nullable when not set. */
+  semester?: number | null;
   curriculumId: string | null;
   departmentId: string | null;
   curriculum?: { id: string; name: string; code: string | null } | null;

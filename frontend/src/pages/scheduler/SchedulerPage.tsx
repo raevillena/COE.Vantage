@@ -7,7 +7,10 @@ import { getApiErrorMessage } from "../../types/api";
 import type { SubjectDragItem, LoadDragItem } from "../../components/scheduler/schedulerTypes";
 import type { AssignmentFormValues } from "../../components/scheduler/AssignmentForm";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
-import { CurriculumSubjectTree } from "../../components/scheduler/CurriculumSubjectTree";
+import {
+  CurriculumSubjectTree,
+  type CurriculumSubjectTreeProps,
+} from "../../components/scheduler/CurriculumSubjectTree";
 import {
   ScheduleSlotOverlay,
   parseSlotId,
@@ -27,6 +30,7 @@ import {
   SLOT_HEIGHT,
 } from "../../components/scheduler/scheduleGridConstants";
 import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
+import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
 
 type ViewMode = "class" | "faculty";
 
@@ -117,6 +121,24 @@ function slotConflictsWithLoads(
   const end = timeToMinutes(endTime);
   if (!start || !end || end <= start) return true;
   return !isIntervalFree(dayOfWeek, start, end, classLoads, facultyLoads, roomLoads);
+}
+
+function SchedulePaletteSelect() {
+  const { paletteId, palettes, setPaletteId } = useSchedulePalette();
+  return (
+    <Select.Root value={paletteId} onValueChange={(v) => setPaletteId(v as SchedulePaletteId)}>
+      <Select.Trigger aria-label="Block color palette" className="w-[120px]">
+        <Select.Value />
+      </Select.Trigger>
+      <Select.Content>
+        {palettes.map((p) => (
+          <Select.Item key={p.id} value={p.id}>
+            {p.label}
+          </Select.Item>
+        ))}
+      </Select.Content>
+    </Select.Root>
+  );
 }
 
 export function SchedulerPage() {
@@ -751,8 +773,9 @@ export function SchedulerPage() {
               <Select.Value />
             </Select.Trigger>
             <Select.Content>
-              <Select.Item value="1">Sem 1</Select.Item>
-              <Select.Item value="2">Sem 2</Select.Item>
+              <Select.Item value="1">1st Sem</Select.Item>
+              <Select.Item value="2">2nd Sem</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
@@ -819,6 +842,10 @@ export function SchedulerPage() {
             Add load
           </Button>
         )}
+        <div className="ml-auto flex items-end gap-2">
+          <label className="mb-1 block text-sm font-medium text-foreground self-center">Block colors</label>
+          <SchedulePaletteSelect />
+        </div>
       </div>
 
       <DndContext
@@ -837,10 +864,11 @@ export function SchedulerPage() {
             <div className="flex-1 min-h-0 overflow-auto">
               <CurriculumSubjectTree
                 {...({
-                  curriculumId: viewMode === "class" ? currentCurriculumId || undefined : undefined,
+                  curriculumId: viewMode === "class" ? currentCurriculumId ?? undefined : undefined,
                   yearLevel: viewMode === "class" ? currentYearLevel : undefined,
+                  semester: viewMode === "class" ? semester : undefined,
                   classLoads: viewMode === "class" ? loads : undefined,
-                } as any)}
+                } satisfies CurriculumSubjectTreeProps)}
               />
             </div>
           </aside>
