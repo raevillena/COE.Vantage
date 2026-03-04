@@ -1,7 +1,12 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
-import type { CreateFacultyLoadBody, UpdateFacultyLoadBody, PreviewFacultyLoadBody } from "./facultyLoadSchemas.js";
+import type {
+  CreateFacultyLoadBody,
+  UpdateFacultyLoadBody,
+  PreviewFacultyLoadBody,
+  CopyFromPreviousFacultyLoadBody,
+} from "./facultyLoadSchemas.js";
 
 export interface ListFacultyLoadsQuery {
   facultyId?: string;
@@ -137,6 +142,121 @@ export async function resetForClass(academicYearId: string, semester: number, st
   });
 }
 
+export interface CopiedFacultyLoadSummary {
+  subjectCode: string;
+  subjectName: string;
+  facultyName: string | null;
+  roomName: string | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface SkippedFacultyLoadSummary extends CopiedFacultyLoadSummary {
+  reason: string;
+}
+
+export interface CopyClassScheduleResult {
+  copied: CopiedFacultyLoadSummary[];
+  skipped: SkippedFacultyLoadSummary[];
+}
+
+export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody): Promise<CopyClassScheduleResult> {
+  const { studentClassId, sourceAcademicYearId, sourceSemester, targetAcademicYearId, targetSemester } = body;
+
+  if (sourceAcademicYearId === targetAcademicYearId && sourceSemester === targetSemester) {
+    throw badRequest("Source and target term must be different");
+  }
+
+  const sourceLoads = await prisma.facultyLoad.findMany({
+    where: {
+      studentClassId,
+      academicYearId: sourceAcademicYearId,
+      semester: sourceSemester,
+    },
+    include: {
+      subject: { select: { code: true, name: true } },
+      faculty: { select: { name: true } },
+      room: { select: { name: true } },
+    },
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+  });
+
+  if (!sourceLoads.length) {
+    throw badRequest("No existing schedule found for the selected source term");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const copied: CopiedFacultyLoadSummary[] = [];
+    const skipped: SkippedFacultyLoadSummary[] = [];
+
+    for (const load of sourceLoads) {
+      const payload: PreviewFacultyLoadBody = {
+        facultyId: load.facultyId,
+        subjectId: load.subjectId,
+        studentClassId: load.studentClassId,
+        roomId: load.roomId,
+        dayOfWeek: load.dayOfWeek,
+        startTime: load.startTime,
+        endTime: load.endTime,
+        semester: targetSemester,
+        academicYearId: targetAcademicYearId,
+      };
+
+      const conflicts = await checkConflicts(payload, tx);
+      const reasons: string[] = [];
+      if (conflicts.facultyConflict) reasons.push("Faculty has another class at this time");
+      if (conflicts.roomConflict) reasons.push("Room is already in use at this time");
+      if (conflicts.studentConflict) reasons.push("Student class has another class at this time");
+      if (conflicts.capacityIssue) reasons.push("Room capacity is less than class size");
+      if (conflicts.labRoomMismatch) reasons.push("Lab subject must be assigned to a lab room");
+
+      const summaryBase: CopiedFacultyLoadSummary = {
+        subjectCode: load.subject.code,
+        subjectName: load.subject.name,
+        facultyName: load.faculty?.name ?? null,
+        roomName: load.room?.name ?? null,
+        dayOfWeek: load.dayOfWeek,
+        startTime: load.startTime,
+        endTime: load.endTime,
+      };
+
+      if (reasons.length > 0) {
+        skipped.push({ ...summaryBase, reason: reasons.join("; ") });
+        continue;
+      }
+
+      const created = await tx.facultyLoad.create({
+        data: {
+          facultyId: load.facultyId,
+          subjectId: load.subjectId,
+          studentClassId: load.studentClassId,
+          roomId: load.roomId,
+          dayOfWeek: load.dayOfWeek,
+          startTime: load.startTime,
+          endTime: load.endTime,
+          semester: targetSemester,
+          academicYearId: targetAcademicYearId,
+        },
+      });
+
+      copied.push({
+        subjectCode: summaryBase.subjectCode,
+        subjectName: summaryBase.subjectName,
+        facultyName: summaryBase.facultyName,
+        roomName: summaryBase.roomName,
+        dayOfWeek: created.dayOfWeek,
+        startTime: created.startTime,
+        endTime: created.endTime,
+      });
+    }
+
+    return { copied, skipped };
+  });
+
+  return result;
+}
+
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map((v) => parseInt(v, 10));
   if (Number.isNaN(h) || Number.isNaN(m)) return 0;
@@ -249,6 +369,8 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
   }
 
   const newLoads: CreateFacultyLoadBody[] = [];
+  /** Subjects that could not be fully scheduled, with reason (no faculty, no room, no slot). */
+  const skippedSummary: { subjectCode: string; subjectName: string; reason: string }[] = [];
 
   const WORK_START = 8 * 60;
   const WORK_END = 17 * 60;
@@ -332,7 +454,10 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
           : faculties;
       facultyPool = facultyCandidates.length ? facultyCandidates : faculties;
     }
-    if (!facultyPool.length) continue;
+    if (!facultyPool.length) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No faculty available" });
+      continue;
+    }
 
     let chosenFacultyId: string;
     if (prioritized && prioritized.length > 0) {
@@ -365,7 +490,10 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
       return true;
     });
     const roomPool = roomCandidates.length ? roomCandidates : rooms;
-    if (!roomPool.length) continue;
+    if (!roomPool.length) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No suitable room (capacity or lab type)" });
+      continue;
+    }
 
     let chosenRoomId = roomPool[0].id;
     let minRoomMinutes = roomMinutes.get(chosenRoomId) ?? 0;
@@ -428,10 +556,13 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
 
       if (!placed) break;
     }
+    if (remaining > 0) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No free slot for remaining minutes" });
+    }
   }
 
   if (!newLoads.length) {
-    return [];
+    return { assigned: [], skipped: skippedSummary };
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -452,5 +583,15 @@ export async function autoAssignForClass(academicYearId: string, semester: numbe
     return results;
   });
 
-  return created;
+  const assigned = created.map((load) => ({
+    subjectCode: load.subject.code,
+    subjectName: load.subject.name,
+    facultyName: load.faculty.name,
+    roomName: load.room.name,
+    dayOfWeek: load.dayOfWeek,
+    startTime: load.startTime,
+    endTime: load.endTime,
+  }));
+
+  return { assigned, skipped: skippedSummary };
 }

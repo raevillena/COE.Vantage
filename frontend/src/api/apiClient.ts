@@ -16,11 +16,21 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
+/** Auth endpoints must not trigger refresh on 401 — reject so login page can show error. */
+function isAuthEndpoint(config: { url?: string }): boolean {
+  const url = config?.url ?? "";
+  return url.includes("/auth/login") || url.includes("/auth/refresh");
+}
+
 apiClient.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
     const originalRequest = err.config;
     if (!originalRequest || err.response?.status !== 401) {
+      return Promise.reject(err);
+    }
+    // Never run refresh for login/refresh: let the caller handle 401 (e.g. show "Invalid password").
+    if (isAuthEndpoint(originalRequest)) {
       return Promise.reject(err);
     }
     if (isRefreshing) {

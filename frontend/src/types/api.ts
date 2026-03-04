@@ -109,6 +109,48 @@ export interface ConflictPreview {
   labRoomMismatch: boolean;
 }
 
+export interface CopyFacultyLoadSummary {
+  subjectCode: string;
+  subjectName: string;
+  facultyName: string | null;
+  roomName: string | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface CopySkippedFacultyLoadSummary extends CopyFacultyLoadSummary {
+  reason: string;
+}
+
+export interface CopyFacultyLoadsSummary {
+  copied: CopyFacultyLoadSummary[];
+  skipped: CopySkippedFacultyLoadSummary[];
+}
+
+/** One assigned block from auto-schedule (same shape as copy summary for display). */
+export interface AutoAssignAssignedItem {
+  subjectCode: string;
+  subjectName: string;
+  facultyName: string;
+  roomName: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+}
+
+/** One subject that could not be fully scheduled by auto-assign. */
+export interface AutoAssignSkippedItem {
+  subjectCode: string;
+  subjectName: string;
+  reason: string;
+}
+
+export interface AutoAssignSummary {
+  assigned: AutoAssignAssignedItem[];
+  skipped: AutoAssignSkippedItem[];
+}
+
 /** Build a short conflict summary for toasts (e.g. "Room is in use. Faculty has another class."). */
 export function getConflictSummary(preview: ConflictPreview): string {
   const parts: string[] = [];

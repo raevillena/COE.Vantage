@@ -290,26 +290,56 @@ export function CurriculumPage() {
                   <td className="px-4 py-2 text-foreground">{c.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-right">
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger asChild>
-                        <button type="button" className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" aria-label="Actions">
-                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="18" r="1.5" /></svg>
-                        </button>
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item onSelect={() => openViewer(c)}>View</DropdownMenu.Item>
-                        {canEdit && (
-                          <>
-                            <DropdownMenu.Item asChild>
-                              <Link to={`/curriculum/${c.id}/build`}>Build</Link>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => handleDeleteClick(c.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
-                          </>
-                        )}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openViewer(c)}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        View
+                      </button>
+                      {canEdit && (
+                        <Link
+                          to={`/curriculum/${c.id}/build`}
+                          className="text-xs font-medium text-primary hover:underline"
+                        >
+                          Build
+                        </Link>
+                      )}
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                          <button
+                            type="button"
+                            className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                            aria-label="More actions"
+                          >
+                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="6" r="1.5" />
+                              <circle cx="12" cy="12" r="1.5" />
+                              <circle cx="12" cy="18" r="1.5" />
+                            </svg>
+                          </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onSelect={() => openViewer(c)}>View</DropdownMenu.Item>
+                          {canEdit && (
+                            <>
+                              <DropdownMenu.Item asChild>
+                                <Link to={`/curriculum/${c.id}/build`}>Build</Link>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
+                              <DropdownMenu.Item
+                                onSelect={() => handleDeleteClick(c.id)}
+                                className="text-danger focus:bg-danger-muted focus:text-danger-hover"
+                              >
+                                Move to trash
+                              </DropdownMenu.Item>
+                            </>
+                          )}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    </div>
                   </td>
                 </tr>
               ))}

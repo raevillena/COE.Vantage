@@ -67,6 +67,8 @@ interface AssignmentFormProps {
   onFacultyIdChange?: (facultyId: string) => void;
   /** Called when room selection changes (for main grid availability overlay). */
   onRoomIdChange?: (roomId: string) => void;
+  /** Whether to render the inline faculty schedule preview block below the form. Defaults to true. */
+  showFacultySchedulePreview?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -82,6 +84,7 @@ export function AssignmentForm({
   facultyLoadsOverride,
   onFacultyIdChange,
   onRoomIdChange,
+  showFacultySchedulePreview = true,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
@@ -403,7 +406,7 @@ export function AssignmentForm({
           )}
         </div>
       )}
-      {facultyId && (
+      {showFacultySchedulePreview && facultyId && (
         <div className="flex flex-col min-h-0 flex-1 rounded border border-border bg-surface overflow-hidden">
           <button
             type="button"

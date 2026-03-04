@@ -13,6 +13,12 @@ export async function listActive(_req: Request, res: Response): Promise<void> {
   res.json(list);
 }
 
+/** List all non-deleted academic years for scheduler dropdown (active year can be labeled "current"). */
+export async function listForSchedules(_req: Request, res: Response): Promise<void> {
+  const list = await academicYearService.listAcademicYears();
+  res.json(list);
+}
+
 export async function getById(req: Request, res: Response): Promise<void> {
   const y = await academicYearService.getAcademicYearById(req.params.id);
   res.json(y);

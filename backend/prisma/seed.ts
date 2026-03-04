@@ -267,13 +267,39 @@ async function main() {
     await prisma.facultyLoad.create({ data: load });
   }
 
+  // 9. Class schedules for 2024-2025 (historical data; e.g. for "copy from previous term")
+  const loadsData2425 = [
+    // Semester 1 — BSCE-3A
+    { facultyId: facultyUsers[0].id, subjectId: subjMath.id, studentClassId: classBsce3a.id, roomId: roomCe201.id, dayOfWeek: 1, startTime: "07:00", endTime: "08:00", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[0].id, subjectId: subjPhysics.id, studentClassId: classBsce3a.id, roomId: roomCe201.id, dayOfWeek: 1, startTime: "09:00", endTime: "10:00", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[0].id, subjectId: subjChemLab.id, studentClassId: classBsce3a.id, roomId: roomCeLab.id, dayOfWeek: 2, startTime: "08:00", endTime: "09:30", semester: 1, academicYearId: ay2425.id },
+    // BSCE-3B
+    { facultyId: facultyUsers[1].id, subjectId: subjSurvey.id, studentClassId: classBsce3b.id, roomId: roomCe202.id, dayOfWeek: 1, startTime: "10:00", endTime: "11:00", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[1].id, subjectId: subjMath.id, studentClassId: classBsce3b.id, roomId: roomCe201.id, dayOfWeek: 2, startTime: "07:00", endTime: "08:00", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[1].id, subjectId: subjPhysics.id, studentClassId: classBsce3b.id, roomId: roomCe202.id, dayOfWeek: 3, startTime: "08:00", endTime: "09:00", semester: 1, academicYearId: ay2425.id },
+    // BSEE-4A
+    { facultyId: facultyUsers[2].id, subjectId: subjCircuits.id, studentClassId: classBsee4a.id, roomId: roomEce301.id, dayOfWeek: 2, startTime: "09:00", endTime: "10:00", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[2].id, subjectId: subjCircuitsLab.id, studentClassId: classBsee4a.id, roomId: roomEceLab.id, dayOfWeek: 2, startTime: "11:00", endTime: "12:30", semester: 1, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[3].id, subjectId: subjCircuits.id, studentClassId: classBsee4a.id, roomId: roomEce301.id, dayOfWeek: 4, startTime: "14:00", endTime: "15:00", semester: 1, academicYearId: ay2425.id },
+    // Semester 2 — same classes, different slots
+    { facultyId: facultyUsers[0].id, subjectId: subjMath.id, studentClassId: classBsce3a.id, roomId: roomCe201.id, dayOfWeek: 1, startTime: "08:00", endTime: "09:00", semester: 2, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[1].id, subjectId: subjSurvey.id, studentClassId: classBsce3b.id, roomId: roomCe202.id, dayOfWeek: 3, startTime: "09:00", endTime: "10:00", semester: 2, academicYearId: ay2425.id },
+    { facultyId: facultyUsers[2].id, subjectId: subjCircuits.id, studentClassId: classBsee4a.id, roomId: roomEce301.id, dayOfWeek: 5, startTime: "08:00", endTime: "09:00", semester: 2, academicYearId: ay2425.id },
+  ];
+
+  for (const load of loadsData2425) {
+    await prisma.facultyLoad.create({ data: load });
+  }
+
+  const totalLoads = loadsData.length + loadsData2425.length;
   console.log("Seed completed.");
   console.log(`  Departments: ${departments.length}`);
   console.log(`  Users: ${users.length} (ADMIN, DEAN, CHAIRMAN, ${facultyUsers.length} FACULTY, OFFICER)`);
   console.log(`  Academic years: 2 (active: ${activeYear.name})`);
   console.log(`  Rooms: ${rooms.length}`);
   const totalSubjects = bsceSubjects.length + bseeSubjects.length;
-  console.log(`  Curricula: 2 | Subjects: ${totalSubjects} (BSCE: ${bsceSubjects.length}, BSEE: ${bseeSubjects.length}) | Student classes: 3 | Faculty loads: ${loadsData.length}`);
+  console.log(`  Curricula: 2 | Subjects: ${totalSubjects} (BSCE: ${bsceSubjects.length}, BSEE: ${bseeSubjects.length}) | Student classes: 3`);
+  console.log(`  Faculty loads: ${totalLoads} (${ay2526.name}: ${loadsData.length}, ${ay2425.name}: ${loadsData2425.length})`);
   console.log(`\nTest password for all users: ${TEST_PASSWORD}`);
   console.log("Example logins: admin@coe.vantage, dean@coe.vantage, chairman@coe.vantage, faculty1@coe.vantage, officer@coe.vantage");
 }

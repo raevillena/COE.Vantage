@@ -2,66 +2,108 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* COE.Vantage color scheme — professional blue-indigo for engineering/academic use */
+/* COE.Vantage color scheme — matches logo: teal #197FA1, cyan accents, dark neutrals #1C1E20 */
 @theme {
-  /* Primary: deep blue (brand, primary actions, active nav) */
-  --color-primary: #1e40af;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-muted: #dbeafe;
+  /* Primary: logo teal (brand, buttons, links, active nav) */
+  --color-primary: #197fa1;
+  --color-primary-hover: #156b89;
+  --color-primary-muted: #e0f2f7;
   --color-primary-foreground: #ffffff;
 
-  /* Surface: backgrounds */
+  /* Surface: light backgrounds aligned with clean academic look */
   --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-surface-hover: #f1f5f9;
+  --color-surface-muted: #f5f9fb;
+  --color-surface-hover: #eaf4f8;
 
-  /* Border and dividers */
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  /* Border: subtle cool grays that work with teal */
+  --color-border: #e0e8ec;
+  --color-border-strong: #c5d1d9;
 
-  /* Text */
-  --color-foreground: #0f172a;
-  --color-foreground-muted: #64748b;
-  --color-foreground-subtle: #94a3b8;
+  /* Text: dark neutral from logo (#1C1E20 family) */
+  --color-foreground: #1c1e20;
+  --color-foreground-muted: #5c6b73;
+  --color-foreground-subtle: #8a9ca6;
 
-  /* Semantic */
-  --color-danger: #dc2626;
-  --color-danger-hover: #b91c1c;
-  --color-danger-muted: #fef2f2;
-  --color-success: #16a34a;
-  --color-success-muted: #dcfce7;
-  --color-focus-ring: #1e40af;
+  /* Semantic: keep clear red/green, tuned to not clash with teal */
+  --color-danger: #c53030;
+  --color-danger-hover: #9b2c2c;
+  --color-danger-muted: #fff5f5;
+  --color-success: #276749;
+  --color-success-muted: #f0fff4;
+  --color-focus-ring: #197fa1;
 }
 
-/* Dark theme overrides: applied when the root <html> element has the `dark` class. */
+/* Dark theme: logo dark neutrals (#1C1E20, #0D0D0D) with teal/cyan accents from logo */
 :root.dark {
-  /* Surfaces: deep slate backgrounds with subtle layering */
-  --color-surface: #020617; /* slate-950 */
-  --color-surface-muted: #020617;
-  --color-surface-hover: #0f172a; /* slate-900 */
+  /* Surfaces: logo dark charcoal (#1C1E20, near-blacks) */
+  --color-surface: #0d0d0e;
+  --color-surface-muted: #0d0d0e;
+  --color-surface-hover: #1c1e20;
 
-  /* Borders: slightly lighter than background for gentle separation */
-  --color-border: #1e293b; /* slate-800 */
-  --color-border-strong: #334155; /* slate-700 */
+  /* Borders: slightly lighter charcoal for separation */
+  --color-border: #1e1f1e;
+  --color-border-strong: #2d2f2e;
 
-  /* Text: light-on-dark, with muted/subtle variants */
-  --color-foreground: #e2e8f0; /* slate-200 */
-  --color-foreground-muted: #94a3b8; /* slate-400 */
-  --color-foreground-subtle: #64748b; /* slate-500 */
+  /* Text: light-on-dark, readable on charcoal */
+  --color-foreground: #e8eaec;
+  --color-foreground-muted: #9ca3a8;
+  --color-foreground-subtle: #6b7280;
 
-  /* Primary: slightly brighter blue accents that read well on dark */
-  --color-primary: #60a5fa; /* blue-400 */
-  --color-primary-hover: #3b82f6; /* blue-500 */
-  --color-primary-muted: #1d4ed8; /* blue-700 background for active items */
-  --color-primary-foreground: #0b1120; /* near-black text on primary surfaces */
+  /* Primary: logo cyan/teal that pops on dark (#44C4E0, #08CCFB family) */
+  --color-primary: #44c4e0;
+  --color-primary-hover: #5dd4f0;
+  --color-primary-muted: #156b89;
+  --color-primary-foreground: #0d0d0e;
 
-  /* Semantic status colors tuned for dark backgrounds */
-  --color-danger: #f97373;
+  /* Semantic status colors for dark backgrounds */
+  --color-danger: #f87171;
   --color-danger-hover: #ef4444;
   --color-danger-muted: #7f1d1d;
-  --color-success: #22c55e;
+  --color-success: #34d399;
   --color-success-muted: #064e3b;
 
-  /* Focus ring: bright enough to stand out on dark surfaces */
-  --color-focus-ring: #93c5fd; /* blue-300 */
+  /* Focus ring: logo cyan so it reads on dark */
+  --color-focus-ring: #44c4e0;
+}
+
+/* Subtle abstract background for auth pages (login, reset password). */
+.auth-bg {
+  position: relative;
+  isolation: isolate;
+}
+
+.auth-bg::before,
+.auth-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* Light theme soft blobs using brand teal and cyan. */
+.auth-bg::before {
+  background:
+    radial-gradient(circle at top left, rgba(25, 127, 161, 0.12), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(68, 196, 224, 0.14), transparent 55%);
+  mix-blend-mode: normal;
+}
+
+/* Dark theme variant: use darker, lower-opacity blobs to avoid noise. */
+.dark .auth-bg::before {
+  background:
+    radial-gradient(circle at top left, rgba(8, 204, 251, 0.10), transparent 55%),
+    radial-gradient(circle at bottom right, rgba(25, 127, 161, 0.18), transparent 60%);
+}
+
+/* Very subtle grain/noise overlay to break flatness without distraction. */
+.auth-bg::after {
+  background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.02) 1px, transparent 0);
+  background-size: 12px 12px;
+  opacity: 0.4;
+}
+
+.dark .auth-bg::after {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
+  opacity: 0.25;
 }

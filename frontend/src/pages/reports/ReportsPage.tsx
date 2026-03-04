@@ -20,9 +20,12 @@ export function ReportsPage() {
   const [roomId, setRoomId] = useState("");
 
   useEffect(() => {
-    apiClient.get("/academic-years/for-schedules").then(({ data }) => {
+    apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      if (data.length >= 1) setAcademicYearId(data[0].id);
+      if (data.length >= 1) {
+        const active = data.find((y) => y.isActive);
+        setAcademicYearId(active?.id ?? data[0].id);
+      }
     });
     apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
@@ -61,7 +64,7 @@ export function ReportsPage() {
             <Select.Content>
               <Select.Item value="__none__">Select</Select.Item>
               {academicYears.map((y) => (
-                <Select.Item key={y.id} value={y.id}>{y.name}</Select.Item>
+                <Select.Item key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</Select.Item>
               ))}
             </Select.Content>
           </Select.Root>

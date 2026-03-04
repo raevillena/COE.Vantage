@@ -15,9 +15,12 @@ export function StudentSchedulePage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    apiClient.get("/academic-years/for-schedules").then(({ data }) => {
+    apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      if (data.length >= 1) setAcademicYearId(data[0].id);
+      if (data.length >= 1) {
+        const active = data.find((y) => y.isActive);
+        setAcademicYearId(active?.id ?? data[0].id);
+      }
     });
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
   }, []);
@@ -44,7 +47,7 @@ export function StudentSchedulePage() {
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="__none__">Academic Year</Select.Item>
-              {academicYears.map((y) => <Select.Item key={y.id} value={y.id}>{y.name}</Select.Item>)}
+              {academicYears.map((y) => <Select.Item key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</Select.Item>)}
             </Select.Content>
           </Select.Root>
         </div>

@@ -7,6 +7,7 @@ import type {
   AutoAssignFacultyLoadBody,
   ResetFacultyLoadBody,
 } from "./facultyLoadSchemas.js";
+import type { CopyFromPreviousFacultyLoadBody } from "./facultyLoadSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = req.query as unknown as facultyLoadService.ListFacultyLoadsQuery;
@@ -45,12 +46,18 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
 export async function autoAssign(req: Request, res: Response): Promise<void> {
   const body = req.body as AutoAssignFacultyLoadBody;
-  const created = await facultyLoadService.autoAssignForClass(body.academicYearId, body.semester, body.studentClassId);
-  res.status(201).json(created);
+  const summary = await facultyLoadService.autoAssignForClass(body.academicYearId, body.semester, body.studentClassId);
+  res.json(summary);
 }
 
 export async function resetForClass(req: Request, res: Response): Promise<void> {
   const body = req.body as ResetFacultyLoadBody;
   await facultyLoadService.resetForClass(body.academicYearId, body.semester, body.studentClassId);
   res.status(204).send();
+}
+
+export async function copyFromPrevious(req: Request, res: Response): Promise<void> {
+  const body = req.body as CopyFromPreviousFacultyLoadBody;
+  const summary = await facultyLoadService.copyClassSchedule(body);
+  res.json(summary);
 }

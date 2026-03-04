@@ -62,8 +62,19 @@ export const resetFacultyLoadSchema = z.object({
   }),
 });
 
+export const copyFromPreviousFacultyLoadSchema = z.object({
+  body: z.object({
+    studentClassId: z.string().uuid(),
+    sourceAcademicYearId: z.string().uuid(),
+    sourceSemester: z.number().int().min(1).max(3),
+    targetAcademicYearId: z.string().uuid(),
+    targetSemester: z.number().int().min(1).max(3),
+  }),
+});
+
 export type CreateFacultyLoadBody = z.infer<typeof createFacultyLoadSchema>["body"];
 export type UpdateFacultyLoadBody = z.infer<typeof updateFacultyLoadSchema>["body"];
 export type PreviewFacultyLoadBody = z.infer<typeof previewFacultyLoadSchema>["body"];
 export type AutoAssignFacultyLoadBody = z.infer<typeof autoAssignFacultyLoadSchema>["body"];
 export type ResetFacultyLoadBody = z.infer<typeof resetFacultyLoadSchema>["body"];
+export type CopyFromPreviousFacultyLoadBody = z.infer<typeof copyFromPreviousFacultyLoadSchema>["body"];

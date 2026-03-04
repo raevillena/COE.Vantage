@@ -38,7 +38,46 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
       ? "Light"
       : "Dark";
 
-  const themeIcon = resolvedTheme === "dark" ? "🌙" : "☀️";
+  const themeIcon =
+    resolvedTheme === "dark" ? (
+      // Monochrome moon icon (currentColor stroke)
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          d="M21 12.79A9 9 0 0 1 11.21 3 7 7 0 1 0 21 12.79Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ) : (
+      // Monochrome sun icon (currentColor stroke)
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="4.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+        <path
+          d="M12 3.25V5.5M12 18.5v2.25M5.05 5.05 6.6 6.6M17.4 17.4l1.55 1.55M3.25 12H5.5M18.5 12h2.25M5.05 18.95 6.6 17.4M17.4 6.6 18.95 5.05"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-surface px-4 shadow-sm">
@@ -55,8 +94,18 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
           </svg>
         </button>
       )}
-      <Link to="/dashboard" className="shrink-0 text-lg font-semibold text-foreground">
-        COE.Vantage
+      <Link
+        to="/dashboard"
+        className="flex shrink-0 items-center gap-2 text-lg font-semibold text-foreground"
+      >
+        <img
+          src="/favicon-32x32.png"
+          alt=""
+          className="h-8 w-8"
+          width={32}
+          height={32}
+        />
+        <span>COE.Vantage</span>
       </Link>
       <span className="hidden truncate text-sm font-medium text-foreground-muted sm:block md:ml-4">
         {pageTitle}
@@ -68,7 +117,9 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
           className="hidden h-9 items-center gap-1 rounded-md px-2 text-xs font-medium text-foreground-muted hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 sm:flex"
           aria-label={`Switch color theme (currently ${themeLabel})`}
         >
-          <span aria-hidden>{themeIcon}</span>
+          <span aria-hidden className="inline-flex items-center justify-center">
+            {themeIcon}
+          </span>
           <span>{themeLabel}</span>
         </button>
         <DropdownMenu.Root>

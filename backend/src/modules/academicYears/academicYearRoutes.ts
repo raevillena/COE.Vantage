@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { list, getById, getActive, listActive, create, update, remove, listTrash, restore, permanentDelete } from "./academicYearController.js";
+import { list, getById, getActive, listActive, listForSchedules, create, update, remove, listTrash, restore, permanentDelete } from "./academicYearController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -10,7 +10,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get("/active", getActive);
-router.get("/for-schedules", listActive);
+router.get("/for-schedules", listForSchedules);
 
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);

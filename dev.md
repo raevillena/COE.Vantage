@@ -578,3 +578,148 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 - **Scheduler toolbar (`SchedulerPage`)**:
   - Adds a compact “Block colors” select on the right of the toolbar so users can change the palette while scheduling.
 
+---
+
+### 20. Auth & Branding (Login / Reset / Theme)
+
+**Auth layout**
+
+- `src/components/layout/AuthLayout.tsx` is the shared layout for unauthenticated pages (`LoginPage`, `ResetPasswordPage`):
+  - Left side: branded banner (`/banner.svg` in light mode, `/banner-dark.svg` in dark mode) within a bordered panel.
+  - Right side: centered card with logo, app title/subtitle, and the actual form.
+  - The outer wrapper uses `auth-bg` to apply a subtle, CSS-only abstract background; the login card itself is rendered above it (`relative z-10`) so the card surface stays clean.
+- A small footer under the card shows the app version:
+  - `const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "v0.0.0";`
+  - Rendered as: `COE.Vantage • {APP_VERSION}`.
+
+**Theme toggle (light / dark / system)**
+
+- `AuthLayout` and `AppBar` both use `useTheme()` (from `src/context/ThemeContext.tsx`) to expose a theme toggle:
+  - Preference cycles: **Light → Dark → System → Light**.
+  - `ResolvedTheme` (`"light" | "dark"`) drives visuals and the `.dark` class on `<html>`.
+- Toggle UI:
+  - Top-right button in `AuthLayout` (visible on login and reset-password screens).
+  - Right side of the top app bar in authenticated views.
+  - Each toggle shows:
+    - A **monochrome SVG icon** using `stroke="currentColor"`:
+      - Sun icon when `resolvedTheme === "light"`.
+      - Crescent moon icon when `resolvedTheme === "dark"`.
+    - A label: `Light`, `Dark`, or `System` (current preference).
+
+**Login validation & error handling**
+
+- `src/pages/login/loginValidation.ts` centralizes login form validation and error parsing:
+  - `validateLoginFields(email, password)`:
+    - Trims email, requires non-empty email/password.
+    - Checks a simple email regex matching backend expectations.
+    - Returns per-field errors or `null` when valid.
+  - `getLoginError(err)`:
+    - Accepts an Axios error from `/auth/login`.
+    - Distinguishes **network errors** (no `response`) from API responses:
+      - Network: "Could not reach server. Check your connection and try again." (or a generic failure).
+      - HTTP 400 with `ZodError` shape: maps first `email` / `password` messages from `errors.body` (or top-level `errors`) to inline field errors.
+      - HTTP 401 with `AppError`: uses `data.message` (e.g. "Invalid email or password") as the main message.
+- `LoginPage`:
+  - No longer uses HTML `required`; the form adds `noValidate` and relies on `validateLoginFields` on submit.
+  - Tracks `fieldErrors` for `email` and `password`, shows inline messages and `aria-invalid`/`aria-describedby` for accessibility.
+  - Clears field-specific errors on change for a smoother UX.
+  - Uses `getLoginError` in both:
+    - Normal login submit.
+    - Quick sign-in (dev) buttons.
+- API client integration:
+  - `src/api/apiClient.ts` has a response interceptor that auto-refreshes access tokens on **401** via `/auth/refresh`, but it explicitly **skips** this behavior for auth endpoints:
+    - For `/auth/login` and `/auth/refresh`, a 401 is passed through directly. This ensures:
+      - Wrong credentials on login do **not** trigger refresh.
+      - The login page receives the original 401 error and can show the correct message and stop the loading state.
+
+**Environment variables (summary)**
+
+- **Backend** (`backend/env.example`):
+  - `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`.
+  - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ACCESS_TOKEN_EXPIRY`, `REFRESH_TOKEN_EXPIRY`.
+  - `FRONTEND_ORIGIN` (e.g. `http://localhost:5173`) for CORS and password reset link generation.
+  - Optional password reset + SMTP settings for emailing reset links.
+  - Optional `OPENAI_API_KEY` for AI features.
+- **Frontend** (`frontend/.env` – sample in `frontend/.env.example`):
+  - `VITE_API_URL` — base URL for the backend API (e.g. `http://localhost:4000/api`).
+  - `VITE_APP_VERSION` — string shown in the auth footer (e.g. `v1.0.0`); when unset, the UI falls back to `v0.0.0`.
+
+---
+
+### 21. Copy Class Schedule From Previous Term
+
+**Goal**
+
+- Allow a chairman to copy a **class schedule** (faculty loads for a specific student class) from a previous academic year and semester into the **currently selected** academic year and semester in the Scheduler, while avoiding conflicts and showing a clear summary of what was copied or skipped.
+
+**Backend**
+
+- New service in `facultyLoadService`:
+  - `copyClassSchedule(body: CopyFromPreviousFacultyLoadBody): Promise<CopyClassScheduleResult>`.
+  - Input (`CopyFromPreviousFacultyLoadBody` from `facultyLoadSchemas`):
+    - `studentClassId` — class whose schedule will be copied.
+    - `sourceAcademicYearId`, `sourceSemester` — term to copy **from**.
+    - `targetAcademicYearId`, `targetSemester` — term to copy **into**.
+  - Steps:
+    - Reject if source and target term are identical.
+    - Load all `FacultyLoad` rows for the class in the **source** term (includes subject/faculty/room for summary).
+    - For each source load, build a candidate payload for the target term:
+      - Same faculty, subject, class, room, day of week, start/end time.
+      - Target `academicYearId` and `semester`.
+    - Call `checkConflicts(payload, tx)` (from `conflictService`) inside a transaction to evaluate:
+      - Faculty/room/student overlaps, capacity, and lab-room mismatch.
+    - If any conflict or constraint is present:
+      - The load is **not** created.
+      - A `SkippedFacultyLoadSummary` entry is added with subject, faculty, room, day/time and a `reason` string composed from the conflict flags (e.g. "Faculty has another class at this time; Room is already in use at this time").
+    - If there are **no** conflicts:
+      - Create a new `FacultyLoad` in the target term.
+      - Record a `CopiedFacultyLoadSummary` entry.
+    - The whole operation runs inside a transaction so it is consistent.
+  - Result (`CopyClassScheduleResult`):
+    - `copied: CopiedFacultyLoadSummary[]`
+    - `skipped: SkippedFacultyLoadSummary[]`
+    - Each summary row includes subject code/name, faculty name, room name, day of week, and time.
+- New endpoint in `facultyLoadController`/`facultyLoadRoutes`:
+  - `POST /faculty-loads/copy-from-previous`
+  - Body: `CopyFromPreviousFacultyLoadBody`.
+  - Validation: `copyFromPreviousFacultyLoadSchema` in `facultyLoadSchemas` (semesters 1–3).
+  - Auth: `ADMIN`/`DEAN`/`CHAIRMAN` (route uses `authenticate` + `authorize("ADMIN", "DEAN", "CHAIRMAN")`, then further `authorize("CHAIRMAN")` for this specific route).
+  - Response: `CopyClassScheduleResult` JSON.
+
+**Frontend (Scheduler)**
+
+- Types (`types/api.ts`):
+  - `CopyFacultyLoadSummary`, `CopySkippedFacultyLoadSummary`, and `CopyFacultyLoadsSummary` to match the backend response.
+- Scheduler UI (`SchedulerPage.tsx`):
+  - New state:
+    - `copyDialogOpen`, `copySourceAcademicYearId`, `copySourceSemester`.
+    - `copyLoading`, `copySummary: CopyFacultyLoadsSummary | null`, `copyError`.
+    - Derived helpers: `currentAcademicYear` and `previousAcademicYears` (all academic years except the current one).
+  - Toolbar:
+    - In **class view**, when `academicYearId` and `studentClassId` are set:
+      - Adds a `"Copy from previous term"` button beside Auto-schedule and Reset.
+      - Disabled when there are no other academic years to copy from or while copying.
+  - Copy dialog:
+    - Opens when the button is clicked.
+    - Shows **target context**: class name, current academic year, and current semester.
+    - Lets the user choose:
+      - **Source academic year** from `previousAcademicYears`.
+      - **Source semester** (1st, 2nd, Mid Year).
+    - On **Copy schedule**:
+      - Calls `POST /faculty-loads/copy-from-previous` with the selected source term and the current scheduler term as target.
+      - On success:
+        - Stores the returned `CopyFacultyLoadsSummary` in state.
+        - Refreshes both main loads and room loads.
+        - Shows a toast like `"Copied X blocks, skipped Y."`.
+      - On failure:
+        - Stores `copyError` and shows a toast built from `getApiErrorMessage`.
+  - Summary view:
+    - When `copySummary` is set, the dialog switches to a read-only summary:
+      - Overview line: `Copied X blocks, skipped Y.`
+      - Optional **Copied** table (if any blocks were copied) showing:
+        - Subject, faculty, room, day of week, and time.
+      - **Skipped** table (always shown, with a “no skipped blocks” message when empty) showing the same plus a **Reason** column built from the backend’s conflict explanation (e.g. faculty/room busy, capacity, lab-room mismatch).
+    - A single **Close** button (Dialog.Close) dismisses the summary and dialog.
+
+
+

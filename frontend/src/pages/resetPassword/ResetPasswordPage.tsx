@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
+import { AuthLayout } from "../../components/layout/AuthLayout";
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -39,23 +40,21 @@ export function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface-muted">
-        <div className="w-full max-w-sm rounded-lg bg-surface p-6 shadow-lg border border-border text-center">
-          <p className="text-foreground font-medium">Password updated.</p>
+      <AuthLayout>
+        <div className="text-center">
+          <p className="font-medium text-foreground">Password updated.</p>
           <p className="mt-2 text-sm text-foreground-muted">Redirecting you to sign in…</p>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-muted">
-      <div className="w-full max-w-sm rounded-lg bg-surface p-6 shadow-lg border border-border">
-        <h1 className="mb-2 text-center text-xl font-semibold text-foreground">Set new password</h1>
-        <p className="mb-6 text-center text-sm text-foreground-muted">
-          Enter your new password below. Links expire after 1 hour.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <AuthLayout
+      title="Set new password"
+      subtitle="Enter your new password below. Links expire after 1 hour."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="newPassword" className="block text-sm font-medium text-foreground">
               New password
@@ -98,7 +97,6 @@ export function ResetPasswordPage() {
             Back to sign in
           </a>
         </p>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }
