@@ -178,7 +178,10 @@ export function SchedulerPage() {
   const [overlayFacultyId, setOverlayFacultyId] = useState("");
   const [overlayRoomId, setOverlayRoomId] = useState("");
   const [overlayFacultyLoads, setOverlayFacultyLoads] = useState<FacultyLoad[]>([]);
+  const [overlayFacultyLoading, setOverlayFacultyLoading] = useState(false);
   const [overlayRoomLoads, setOverlayRoomLoads] = useState<FacultyLoad[]>([]);
+  const [overlayClassId, setOverlayClassId] = useState("");
+  const [overlayClassLoads, setOverlayClassLoads] = useState<FacultyLoad[]>([]);
   const [pendingAssignmentDragged, setPendingAssignmentDragged] = useState(false);
   const [resizingLoadId, setResizingLoadId] = useState<string | null>(null);
   const [moveConflict, setMoveConflict] = useState<MoveConflictState | null>(null);
@@ -202,6 +205,23 @@ export function SchedulerPage() {
 
   const currentAcademicYear = academicYears.find((y) => y.id === academicYearId);
   const previousAcademicYears = academicYears.filter((y) => y.id !== academicYearId);
+
+  // In faculty view, keep overlay faculty in sync with the selected faculty so pending blocks
+  // and the faculty preview table work the same way as in class view.
+  useEffect(() => {
+    if (viewMode === "faculty") {
+      setOverlayFacultyId(selectedFacultyId || "");
+    }
+  }, [viewMode, selectedFacultyId]);
+
+  // When switching back to class view, clear any class overlay id/loads so only faculty/room
+  // overlays are shown in that mode.
+  useEffect(() => {
+    if (viewMode === "class") {
+      setOverlayClassId("");
+      setOverlayClassLoads([]);
+    }
+  }, [viewMode]);
 
   // When switching view mode or changing class, reset side previews so they don't show stale schedules.
   useEffect(() => {
@@ -486,11 +506,13 @@ export function SchedulerPage() {
       subjectId: data.subjectId,
       subjectCode: data.code,
       subjectName: data.name,
-      studentClassId: viewMode === "class" ? studentClassId : undefined,
+      studentClassId: viewMode === "class" ? studentClassId : overlayClassId || undefined,
     });
     setPendingAssignmentDragged(false);
     setEditingLoadId(null);
-    setOverlayFacultyId("");
+    // In faculty view, keep the overlay faculty tied to the selected faculty so
+    // suggestions and pending block behave like in class view.
+    setOverlayFacultyId(viewMode === "faculty" ? selectedFacultyId : "");
     setOverlayRoomId("");
   };
 
@@ -525,13 +547,6 @@ export function SchedulerPage() {
     setActiveDragItem(null);
     setActiveDragLoad(null);
     setOverSlotId(null);
-    // If we're not in the "add new" flow, hide overlay again after drag ends.
-    if (!pendingAssignment) {
-      setOverlayFacultyId("");
-      setOverlayRoomId("");
-      setOverlayFacultyLoads([]);
-      setOverlayRoomLoads([]);
-    }
   };
 
   const refreshOverlayForLoad = useCallback(
@@ -647,6 +662,24 @@ export function SchedulerPage() {
       setRoomLoads((prev) =>
         prev.map((l) => (l.id === load.id ? updated : l))
       );
+      if (overlayFacultyId && load.facultyId && overlayFacultyId === load.facultyId) {
+        setOverlayFacultyLoads((prev) => {
+          const exists = prev.some((l) => l.id === load.id);
+          if (exists) {
+            return prev.map((l) => (l.id === load.id ? updated : l));
+          }
+          return [...prev, updated];
+        });
+      }
+      if (overlayClassId && load.studentClassId && overlayClassId === load.studentClassId) {
+        setOverlayClassLoads((prev) => {
+          const exists = prev.some((l) => l.id === load.id);
+          if (exists) {
+            return prev.map((l) => (l.id === load.id ? updated : l));
+          }
+          return [...prev, updated];
+        });
+      }
       if (load.id === editingLoadId) {
         setEditingLoad((prev) =>
           prev ? { ...prev, startTime: payload.startTime, endTime: payload.endTime } : null
@@ -674,11 +707,11 @@ export function SchedulerPage() {
           refreshRoomLoads();
         });
     },
-    [academicYearId, semester, editingLoadId, refreshLoads, refreshRoomLoads]
+    [academicYearId, semester, editingLoadId, overlayFacultyId, overlayClassId, refreshLoads, refreshRoomLoads, refreshOverlayForLoad]
   );
 
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
-  const assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
+  let assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
     ? {
         facultyId: editingLoad.facultyId,
         subjectId: editingLoad.subjectId,
@@ -698,6 +731,13 @@ export function SchedulerPage() {
         }
       : {};
 
+  if (viewMode === "faculty" && selectedFacultyId) {
+    assignmentInitialValues = {
+      ...assignmentInitialValues,
+      facultyId: selectedFacultyId,
+    };
+  }
+
   const clearAssignmentPanel = () => {
     setPendingAssignment(null);
     setPendingAssignmentDragged(false);
@@ -708,10 +748,16 @@ export function SchedulerPage() {
   useEffect(() => {
     if (!overlayFacultyId || !academicYearId) {
       setOverlayFacultyLoads([]);
+      setOverlayFacultyLoading(false);
       return;
     }
+    setOverlayFacultyLoading(true);
     const params = new URLSearchParams({ academicYearId, semester: String(semester), facultyId: overlayFacultyId });
-    apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setOverlayFacultyLoads(data)).catch(() => setOverlayFacultyLoads([]));
+    apiClient
+      .get<FacultyLoad[]>(`/faculty-loads?${params}`)
+      .then(({ data }) => setOverlayFacultyLoads(data))
+      .catch(() => setOverlayFacultyLoads([]))
+      .finally(() => setOverlayFacultyLoading(false));
   }, [academicYearId, semester, overlayFacultyId]);
 
   useEffect(() => {
@@ -723,6 +769,18 @@ export function SchedulerPage() {
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setOverlayRoomLoads(data)).catch(() => setOverlayRoomLoads([]));
   }, [academicYearId, semester, overlayRoomId]);
 
+  useEffect(() => {
+    if (!overlayClassId || !academicYearId) {
+      setOverlayClassLoads([]);
+      return;
+    }
+    const params = new URLSearchParams({ academicYearId, semester: String(semester), studentClassId: overlayClassId });
+    apiClient
+      .get<FacultyLoad[]>(`/faculty-loads?${params}`)
+      .then(({ data }) => setOverlayClassLoads(data))
+      .catch(() => setOverlayClassLoads([]));
+  }, [academicYearId, semester, overlayClassId]);
+
   // When adding a new assignment and a faculty has been selected, suggest the first free 1-hour slot
   // that works for the current class (in class view) and the selected faculty. This sets day/time so
   // the pending block becomes visible on the grid.
@@ -730,16 +788,13 @@ export function SchedulerPage() {
     if (!pendingAssignment) return;
     if (pendingAssignment.dayOfWeek != null && pendingAssignment.startTime && pendingAssignment.endTime) return;
     if (pendingAssignmentDragged) return;
-    if (!overlayFacultyId || overlayFacultyLoads.length === 0) return;
+    if (!overlayFacultyId) return;
 
     let classLoadsForSuggestion: FacultyLoad[] = [];
-    if (
-      viewMode === "class" &&
-      studentClassId &&
-      pendingAssignment.studentClassId &&
-      pendingAssignment.studentClassId === studentClassId
-    ) {
-      classLoadsForSuggestion = loads;
+    const effectiveClassId =
+      viewMode === "class" ? studentClassId : pendingAssignment.studentClassId ?? studentClassId;
+    if (effectiveClassId) {
+      classLoadsForSuggestion = loads.filter((l) => l.studentClassId === effectiveClassId);
     }
 
     const suggestion = suggestFirstFreeSlot(
@@ -776,13 +831,10 @@ export function SchedulerPage() {
     if (pendingAssignmentDragged) return;
 
     let classLoadsForSuggestion: FacultyLoad[] = [];
-    if (
-      viewMode === "class" &&
-      studentClassId &&
-      pendingAssignment.studentClassId &&
-      pendingAssignment.studentClassId === studentClassId
-    ) {
-      classLoadsForSuggestion = loads;
+    const effectiveClassId =
+      viewMode === "class" ? studentClassId : pendingAssignment.studentClassId ?? studentClassId;
+    if (effectiveClassId) {
+      classLoadsForSuggestion = loads.filter((l) => l.studentClassId === effectiveClassId);
     }
 
     const conflicts = slotConflictsWithLoads(
@@ -1078,13 +1130,6 @@ export function SchedulerPage() {
                       }}
                       onLoadResizeEnd={() => {
                         setResizingLoadId(null);
-                        // If we're not adding a new assignment and not dragging, hide overlay after resize ends.
-                        if (!pendingAssignment && !activeDragLoad) {
-                          setOverlayFacultyId("");
-                          setOverlayRoomId("");
-                          setOverlayFacultyLoads([]);
-                          setOverlayRoomLoads([]);
-                        }
                       }}
                     />
                     <ScheduleSlotOverlay
@@ -1113,13 +1158,15 @@ export function SchedulerPage() {
                         setPendingAssignmentDragged(true);
                       }}
                     />
-                    {(pendingAssignment !== null || activeDragLoad || resizingLoadId) && (overlayFacultyId || overlayRoomId) && (
+                    {(pendingAssignment !== null || activeDragLoad || resizingLoadId) &&
+                      (overlayFacultyId || overlayRoomId || (viewMode === "faculty" && overlayClassId)) && (
                       <AvailabilityOverlay
                         facultyLoads={overlayFacultyLoads}
                         roomLoads={overlayRoomLoads}
+                        classLoads={viewMode === "faculty" ? overlayClassLoads : []}
                         hourEnd={scheduleHourEnd}
                       />
-                    )}
+                      )}
                     {moveConflict && (
                       <div className="absolute inset-0 z-30 flex items-start justify-center pointer-events-none">
                         <div className="mt-10 max-w-sm rounded-lg border border-border bg-surface shadow-lg p-3 text-xs text-foreground pointer-events-auto">
@@ -1254,8 +1301,15 @@ export function SchedulerPage() {
                       : undefined
                   }
                   showFacultySchedulePreview={false}
+                  lockFaculty={viewMode === "faculty"}
+                  lockStudentClass={viewMode === "class"}
                   onFacultyIdChange={(id) => {
                     setOverlayFacultyId(id);
+                  }}
+                  onStudentClassIdChange={(id) => {
+                    if (viewMode === "faculty") {
+                      setOverlayClassId(id);
+                    }
                   }}
                   onRoomIdChange={(id) => {
                     setOverlayRoomId(id);
@@ -1355,8 +1409,12 @@ export function SchedulerPage() {
                     </div>
                   </div>
                   {overlayFacultyId ? (
-                    overlayFacultyLoads.length ? (
-                      <div className="flex-1 min-h-0 w-full overflow-auto rounded border border-border bg-surface-muted/40">
+                    <div className="flex-1 min-h-0 w-full rounded border border-border bg-surface-muted/40 overflow-auto">
+                      {overlayFacultyLoading ? (
+                        <div className="flex items-center justify-center py-12" aria-busy="true">
+                          <Spinner />
+                        </div>
+                      ) : overlayFacultyLoads.length ? (
                         <ScheduleGrid
                           loads={overlayFacultyLoads}
                           readOnly
@@ -1364,12 +1422,12 @@ export function SchedulerPage() {
                           hourEnd={scheduleHourEnd}
                           draggableIdPrefix="faculty-preview"
                         />
-                      </div>
-                    ) : (
-                      <p className="text-xs text-foreground-muted">
-                        No schedule found for the selected faculty in this term.
-                      </p>
-                    )
+                      ) : (
+                        <p className="px-3 py-2 text-xs text-foreground-muted">
+                          No schedule found for the selected faculty in this term.
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <p className="text-xs text-foreground-muted">
                       Select a faculty to preview their weekly schedule here.

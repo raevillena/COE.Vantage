@@ -67,8 +67,14 @@ interface AssignmentFormProps {
   onFacultyIdChange?: (facultyId: string) => void;
   /** Called when room selection changes (for main grid availability overlay). */
   onRoomIdChange?: (roomId: string) => void;
+  /** Called when student class selection changes (for overlays in faculty view). */
+  onStudentClassIdChange?: (studentClassId: string) => void;
   /** Whether to render the inline faculty schedule preview block below the form. Defaults to true. */
   showFacultySchedulePreview?: boolean;
+  /** When true, lock the faculty select to the provided initial value (used in faculty view). */
+  lockFaculty?: boolean;
+  /** When true, lock the student class select to the provided initial value (used in class view). */
+  lockStudentClass?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -84,7 +90,10 @@ export function AssignmentForm({
   facultyLoadsOverride,
   onFacultyIdChange,
   onRoomIdChange,
+  onStudentClassIdChange,
   showFacultySchedulePreview = true,
+  lockFaculty = false,
+  lockStudentClass = false,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
@@ -292,8 +301,16 @@ export function AssignmentForm({
     <div className="flex flex-col min-h-0 flex-1 gap-3">
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
-        <Select.Root value={facultyId || "__none__"} onValueChange={(v) => { const id = v === "__none__" ? "" : v; setFacultyId(id); onFacultyIdChange?.(id); }}>
-          <Select.Trigger aria-label="Faculty" className="w-full">
+        <Select.Root
+          value={facultyId || "__none__"}
+          onValueChange={(v) => {
+            if (lockFaculty) return;
+            const id = v === "__none__" ? "" : v;
+            setFacultyId(id);
+            onFacultyIdChange?.(id);
+          }}
+        >
+          <Select.Trigger aria-label="Faculty" className="w-full" disabled={lockFaculty}>
             <Select.Value placeholder="Select faculty" />
           </Select.Trigger>
           <Select.Content>
@@ -324,8 +341,16 @@ export function AssignmentForm({
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Student Class</label>
-        <Select.Root value={studentClassId || "__none__"} onValueChange={(v) => setStudentClassId(v === "__none__" ? "" : v)}>
-          <Select.Trigger aria-label="Student class" className="w-full">
+        <Select.Root
+          value={studentClassId || "__none__"}
+          onValueChange={(v) => {
+            if (lockStudentClass) return;
+            const id = v === "__none__" ? "" : v;
+            setStudentClassId(id);
+            onStudentClassIdChange?.(id);
+          }}
+        >
+          <Select.Trigger aria-label="Student class" className="w-full" disabled={lockStudentClass}>
             <Select.Value placeholder="Select class" />
           </Select.Trigger>
           <Select.Content>

@@ -13,6 +13,8 @@ interface AvailabilityOverlayProps {
   facultyLoads?: FacultyLoad[];
   /** Loads for the selected room — shown as unavailable (room in use). */
   roomLoads?: FacultyLoad[];
+  /** Loads for the selected student class — shown as unavailable (class busy). */
+  classLoads?: FacultyLoad[];
   hourStart?: number;
   hourEnd?: number;
   className?: string;
@@ -26,6 +28,7 @@ interface AvailabilityOverlayProps {
 export function AvailabilityOverlay({
   facultyLoads = [],
   roomLoads = [],
+  classLoads = [],
   hourStart: hourStartProp,
   hourEnd: hourEndProp,
   className,
@@ -38,11 +41,13 @@ export function AvailabilityOverlay({
   const timeToPx = (time: string) =>
     (timeToMinutes(time) - hourStart * 60) * (SLOT_HEIGHT / 60);
 
-  const renderBlocks = (loads: FacultyLoad[], type: "faculty" | "room") => {
+  const renderBlocks = (loads: FacultyLoad[], type: "faculty" | "room" | "class") => {
     const baseClass =
       type === "faculty"
         ? "bg-blue-500/25 ring-1 ring-blue-500/40"
-        : "bg-amber-500/25 ring-1 ring-amber-500/40";
+        : type === "room"
+        ? "bg-amber-500/25 ring-1 ring-amber-500/40"
+        : "bg-emerald-500/25 ring-1 ring-emerald-500/40";
     return loads.map((load) => {
       const top = timeToPx(load.startTime) + 1;
       const height = Math.max(
@@ -57,7 +62,9 @@ export function AvailabilityOverlay({
           title={
             type === "faculty"
               ? "Faculty has another class here"
-              : "Room in use here"
+              : type === "room"
+              ? "Room in use here"
+              : "Student class has another class here"
           }
           aria-hidden
         />
@@ -65,7 +72,7 @@ export function AvailabilityOverlay({
     });
   };
 
-  if (facultyLoads.length === 0 && roomLoads.length === 0) return null;
+  if (facultyLoads.length === 0 && roomLoads.length === 0 && classLoads.length === 0) return null;
 
   return (
     <div
@@ -90,6 +97,10 @@ export function AvailabilityOverlay({
           {renderBlocks(
             roomLoads.filter((l) => l.dayOfWeek === dayOfWeek),
             "room"
+          )}
+          {renderBlocks(
+            classLoads.filter((l) => l.dayOfWeek === dayOfWeek),
+            "class"
           )}
         </div>
       ))}
