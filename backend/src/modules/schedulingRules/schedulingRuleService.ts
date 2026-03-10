@@ -136,7 +136,7 @@ export async function createRuleSet(
 
 export async function updateRuleSet(
   id: string,
-  body: { name?: string; description?: string; config?: SchedulingRuleSetConfig },
+  body: { name?: string; description?: string | null; config?: SchedulingRuleSetConfig },
   caller: CallerContext
 ) {
   const existing = await prisma.schedulingRuleSet.findUnique({ where: { id } });

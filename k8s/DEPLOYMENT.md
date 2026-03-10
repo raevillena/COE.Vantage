@@ -8,16 +8,26 @@ This guide assumes:
 
 ---
 
-### 1. Build and push Docker images
+### 1. Build app artifacts and push Docker images
 
-From the repo root:
+From the repo root, first build the backend and generate Prisma client locally:
 
 ```bash
-# Backend
+cd backend
+npm ci
+npx prisma generate
+npm run build
+cd ..
+```
+
+Then build and push the Docker images:
+
+```bash
+# Backend (expects pre-built dist/ and prisma/ in backend/)
 docker build -t raevillena21/coe-vantage-backend:v0.0.1 backend
 docker push raevillena21/coe-vantage-backend:v0.0.1
 
-# Frontend
+# Frontend (builds inside the image)
 docker build -t raevillena21/coe-vantage-frontend:v0.0.1 frontend
 docker push raevillena21/coe-vantage-frontend:v0.0.1
 ```

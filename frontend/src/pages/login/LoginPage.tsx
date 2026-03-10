@@ -18,6 +18,7 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [loading, setLoading] = useState(false);
+  const showQuickSignIn = import.meta.env.MODE !== "production";
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -161,23 +162,27 @@ export function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
 
-          <div className="mt-6 pt-4 border-t border-border">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">Quick sign in (dev)</p>
-            <p className="mb-2 text-xs text-foreground-muted">Password: {TEST_PASSWORD}</p>
-            <div className="flex flex-wrap gap-2">
-              {testUsers.map(({ email: testEmail, label }) => (
-                <button
-                  key={testEmail}
-                  type="button"
-                  onClick={() => handleTestUserAndSubmit(testEmail)}
-                  disabled={loading}
-                  className="rounded border border-border bg-surface-muted px-2 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-50"
-                >
-                  {label}
-                </button>
-              ))}
+          {showQuickSignIn && (
+            <div className="mt-6 pt-4 border-t border-border">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                Quick sign in (dev)
+              </p>
+              <p className="mb-2 text-xs text-foreground-muted">Password: {TEST_PASSWORD}</p>
+              <div className="flex flex-wrap gap-2">
+                {testUsers.map(({ email: testEmail, label }) => (
+                  <button
+                    key={testEmail}
+                    type="button"
+                    onClick={() => handleTestUserAndSubmit(testEmail)}
+                    disabled={loading}
+                    className="rounded border border-border bg-surface-muted px-2 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-50"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </form>
     </AuthLayout>
   );
