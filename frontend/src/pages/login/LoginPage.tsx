@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppDispatch } from "../../store/hooks";
 import { setAuth } from "../../store/authSlice";
@@ -10,6 +10,7 @@ import {
   getLoginError,
   type LoginFieldErrors,
 } from "./loginValidation";
+import { toast } from "react-hot-toast";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,6 +22,19 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/dashboard";
+
+  // If we were redirected here because the session expired, show a one-time toast.
+  useEffect(() => {
+    try {
+      const flag = sessionStorage.getItem("sessionExpired");
+      if (flag === "1") {
+        sessionStorage.removeItem("sessionExpired");
+        toast.error("Your session has expired. Please sign in again.");
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   const TEST_PASSWORD = "Test123!";
   const testUsers = [

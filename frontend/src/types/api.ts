@@ -15,7 +15,9 @@ export interface Room {
   isLab: boolean;
   hasAC: boolean;
   departmentId: string;
+  controlDepartmentId?: string | null;
   department?: { id: string; name: string; code: string | null };
+  controlDepartment?: { id: string; name: string; code: string | null } | null;
   deletedAt?: string | null;
 }
 
@@ -79,26 +81,56 @@ export interface UserListItem {
   name: string;
   role: Role;
   departmentId: string | null;
+  status?: string | null;
+  maxUnits?: number | null;
   department?: { name: string; code: string | null } | null;
   deletedAt?: string | null;
 }
 
 export interface FacultyLoad {
   id: string;
-  facultyId: string;
+  facultyId: string | null;
   subjectId: string;
   studentClassId: string;
-  roomId: string;
+  roomId: string | null;
   dayOfWeek: number;
   startTime: string;
   endTime: string;
   semester: number;
   academicYearId: string;
-  faculty?: { id: string; name: string; email: string };
+  facultyDisplayName?: string | null;
+  roomDisplayName?: string | null;
+  faculty?: { id: string; name: string; email: string } | null;
   subject?: { id: string; code: string; name: string; units: number; isLab: boolean };
   studentClass?: { id: string; name: string; yearLevel: number; studentCount: number };
-  room?: { id: string; name: string; capacity: number; isLab: boolean };
+  room?: { id: string; name: string; capacity: number; isLab: boolean } | null;
   academicYear?: { id: string; name: string };
+}
+
+/** Cross-department assignment request (chairman-to-chairman). */
+export interface AssignmentRequest {
+  id: string;
+  facultyId: string;
+  subjectId: string;
+  studentClassId: string;
+  roomId: string | null;
+  roomDisplayName: string | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  semester: number;
+  academicYearId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  faculty?: { id: string; name: string; email: string; department?: { name: string } };
+  subject?: { id: string; code: string; name: string };
+  studentClass?: { id: string; name: string };
+  room?: { id: string; name: string } | null;
+  requestedBy?: { id: string; name: string; department?: { name: string } };
+  academicYear?: { id: string; name: string };
+  respondedById?: string | null;
+  respondedAt?: string | null;
+  notes?: string | null;
+  createdAt?: string;
 }
 
 export interface ConflictPreview {
@@ -149,6 +181,51 @@ export interface AutoAssignSkippedItem {
 export interface AutoAssignSummary {
   assigned: AutoAssignAssignedItem[];
   skipped: AutoAssignSkippedItem[];
+}
+
+/** Config for a scheduling rule set (auto-schedule behavior). */
+export interface SchedulingRuleSetConfig {
+  workStartMinutes: number;
+  workEndMinutes: number;
+  lunchStartMinutes: number;
+  lunchEndMinutes: number;
+  slotStepMinutes: number;
+  avoidLunchSpan: boolean;
+  preferMwfFor3UnitLecture: boolean;
+  preferTthFor3UnitLecture: boolean;
+  requireLabBreakAfterLongLab: boolean;
+  preferRandom3DayFor3UnitLecture?: boolean;
+  maxBlockMinutes: number;
+  /** Days to avoid for assignment (1=Mon … 6=Sat). Default often includes Friday [5]. */
+  excludedDays?: number[];
+}
+
+export interface SchedulingRuleSet {
+  id: string;
+  name: string;
+  description: string | null;
+  config: SchedulingRuleSetConfig;
+  departmentId: string | null;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Resolved rule set for (academic year, class). */
+export interface ResolvedSchedulingRuleSet {
+  ruleSetId: string | null;
+  ruleSetName?: string | null;
+  config: SchedulingRuleSetConfig | null;
+}
+
+export interface SchedulingRuleSetAssignment {
+  id: string;
+  academicYearId: string | null;
+  studentClassId: string | null;
+  ruleSetId: string;
+  ruleSet?: { id: string; name: string };
+  academicYear?: { id: string; name: string } | null;
+  studentClass?: { id: string; name: string } | null;
 }
 
 /** Build a short conflict summary for toasts (e.g. "Room is in use. Faculty has another class."). */

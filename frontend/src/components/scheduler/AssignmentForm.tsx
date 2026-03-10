@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { ConflictPreview, FacultyLoad } from "../../types/api";
+import type { ConflictPreview, FacultyLoad, Room } from "../../types/api";
 import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
+import { useAppSelector } from "../../store/hooks";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { ScheduleGrid } from "../scheduleGrid/ScheduleGrid";
 
@@ -36,11 +38,14 @@ function getCompactHourRange(loads: FacultyLoad[]): { hourStart: number; hourEnd
   return { hourStart, hourEnd };
 }
 
+/** Sentinel values: __others__ = off-system faculty (use facultyDisplayName); __off_system__ = off-system room (use roomDisplayName). */
 export interface AssignmentFormValues {
   facultyId: string;
+  facultyDisplayName?: string;
   subjectId: string;
   studentClassId: string;
   roomId: string;
+  roomDisplayName?: string;
   dayOfWeek: number;
   startTime: string;
   endTime: string;
@@ -75,6 +80,8 @@ interface AssignmentFormProps {
   lockFaculty?: boolean;
   /** When true, lock the student class select to the provided initial value (used in class view). */
   lockStudentClass?: boolean;
+  /** Room ID -> isOpen for current term; when room is closed and user is not control dept, room is disabled. */
+  roomAvailabilityMap?: Record<string, boolean>;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -94,13 +101,17 @@ export function AssignmentForm({
   showFacultySchedulePreview = true,
   lockFaculty = false,
   lockStudentClass = false,
+  roomAvailabilityMap,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
+  const user = useAppSelector((s) => s.auth.user);
   const [facultyId, setFacultyId] = useState(initialValues.facultyId ?? "");
+  const [facultyDisplayName, setFacultyDisplayName] = useState(initialValues.facultyDisplayName ?? "");
   const [subjectId, setSubjectId] = useState(initialValues.subjectId ?? "");
   const [studentClassId, setStudentClassId] = useState(initialValues.studentClassId ?? "");
   const [roomId, setRoomId] = useState(initialValues.roomId ?? "");
+  const [roomDisplayName, setRoomDisplayName] = useState(initialValues.roomDisplayName ?? "");
   const [dayOfWeek, setDayOfWeek] = useState(initialValues.dayOfWeek ?? 1);
   const [startTime, setStartTime] = useState(initialValues.startTime ?? "08:00");
   const [endTime, setEndTime] = useState(initialValues.endTime ?? "09:00");
@@ -109,22 +120,27 @@ export function AssignmentForm({
   const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; code: string; name: string; isLab: boolean }[]>([]);
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
-  const [rooms, setRooms] = useState<{ id: string; name: string; isLab: boolean }[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [facultyLoads, setFacultyLoads] = useState<FacultyLoad[]>([]);
   const [facultyScheduleOpen, setFacultyScheduleOpen] = useState(true);
+
+  const isOthersFaculty = facultyId === "__others__";
+  const isOffSystemRoom = roomId === "__off_system__";
 
   // Sync from initialValues when formKey changes and data is ready. For edit mode, wait until the fetched load matches (initialValuesReady) so we don't show the previous block's data on click.
   useEffect(() => {
     if (!initialValuesReady) return;
     setFacultyId(initialValues.facultyId ?? "");
+    setFacultyDisplayName(initialValues.facultyDisplayName ?? "");
     setSubjectId(initialValues.subjectId ?? "");
     setStudentClassId(initialValues.studentClassId ?? "");
     setRoomId(initialValues.roomId ?? "");
+    setRoomDisplayName(initialValues.roomDisplayName ?? "");
     setDayOfWeek(initialValues.dayOfWeek ?? 1);
     setStartTime(initialValues.startTime ?? "08:00");
     setEndTime(initialValues.endTime ?? "09:00");
     setPreview(null);
-  }, [formKey, initialValuesReady]);
+  }, [formKey, initialValuesReady, initialValues.facultyId, initialValues.facultyDisplayName, initialValues.roomId, initialValues.roomDisplayName]);
 
   // While adding a new assignment (no editingLoadId), keep the form's day/time in sync with the pending block
   // when it is dragged or resized on the main grid.
@@ -150,7 +166,7 @@ export function AssignmentForm({
   }, []);
 
   useEffect(() => {
-    if (!facultyId || !academicYearId) {
+    if (!facultyId || facultyId === "__others__" || !academicYearId) {
       setFacultyLoads([]);
       return;
     }
@@ -160,12 +176,21 @@ export function AssignmentForm({
 
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const roomOptions = selectedSubject?.isLab ? rooms.filter((r) => r.isLab) : rooms;
+  const roomOptionDisabled = (r: Room) => {
+    if (!r.controlDepartmentId) return false;
+    const isOpen = roomAvailabilityMap?.[r.id] === true;
+    if (isOpen) return false;
+    if (user?.role !== "CHAIRMAN") return false;
+    return user.departmentId !== r.controlDepartmentId;
+  };
   const displayFacultyLoads = facultyLoadsOverride ?? facultyLoads;
   const { hourStart, hourEnd } = useMemo(() => getCompactHourRange(displayFacultyLoads), [displayFacultyLoads]);
 
   /** Run conflict preview whenever assignment fields change (auto-check for room/faculty/class conflicts). */
   useEffect(() => {
-    if (!facultyId || !subjectId || !studentClassId || !roomId || !academicYearId) {
+    const effectiveFacultyId = isOthersFaculty ? null : facultyId;
+    const effectiveRoomId = isOffSystemRoom ? null : roomId;
+    if ((!effectiveFacultyId && !facultyDisplayName?.trim()) || !subjectId || !studentClassId || (effectiveRoomId === "" && !roomDisplayName?.trim()) || !academicYearId) {
       setPreview(null);
       return;
     }
@@ -173,10 +198,12 @@ export function AssignmentForm({
     setLoading(true);
     setPreview(null);
     const body = {
-      facultyId,
+      facultyId: effectiveFacultyId || null,
+      facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
       subjectId,
       studentClassId,
-      roomId,
+      roomId: effectiveRoomId || null,
+      roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
       dayOfWeek,
       startTime,
       endTime,
@@ -198,21 +225,25 @@ export function AssignmentForm({
     return () => {
       cancelled = true;
     };
-  }, [facultyId, subjectId, studentClassId, roomId, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId]);
+  }, [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId]);
 
   const runPreview = async () => {
-    if (!facultyId || !subjectId || !studentClassId || !roomId) {
-      toast.error("Fill all required fields");
+    const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
+    const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom;
+    if (!hasFaculty || !subjectId || !studentClassId || !hasRoom) {
+      toast.error("Fill all required fields (faculty, subject, class, room or display names)");
       return;
     }
     setLoading(true);
     setPreview(null);
     try {
       const body = {
-        facultyId,
+        facultyId: isOthersFaculty ? null : (facultyId || null),
+        facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
         subjectId,
         studentClassId,
-        roomId,
+        roomId: isOffSystemRoom ? null : (roomId || null),
+        roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
         dayOfWeek,
         startTime,
         endTime,
@@ -238,6 +269,12 @@ export function AssignmentForm({
       preview.labRoomMismatch);
 
   const handleSave = async () => {
+    const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
+    const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom; // off-system room allows empty display name (we default to "Off-system")
+    if (!hasFaculty || !subjectId || !studentClassId || !hasRoom) {
+      toast.error("Fill all required fields");
+      return;
+    }
     if (!preview) {
       await runPreview();
       return;
@@ -247,33 +284,30 @@ export function AssignmentForm({
       return;
     }
     setLoading(true);
+    const payload = {
+      facultyId: isOthersFaculty ? null : (facultyId || null),
+      facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
+      subjectId,
+      studentClassId,
+      roomId: isOffSystemRoom ? null : (roomId || null),
+      roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
+      dayOfWeek,
+      startTime,
+      endTime,
+      semester,
+      academicYearId,
+    };
     try {
       if (editingLoadId) {
-        await apiClient.patch(`/faculty-loads/${editingLoadId}`, {
-          facultyId,
-          subjectId,
-          studentClassId,
-          roomId,
-          dayOfWeek,
-          startTime,
-          endTime,
-          semester,
-          academicYearId,
-        });
+        await apiClient.patch(`/faculty-loads/${editingLoadId}`, payload);
         toast.success("Load updated");
       } else {
-        await apiClient.post("/faculty-loads", {
-          facultyId,
-          subjectId,
-          studentClassId,
-          roomId,
-          dayOfWeek,
-          startTime,
-          endTime,
-          semester,
-          academicYearId,
-        });
-        toast.success("Load added");
+        const { data } = await apiClient.post<{ requestCreated?: boolean; id?: string }>("/faculty-loads", payload);
+        if (data?.requestCreated) {
+          toast.success("Request sent to the faculty's department chairman for approval.");
+        } else {
+          toast.success("Load added");
+        }
       }
       onSaved();
     } catch (err: unknown) {
@@ -307,7 +341,7 @@ export function AssignmentForm({
             if (lockFaculty) return;
             const id = v === "__none__" ? "" : v;
             setFacultyId(id);
-            onFacultyIdChange?.(id);
+            onFacultyIdChange?.(id === "__others__" ? "" : id);
           }}
         >
           <Select.Trigger aria-label="Faculty" className="w-full" disabled={lockFaculty}>
@@ -315,6 +349,7 @@ export function AssignmentForm({
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="__none__">Select faculty</Select.Item>
+            <Select.Item value="__others__">Others (off-system)</Select.Item>
             {faculties.map((f) => (
               <Select.Item key={f.id} value={f.id}>
                 {f.name}
@@ -322,6 +357,15 @@ export function AssignmentForm({
             ))}
           </Select.Content>
         </Select.Root>
+        {isOthersFaculty && (
+          <Input
+            className="mt-1"
+            placeholder="Type faculty name"
+            value={facultyDisplayName}
+            onChange={(e) => setFacultyDisplayName(e.target.value)}
+            aria-label="Faculty display name"
+          />
+        )}
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Subject</label>
@@ -365,19 +409,44 @@ export function AssignmentForm({
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
-        <Select.Root value={roomId || "__none__"} onValueChange={(v) => { const id = v === "__none__" ? "" : v; setRoomId(id); onRoomIdChange?.(id); }}>
+        <Select.Root
+          value={roomId || "__none__"}
+          onValueChange={(v) => {
+            const id = v === "__none__" ? "" : v;
+            setRoomId(id);
+            onRoomIdChange?.(id === "__off_system__" ? "" : id);
+          }}
+        >
           <Select.Trigger aria-label="Room" className="w-full">
             <Select.Value placeholder="Select room" />
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="__none__">Select room</Select.Item>
-            {roomOptions.map((r) => (
-              <Select.Item key={r.id} value={r.id}>
-                {r.name} {r.isLab ? "(Lab)" : ""}
-              </Select.Item>
-            ))}
+            <Select.Item value="__off_system__">Off-system / Other</Select.Item>
+            {roomOptions.map((r) => {
+              const disabled = roomOptionDisabled(r);
+              return (
+                <Select.Item
+                  key={r.id}
+                  value={r.id}
+                  disabled={disabled}
+                  title={disabled ? "Room closed for this term; only the control department can assign until they open it." : undefined}
+                >
+                  {r.name} {r.isLab ? "(Lab)" : ""}
+                </Select.Item>
+              );
+            })}
           </Select.Content>
         </Select.Root>
+        {isOffSystemRoom && (
+          <Input
+            className="mt-1"
+            placeholder="Room or location (optional)"
+            value={roomDisplayName}
+            onChange={(e) => setRoomDisplayName(e.target.value)}
+            aria-label="Room display name"
+          />
+        )}
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Day</label>

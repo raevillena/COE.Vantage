@@ -9,7 +9,7 @@ export async function listUsers(query: ListUsersQuery) {
   if (query.departmentId) where.departmentId = query.departmentId;
   return prisma.user.findMany({
     where,
-    select: { id: true, email: true, name: true, role: true, departmentId: true, createdAt: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } } },
     orderBy: { name: "asc" },
   });
 }
@@ -17,7 +17,7 @@ export async function listUsers(query: ListUsersQuery) {
 export async function getUserById(id: string) {
   const user = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, email: true, name: true, role: true, departmentId: true, createdAt: true, isDeleted: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true, createdAt: true, isDeleted: true, department: { select: { name: true, code: true } } },
   });
   if (!user || user.isDeleted) throw notFound("User not found");
   const { isDeleted: _d, ...rest } = user;
@@ -39,8 +39,10 @@ export async function createUser(body: CreateUserBody) {
       name: body.name,
       role: body.role,
       departmentId: body.departmentId ?? undefined,
+      status: body.status ?? undefined,
+      maxUnits: body.maxUnits ?? undefined,
     },
-    select: { id: true, email: true, name: true, role: true, departmentId: true },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true },
   });
   return user;
 }
@@ -64,8 +66,10 @@ export async function updateUser(id: string, body: UpdateUserBody) {
       name: body.name,
       role: body.role,
       departmentId: body.departmentId ?? undefined,
+      ...(body.status !== undefined && { status: body.status }),
+      ...(body.maxUnits !== undefined && { maxUnits: body.maxUnits }),
     },
-    select: { id: true, email: true, name: true, role: true, departmentId: true },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true },
   });
 }
 
@@ -82,7 +86,7 @@ export async function softDeleteUser(id: string) {
 export async function listTrashUsers() {
   return prisma.user.findMany({
     where: { isDeleted: true },
-    select: { id: true, email: true, name: true, role: true, departmentId: true, deletedAt: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, deletedAt: true, department: { select: { name: true, code: true } } },
     orderBy: { deletedAt: "desc" },
   });
 }
@@ -102,4 +106,27 @@ export async function permanentDeleteUser(id: string) {
   if (!user) throw notFound("User not found");
   if (!user.isDeleted) throw badRequest("Only users in Trash can be permanently deleted");
   await prisma.user.delete({ where: { id } });
+}
+
+/** Subjects this user is prioritized to teach (for faculty prioritization view). */
+export async function getPrioritizedSubjects(facultyId: string) {
+  const user = await prisma.user.findUnique({ where: { id: facultyId } });
+  if (!user || user.isDeleted) throw notFound("User not found");
+  const list = await prisma.subjectFacultyPriority.findMany({
+    where: { facultyId },
+    orderBy: { priority: "asc" },
+    include: {
+      subject: {
+        select: { id: true, code: true, name: true, units: true, isLab: true },
+      },
+    },
+  });
+  return list.map((p) => ({
+    subjectId: p.subjectId,
+    priority: p.priority,
+    code: p.subject.code,
+    name: p.subject.name,
+    units: p.subject.units,
+    isLab: p.subject.isLab,
+  }));
 }

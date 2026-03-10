@@ -21,36 +21,42 @@ export interface ConflictResult {
   labRoomMismatch: boolean;
 }
 
-/** Run all conflict checks for a proposed faculty load (create or update). Pass tx when inside a transaction. */
+/** Run all conflict checks for a proposed faculty load (create or update). Pass tx when inside a transaction.
+ * When facultyId is null (off-system faculty), faculty conflict is skipped. When roomId is null (off-system room), room/capacity/lab checks are skipped. */
 export async function checkConflicts(
   payload: PreviewFacultyLoadBody,
   tx?: Prisma.TransactionClient
 ): Promise<ConflictResult> {
   const { facultyId, subjectId, studentClassId, roomId, dayOfWeek, startTime, endTime, semester, academicYearId, excludeLoadId } = payload;
   const db = tx ?? prisma;
+  const hasFaculty = facultyId != null && facultyId !== "";
+  const hasRoom = roomId != null && roomId !== "";
 
-  const [subject, room, studentClass, facultyLoadsForFaculty, facultyLoadsForRoom, facultyLoadsForClass] = await Promise.all([
+  const [subject, studentClass, facultyLoadsForFaculty, facultyLoadsForRoom, facultyLoadsForClass] = await Promise.all([
     db.subject.findUniqueOrThrow({ where: { id: subjectId } }),
-    db.room.findUniqueOrThrow({ where: { id: roomId } }),
     db.studentClass.findUniqueOrThrow({ where: { id: studentClassId } }),
-    db.facultyLoad.findMany({
-      where: {
-        facultyId,
-        academicYearId,
-        semester,
-        dayOfWeek,
-        ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}),
-      },
-    }),
-    db.facultyLoad.findMany({
-      where: {
-        roomId,
-        academicYearId,
-        semester,
-        dayOfWeek,
-        ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}),
-      },
-    }),
+    hasFaculty
+      ? db.facultyLoad.findMany({
+          where: {
+            facultyId: facultyId!,
+            academicYearId,
+            semester,
+            dayOfWeek,
+            ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}),
+          },
+        })
+      : Promise.resolve([]),
+    hasRoom
+      ? db.facultyLoad.findMany({
+          where: {
+            roomId: roomId!,
+            academicYearId,
+            semester,
+            dayOfWeek,
+            ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}),
+          },
+        })
+      : Promise.resolve([]),
     db.facultyLoad.findMany({
       where: {
         studentClassId,
@@ -62,17 +68,19 @@ export async function checkConflicts(
     }),
   ]);
 
-  const facultyConflict = facultyLoadsForFaculty.some((l) =>
+  const room = hasRoom ? await db.room.findUniqueOrThrow({ where: { id: roomId! } }) : null;
+
+  const facultyConflict = hasFaculty && facultyLoadsForFaculty.some((l) =>
     timeOverlaps(l.startTime, l.endTime, startTime, endTime)
   );
-  const roomConflict = facultyLoadsForRoom.some((l) =>
+  const roomConflict = hasRoom && facultyLoadsForRoom.some((l) =>
     timeOverlaps(l.startTime, l.endTime, startTime, endTime)
   );
   const studentConflict = facultyLoadsForClass.some((l) =>
     timeOverlaps(l.startTime, l.endTime, startTime, endTime)
   );
-  const capacityIssue = room.capacity < studentClass.studentCount;
-  const labRoomMismatch = subject.isLab && !room.isLab;
+  const capacityIssue = room !== null && room.capacity < studentClass.studentCount;
+  const labRoomMismatch = room !== null && subject.isLab && !room.isLab;
 
   return {
     facultyConflict,

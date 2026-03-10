@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from "axios";
+import { toast } from "react-hot-toast";
 
 const baseURL = import.meta.env.VITE_API_URL ?? "/api";
 
@@ -53,6 +54,14 @@ apiClient.interceptors.response.use(
       })
       .catch((refreshErr) => {
         processQueue(refreshErr, null);
+        // Session likely expired: clear auth, remember reason, and send user to login.
+        try {
+          sessionStorage.removeItem("accessToken");
+          sessionStorage.removeItem("user");
+        } catch {
+          // ignore storage errors
+        }
+        toast.error("Your session has expired. Please sign in again.");
         window.location.href = "/login";
         return Promise.reject(refreshErr);
       })

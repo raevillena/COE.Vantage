@@ -11,6 +11,9 @@ export const GRID_HEADER_HEIGHT = 48;
 /** Grid border width (ScheduleGrid has border border-border). Overlay insets by this to align. */
 export const GRID_BORDER_WIDTH = 1;
 
+/** Minimum width of the schedule grid (time column 4.5rem + 6 day columns at DAY_COLUMN_MIN_PX). Used so the overlay wrapper can match grid width when the pane is scrollable. */
+export const GRID_MIN_WIDTH_PX = 72 + 6 * 180;
+
 export function hourToTimeString(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00`;
 }

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAppSelector } from "../../store/hooks";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent, DragOverEvent } from "@dnd-kit/core";
 import { apiClient } from "../../api/apiClient";
@@ -10,6 +12,8 @@ import type {
   Room,
   CopyFacultyLoadsSummary,
   AutoAssignSummary,
+  SchedulingRuleSet,
+  ResolvedSchedulingRuleSet,
 } from "../../types/api";
 import { getApiErrorMessage } from "../../types/api";
 import type { SubjectDragItem, LoadDragItem } from "../../components/scheduler/schedulerTypes";
@@ -37,6 +41,7 @@ import {
   timeToMinutes,
   minutesToTimeString,
   SLOT_HEIGHT,
+  GRID_MIN_WIDTH_PX,
 } from "../../components/scheduler/scheduleGridConstants";
 import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
 import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
@@ -150,7 +155,57 @@ function SchedulePaletteSelect() {
   );
 }
 
+/** Match 2xl breakpoint (1536px). */
+function useIs2xl(): boolean {
+  const [is2xl, setIs2xl] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1536px)").matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1536px)");
+    const handler = () => setIs2xl(mq.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return is2xl;
+}
+
+interface SchedulerLayoutProps {
+  renderCurriculum: () => ReactNode;
+  renderMain: () => ReactNode;
+  renderAssignment: () => ReactNode;
+  renderFooter: () => ReactNode | null;
+}
+
+/** Fixed CSS grid layout. 3-column at 2xl, 2-column at xl, stacked below. */
+function SchedulerLayout({
+  renderCurriculum,
+  renderMain,
+  renderAssignment,
+  renderFooter,
+}: SchedulerLayoutProps) {
+  return (
+    <div
+      className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(18rem,2fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface"
+    >
+      <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
+        {renderCurriculum()}
+      </aside>
+      <main
+        className="order-1 xl:order-none 2xl:order-none xl:col-span-1 2xl:col-span-1 min-h-0 overflow-hidden flex flex-col p-3 min-h-[50vh] 2xl:min-h-0 xl:[grid-column:2] xl:[grid-row:1] 2xl:[grid-column:2] 2xl:[grid-row:1]"
+        style={{ display: "grid", gridTemplateRows: "auto 1fr" }}
+      >
+        {renderMain()}
+      </main>
+      <aside className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 p-3 min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
+        {renderAssignment()}
+      </aside>
+      {renderFooter()}
+    </div>
+  );
+}
+
 export function SchedulerPage() {
+  const navigate = useNavigate();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
@@ -172,9 +227,11 @@ export function SchedulerPage() {
   /** When false, main schedule shows only up to 6 PM; "+" expands to show later hours. */
   const [showLateHours, setShowLateHours] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomAvailabilityMap, setRoomAvailabilityMap] = useState<Record<string, boolean>>({});
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [roomLoads, setRoomLoads] = useState<FacultyLoad[]>([]);
   const [roomLoadsLoading, setRoomLoadsLoading] = useState(false);
+  const [openingRoom, setOpeningRoom] = useState(false);
   const [overlayFacultyId, setOverlayFacultyId] = useState("");
   const [overlayRoomId, setOverlayRoomId] = useState("");
   const [overlayFacultyLoads, setOverlayFacultyLoads] = useState<FacultyLoad[]>([]);
@@ -188,6 +245,7 @@ export function SchedulerPage() {
   const [autoScheduling, setAutoScheduling] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const user = useAppSelector((s) => s.auth.user);
   const [copySourceAcademicYearId, setCopySourceAcademicYearId] = useState("");
   const [copySourceSemester, setCopySourceSemester] = useState(1);
   const [copyLoading, setCopyLoading] = useState(false);
@@ -195,6 +253,12 @@ export function SchedulerPage() {
   const [copyError, setCopyError] = useState<string | null>(null);
   const [autoSummaryDialogOpen, setAutoSummaryDialogOpen] = useState(false);
   const [autoSummary, setAutoSummary] = useState<AutoAssignSummary | null>(null);
+  const [ruleSets, setRuleSets] = useState<SchedulingRuleSet[]>([]);
+  const [resolvedRuleSet, setResolvedRuleSet] = useState<ResolvedSchedulingRuleSet | null>(null);
+  /** When set, use this rule set for the next auto-schedule run instead of the assigned one. */
+  const [selectedRuleSetIdForRun, setSelectedRuleSetIdForRun] = useState<string>("__assigned__");
+
+  const is2xl = useIs2xl();
 
   const currentClass =
     viewMode === "class" && studentClassId
@@ -232,16 +296,55 @@ export function SchedulerPage() {
     setSelectedRoomId("");
   }, [viewMode, studentClassId]);
 
+  // Fetch scheduling rule sets (for dropdown and resolved name).
+  useEffect(() => {
+    apiClient.get<SchedulingRuleSet[]>("/scheduling-rule-sets").then(({ data }) => setRuleSets(data)).catch(() => setRuleSets([]));
+  }, []);
+
+  // Resolve which rule set applies for current year + class (class view).
+  useEffect(() => {
+    if (viewMode !== "class" || !academicYearId || !studentClassId) {
+      setResolvedRuleSet(null);
+      return;
+    }
+    apiClient
+      .get<ResolvedSchedulingRuleSet>("/scheduling-rule-sets/resolve", {
+        params: { academicYearId, studentClassId },
+      })
+      .then(({ data }) => setResolvedRuleSet(data))
+      .catch(() => setResolvedRuleSet(null));
+  }, [viewMode, academicYearId, studentClassId]);
+
+  // Whenever the class or academic year changes, default back to the assigned rule
+  // so the scheduler automatically follows the current assignment unless the user overrides it.
+  useEffect(() => {
+    setSelectedRuleSetIdForRun("__assigned__");
+  }, [viewMode, academicYearId, studentClassId]);
+
+  const resolvedRuleSetName = (() => {
+    // No assignment resolved for this (year, class)
+    if (!resolvedRuleSet?.ruleSetId) return "None assigned";
+    // Prefer the name returned by the resolver (always accurate to the assignment)
+    if (resolvedRuleSet.ruleSetName) return resolvedRuleSet.ruleSetName;
+    // Fallback: look up by id in the loaded rule sets
+    const match = ruleSets.find((r) => r.id === resolvedRuleSet.ruleSetId);
+    return match?.name ?? "Assigned rule";
+  })();
+
   const handleAutoSchedule = async () => {
     if (!academicYearId || !studentClassId) return;
     setAutoScheduling(true);
     setAutoSummary(null);
     try {
-      const { data } = await apiClient.post<AutoAssignSummary>("/faculty-loads/auto-assign", {
+      const payload: { academicYearId: string; semester: number; studentClassId: string; ruleSetId?: string } = {
         academicYearId,
         semester,
         studentClassId,
-      });
+      };
+      if (selectedRuleSetIdForRun && selectedRuleSetIdForRun !== "__assigned__") {
+        payload.ruleSetId = selectedRuleSetIdForRun;
+      }
+      const { data } = await apiClient.post<AutoAssignSummary>("/faculty-loads/auto-assign", payload);
       await Promise.all([refreshLoads(), refreshRoomLoads()]);
       setAutoSummary(data);
       setAutoSummaryDialogOpen(true);
@@ -322,7 +425,6 @@ export function SchedulerPage() {
     }
   };
 
-  /** Require 8px movement before starting a drag so clicks on blocks are treated as clicks, not drags. */
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -339,6 +441,15 @@ export function SchedulerPage() {
     apiClient.get("/student-classes").then(({ data }) => setStudentClasses(data));
     apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(data));
   }, []);
+
+  useEffect(() => {
+    if (!academicYearId) {
+      setRoomAvailabilityMap({});
+      return;
+    }
+    const params = new URLSearchParams({ academicYearId, semester: String(semester) });
+    apiClient.get<Record<string, boolean>>(`/rooms/availability-map?${params}`).then(({ data }) => setRoomAvailabilityMap(data ?? {})).catch(() => setRoomAvailabilityMap({}));
+  }, [academicYearId, semester]);
 
   useEffect(() => {
     if (!academicYearId || !selectedRoomId) {
@@ -473,10 +584,12 @@ export function SchedulerPage() {
       }
       apiClient
         .patch(`/faculty-loads/${load.id}`, {
-          facultyId: load.facultyId,
+          facultyId: load.facultyId ?? undefined,
+          facultyDisplayName: load.facultyDisplayName ?? undefined,
           subjectId: load.subjectId,
           studentClassId: load.studentClassId,
-          roomId: load.roomId,
+          roomId: load.roomId ?? undefined,
+          roomDisplayName: load.roomDisplayName ?? undefined,
           dayOfWeek: slot.dayOfWeek,
           startTime,
           endTime,
@@ -579,10 +692,12 @@ export function SchedulerPage() {
       const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
       try {
         await apiClient.patch(`/faculty-loads/${load.id}`, {
-          facultyId: newFacultyId,
+          facultyId: newFacultyId ?? undefined,
+          facultyDisplayName: newFacultyId ? undefined : (load.facultyDisplayName ?? undefined),
           subjectId: load.subjectId,
           studentClassId: load.studentClassId,
-          roomId: load.roomId,
+          roomId: load.roomId ?? undefined,
+          roomDisplayName: load.roomDisplayName ?? undefined,
           dayOfWeek: targetDayOfWeek,
           startTime: targetStartTime,
           endTime: targetEndTime,
@@ -606,10 +721,12 @@ export function SchedulerPage() {
       const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
       try {
         await apiClient.patch(`/faculty-loads/${load.id}`, {
-          facultyId: load.facultyId,
+          facultyId: load.facultyId ?? undefined,
+          facultyDisplayName: load.facultyDisplayName ?? undefined,
           subjectId: load.subjectId,
           studentClassId: load.studentClassId,
-          roomId: newRoomId,
+          roomId: newRoomId ?? undefined,
+          roomDisplayName: newRoomId ? undefined : (load.roomDisplayName ?? undefined),
           dayOfWeek: targetDayOfWeek,
           startTime: targetStartTime,
           endTime: targetEndTime,
@@ -631,10 +748,12 @@ export function SchedulerPage() {
     (load: FacultyLoad, payload: { dayOfWeek: number; startTime: string; endTime: string }) => {
       apiClient
         .patch(`/faculty-loads/${load.id}`, {
-          facultyId: load.facultyId,
+          facultyId: load.facultyId ?? undefined,
+          facultyDisplayName: load.facultyDisplayName ?? undefined,
           subjectId: load.subjectId,
           studentClassId: load.studentClassId,
-          roomId: load.roomId,
+          roomId: load.roomId ?? undefined,
+          roomDisplayName: load.roomDisplayName ?? undefined,
           dayOfWeek: payload.dayOfWeek,
           startTime: payload.startTime,
           endTime: payload.endTime,
@@ -687,10 +806,12 @@ export function SchedulerPage() {
       }
       apiClient
         .patch(`/faculty-loads/${load.id}`, {
-          facultyId: load.facultyId,
+          facultyId: load.facultyId ?? undefined,
+          facultyDisplayName: load.facultyDisplayName ?? undefined,
           subjectId: load.subjectId,
           studentClassId: load.studentClassId,
-          roomId: load.roomId,
+          roomId: load.roomId ?? undefined,
+          roomDisplayName: load.roomDisplayName ?? undefined,
           dayOfWeek: load.dayOfWeek,
           startTime: payload.startTime,
           endTime: payload.endTime,
@@ -713,10 +834,12 @@ export function SchedulerPage() {
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
   let assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
     ? {
-        facultyId: editingLoad.facultyId,
+        facultyId: editingLoad.facultyId != null ? editingLoad.facultyId : "__others__",
+        facultyDisplayName: editingLoad.facultyDisplayName ?? "",
         subjectId: editingLoad.subjectId,
         studentClassId: editingLoad.studentClassId,
-        roomId: editingLoad.roomId,
+        roomId: editingLoad.roomId != null ? editingLoad.roomId : "__off_system__",
+        roomDisplayName: editingLoad.roomDisplayName ?? "",
         dayOfWeek: editingLoad.dayOfWeek,
         startTime: editingLoad.startTime,
         endTime: editingLoad.endTime,
@@ -967,6 +1090,37 @@ export function SchedulerPage() {
         <div className="flex flex-wrap items-end gap-2 w-full justify-center 2xl:w-auto 2xl:justify-end">
           {viewMode === "class" && academicYearId && studentClassId && (
             <>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-xs font-medium text-foreground-muted shrink-0">Rules:</span>
+                <Select.Root
+                  value={selectedRuleSetIdForRun}
+                  onValueChange={(v) => {
+                    if (v === "__manage__") {
+                      navigate("/scheduler/rules");
+                      // Keep the previous selection (do not change rule for this run)
+                      return;
+                    }
+                    setSelectedRuleSetIdForRun(v);
+                  }}
+                >
+                  <Select.Trigger aria-label="Rule set for this run" className="w-[140px] sm:w-[160px]">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="__assigned__">
+                      Use assigned ({resolvedRuleSetName})
+                    </Select.Item>
+                    {ruleSets.map((r) => (
+                      <Select.Item key={r.id} value={r.id}>
+                        {r.name}{r.isSystem ? " (system)" : ""}
+                      </Select.Item>
+                    ))}
+                    <Select.Item value="__manage__">
+                      Manage rule sets…
+                    </Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              </div>
               <Button
                 type="button"
                 variant="secondary"
@@ -1057,20 +1211,8 @@ export function SchedulerPage() {
         </div>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        onDragCancel={handleDragCancel}
-      >
-        {/* <1280px: single column — main panel, then curriculum, then assignment.
-            1280–1535px (xl): 2-column grid (3:9) with main spanning both columns on first row; side panes below.
-            >=1536px (2xl): 3-column layout (curriculum | main | assignment). */}
-        <div
-          className="flex-1 min-h-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(18rem,2fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface"
-        >
-          <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
+      <SchedulerLayout
+        renderCurriculum={() => (
             <div className="flex-1 min-h-0 overflow-auto">
               <CurriculumSubjectTree
                 {...({
@@ -1081,14 +1223,16 @@ export function SchedulerPage() {
                 } satisfies CurriculumSubjectTreeProps)}
               />
             </div>
-          </aside>
-
-          {/* Center: 2 rows — title row + schedule content row.
-              Base/xl: first row, full width (xl: spans both columns in 3:9 grid); 2xl: middle column. */}
-          <main
-            className="order-1 xl:order-none 2xl:order-none xl:col-span-1 2xl:col-span-1 min-h-0 overflow-hidden flex flex-col p-3 min-h-[50vh] 2xl:min-h-0 xl:[grid-column:2] xl:[grid-row:1] 2xl:[grid-column:2] 2xl:[grid-row:1]"
-            style={{ display: "grid", gridTemplateRows: "auto 1fr" }}
-          >
+          )}
+          renderMain={() => (
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              onDragCancel={handleDragCancel}
+            >
+            <>
             <div className="shrink-0 mb-2">
               {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground mb-2">Class schedule</h2>}
               {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground mb-2">Faculty schedule</h2>}
@@ -1106,13 +1250,18 @@ export function SchedulerPage() {
                 </div>
               ) : (
                 <div className="shrink-0 min-h-0 w-full overflow-auto relative" style={{ maxHeight: "42rem" }}>
-                  <div className="relative min-w-[600px] md:min-w-[800px] w-full">
+                  {/* minWidth matches ScheduleGrid so overlay (100%) stays aligned with day columns when horizontal scroll appears */}
+                  <div
+                    className="relative w-full min-w-0"
+                    style={{ minWidth: is2xl ? 520 : GRID_MIN_WIDTH_PX }}
+                  >
                     <ScheduleGrid
                       loads={loads}
                       wrapInScroll={false}
                       selectedLoadId={editingLoadId}
                       hourEnd={scheduleHourEnd}
                       draggableIdPrefix="main"
+                      minWidth={is2xl ? 520 : undefined}
                       onLoadClick={(load) => {
                         setEditingLoadId(load.id);
                         setPendingAssignment(null);
@@ -1268,9 +1417,67 @@ export function SchedulerPage() {
                 </div>
               )}
             </div>
-          </main>
 
-          <aside className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 p-3 min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
+            <DragOverlay dropAnimation={null}>
+              {activeDragItem ? (
+                <div
+                  className="flex items-center gap-1.5 rounded border border-primary bg-surface px-2 py-1 text-xs text-foreground shadow-md pointer-events-none max-w-[200px]"
+                  aria-hidden
+                >
+                  <span className="font-medium truncate shrink-0">{activeDragItem.code}</span>
+                  <span className="truncate text-foreground-muted min-w-0">{activeDragItem.name}</span>
+                  {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
+                </div>
+              ) : activeDragLoad ? (
+                (() => {
+                  let dropTimeLabel: string | null = null;
+                  let timeRangeLabel: string | null = null;
+                  if (overSlotId) {
+                    const slot = parseSlotId(overSlotId);
+                    if (slot) {
+                      const dropStartMins = timeToMinutes(slotStartTime(slot));
+                      const durationMins = Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime));
+                      const dropEndMins = dropStartMins + durationMins;
+                      const format12 = (mins: number) => {
+                        const h = Math.floor(mins / 60);
+                        const m = mins % 60;
+                        const hour12 = h % 12 || 12;
+                        const ampm = h < 12 ? "AM" : "PM";
+                        return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+                      };
+                      dropTimeLabel = `Drop at ${format12(dropStartMins)}`;
+                      timeRangeLabel = `${format12(dropStartMins)} – ${format12(dropEndMins)}`;
+                    }
+                  }
+                  return (
+                    <div className="pointer-events-none flex flex-col items-center gap-1">
+                      <LoadBlockPreview
+                        load={activeDragLoad}
+                        subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
+                        heightPx={Math.max(
+                          20,
+                          ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
+                            SLOT_HEIGHT -
+                            2
+                        )}
+                        dropTimeLabel={dropTimeLabel}
+                        timeRangeLabel={timeRangeLabel}
+                      />
+                      {dropTimeLabel && (
+                        <span className="text-[10px] font-medium text-primary bg-primary/15 px-2 py-0.5 rounded">
+                          {dropTimeLabel}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : null}
+            </DragOverlay>
+            </>
+            </DndContext>
+          )}
+          renderAssignment={() => (
+            <>
             <h2 className="text-sm font-semibold text-foreground mb-2 shrink-0">Assignment</h2>
             <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
               {!showAssignmentForm ? (
@@ -1296,7 +1503,7 @@ export function SchedulerPage() {
                       : undefined
                   }
                   facultyLoadsOverride={
-                    editingLoad?.facultyId
+                    editingLoad?.facultyId != null
                       ? loads.filter((l) => l.facultyId === editingLoad.facultyId)
                       : undefined
                   }
@@ -1314,6 +1521,7 @@ export function SchedulerPage() {
                   onRoomIdChange={(id) => {
                     setOverlayRoomId(id);
                   }}
+                  roomAvailabilityMap={roomAvailabilityMap}
                   onSaved={() => {
                     refreshLoads();
                     refreshRoomLoads();
@@ -1325,17 +1533,16 @@ export function SchedulerPage() {
                 <Spinner />
               )}
             </div>
-          </aside>
-
-          {/* Faculty + room availability row: full width, split into two cards on wide screens */}
-          {academicYearId && (
-            <section className="order-4 xl:order-none 2xl:order-none border-t border-border p-3 min-h-0 overflow-hidden xl:[grid-column:1/3] xl:[grid-row:3] 2xl:[grid-column:1/4] 2xl:[grid-row:2]">
-              <div className="grid gap-3 md:grid-cols-1 xl:grid-cols-2">
+            </>
+          )}
+          renderFooter={() => (academicYearId ? (
+            <section className="order-4 xl:order-none 2xl:order-none border-t border-border p-3 min-h-0 min-w-0 overflow-hidden xl:[grid-column:1/3] xl:[grid-row:3] 2xl:[grid-column:1/4] 2xl:[grid-row:2]">
+              <div className="grid gap-3 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 {/* Room availability (left) */}
-                <div className="flex flex-col min-h-0 rounded border border-border bg-surface p-3">
+                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-0">
                   <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Room availability</h3>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
-                    <div className="min-w-[200px]">
+                    <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Room</label>
                       <Select.Root
                         value={selectedRoomId || "__none__"}
@@ -1360,6 +1567,40 @@ export function SchedulerPage() {
                         {rooms.find((r) => r.id === selectedRoomId)?.name} · same year &amp; semester as above
                       </span>
                     )}
+                    {selectedRoomId && user?.role === "CHAIRMAN" && (() => {
+                      const room = rooms.find((r) => r.id === selectedRoomId);
+                      const isClosed = room?.controlDepartmentId && (roomAvailabilityMap[selectedRoomId] !== true);
+                      const canOpen = room?.controlDepartmentId && user.departmentId === room.controlDepartmentId;
+                      if (!canOpen || !isClosed) return null;
+                      return (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={openingRoom || !academicYearId}
+                          onClick={async () => {
+                            if (!academicYearId) return;
+                            setOpeningRoom(true);
+                            try {
+                              await apiClient.patch(`/rooms/${selectedRoomId}/availability`, {
+                                academicYearId,
+                                semester,
+                                isOpen: true,
+                              });
+                              setRoomAvailabilityMap((prev) => ({ ...prev, [selectedRoomId]: true }));
+                              const params = new URLSearchParams({ academicYearId, semester: String(semester) });
+                              const { data } = await apiClient.get<Record<string, boolean>>(`/rooms/availability-map?${params}`);
+                              setRoomAvailabilityMap(data ?? {});
+                            } catch (err) {
+                              toast.error(getApiErrorMessage(err, "Failed to open room"));
+                            } finally {
+                              setOpeningRoom(false);
+                            }
+                          }}
+                        >
+                          {openingRoom ? "…" : "Open room for other departments"}
+                        </Button>
+                      );
+                    })()}
                   </div>
                   {selectedRoomId ? (
                     <div className="flex-1 min-h-0 w-full rounded border border-border bg-surface-muted/40 overflow-auto">
@@ -1374,6 +1615,7 @@ export function SchedulerPage() {
                           wrapInScroll={false}
                           hourEnd={scheduleHourEnd}
                           draggableIdPrefix="room"
+                          fitWidth
                         />
                       )}
                     </div>
@@ -1385,10 +1627,10 @@ export function SchedulerPage() {
                 </div>
 
                 {/* Faculty schedule preview (right) */}
-                <div className="flex flex-col min-h-0 rounded border border-border bg-surface p-3">
-                  <h3 className="text-sm font-semibold text-foreground mb-2">Faculty schedule</h3>
+                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-0">
+                  <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Faculty schedule</h3>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
-                    <div className="min-w-[200px]">
+                    <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Faculty</label>
                       <Select.Root
                         value={overlayFacultyId || "__none__"}
@@ -1421,6 +1663,7 @@ export function SchedulerPage() {
                           wrapInScroll={false}
                           hourEnd={scheduleHourEnd}
                           draggableIdPrefix="faculty-preview"
+                          fitWidth
                         />
                       ) : (
                         <p className="px-3 py-2 text-xs text-foreground-muted">
@@ -1436,66 +1679,8 @@ export function SchedulerPage() {
                 </div>
               </div>
             </section>
-          )}
-        </div>
-
-        {/* Custom drag preview: subject card (from curriculum) or load block (moving assignment) */}
-        <DragOverlay dropAnimation={null}>
-          {activeDragItem ? (
-            <div
-              className="flex items-center gap-1.5 rounded border border-primary bg-surface px-2 py-1 text-xs text-foreground shadow-md pointer-events-none max-w-[200px]"
-              aria-hidden
-            >
-              <span className="font-medium truncate shrink-0">{activeDragItem.code}</span>
-              <span className="truncate text-foreground-muted min-w-0">{activeDragItem.name}</span>
-              {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
-            </div>
-          ) : activeDragLoad ? (
-            (() => {
-              let dropTimeLabel: string | null = null;
-              let timeRangeLabel: string | null = null;
-              if (overSlotId) {
-                const slot = parseSlotId(overSlotId);
-                if (slot) {
-                  const dropStartMins = timeToMinutes(slotStartTime(slot));
-                  const durationMins = Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime));
-                  const dropEndMins = dropStartMins + durationMins;
-                  const format12 = (mins: number) => {
-                    const h = Math.floor(mins / 60);
-                    const m = mins % 60;
-                    const hour12 = h % 12 || 12;
-                    const ampm = h < 12 ? "AM" : "PM";
-                    return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
-                  };
-                  dropTimeLabel = `Drop at ${format12(dropStartMins)}`;
-                  timeRangeLabel = `${format12(dropStartMins)} – ${format12(dropEndMins)}`;
-                }
-              }
-              return (
-                <div className="pointer-events-none flex flex-col items-center gap-1">
-                  <LoadBlockPreview
-                    load={activeDragLoad}
-                    subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
-                    heightPx={Math.max(
-                      20,
-                      ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
-                        SLOT_HEIGHT -
-                        2
-                    )}
-                    dropTimeLabel={dropTimeLabel}
-                    timeRangeLabel={timeRangeLabel}
-                  />
-                  {dropTimeLabel && (
-                    <span className="text-[10px] font-medium text-primary bg-primary/15 px-2 py-0.5 rounded">
-                      {dropTimeLabel}
-                    </span>
-                  )}
-                </div>
-              );
-            })()
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+          ) : null)}
+        />
 
       {addModalOpen && academicYearId && (
         <AddFacultyLoadModal

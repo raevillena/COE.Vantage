@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { Department } from "../../types/api";
+import type { Department, UserListItem } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
@@ -18,6 +18,10 @@ export function DepartmentsPage() {
   const [form, setForm] = useState({ name: "" });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [viewFacultiesDept, setViewFacultiesDept] = useState<{ id: string; name: string } | null>(null);
+  const [viewFacultiesList, setViewFacultiesList] = useState<UserListItem[]>([]);
+  const [viewFacultiesLoading, setViewFacultiesLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -88,12 +92,47 @@ export function DepartmentsPage() {
     }
   };
 
+  const openViewFaculties = async (d: Department) => {
+    setViewFacultiesDept({ id: d.id, name: d.name });
+    setViewFacultiesList([]);
+    setViewFacultiesLoading(true);
+    try {
+      const { data } = await apiClient.get<UserListItem[]>("/users", { params: { departmentId: d.id } });
+      setViewFacultiesList(data);
+    } catch {
+      toast.error("Failed to load faculties");
+      setViewFacultiesDept(null);
+    } finally {
+      setViewFacultiesLoading(false);
+    }
+  };
+
+  const searchLower = searchQuery.trim().toLowerCase();
+  const filteredList = searchLower
+    ? list.filter((d) => d.name.toLowerCase().includes(searchLower))
+    : list;
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-foreground">Departments</h1>
         {canManage && <Button type="button" onClick={openCreate}>Add Department</Button>}
       </div>
+      {list.length > 0 && (
+        <div className="mb-4 relative max-w-md">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+            aria-label="Search departments"
+          />
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
@@ -103,20 +142,26 @@ export function DepartmentsPage() {
           <p className="text-foreground-muted mb-4">No departments yet. Add one to assign to curriculum, rooms, and users.</p>
           {canManage && <Button type="button" onClick={openCreate}>Add Department</Button>}
         </div>
+      ) : filteredList.length === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="text-foreground-muted mb-4">No departments match &quot;{searchQuery.trim()}&quot;.</p>
+          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search
+          </button>
+        </div>
       ) : (
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
-                {canManage && <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>}
+                <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {list.map((d) => (
+              {filteredList.map((d) => (
                 <tr key={d.id}>
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
-                  {canManage && (
                   <td className="px-4 py-2 text-right">
                     <DropdownMenu.Root>
                       <DropdownMenu.Trigger asChild>
@@ -125,12 +170,16 @@ export function DepartmentsPage() {
                         </button>
                       </DropdownMenu.Trigger>
                       <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item onSelect={() => openEdit(d)}>Edit</DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => handleDeleteClick(d.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
+                        <DropdownMenu.Item onSelect={() => openViewFaculties(d)}>View faculties</DropdownMenu.Item>
+                        {canManage && (
+                          <>
+                            <DropdownMenu.Item onSelect={() => openEdit(d)}>Edit</DropdownMenu.Item>
+                            <DropdownMenu.Item onSelect={() => handleDeleteClick(d.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
+                          </>
+                        )}
                       </DropdownMenu.Content>
                     </DropdownMenu.Root>
                   </td>
-                  )}
                 </tr>
               ))}
             </tbody>
@@ -160,6 +209,45 @@ export function DepartmentsPage() {
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
               {deleteLoading ? "…" : "Move to trash"}
             </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={viewFacultiesDept !== null} onOpenChange={(open) => !open && setViewFacultiesDept(null)}>
+        <Dialog.Content className="!max-w-2xl" title={`Faculties — ${viewFacultiesDept?.name ?? ""}`} description="Users assigned to this department.">
+          <div className="mt-4">
+            {viewFacultiesLoading ? (
+              <div className="flex justify-center py-8" aria-busy="true">
+                <Spinner />
+              </div>
+            ) : viewFacultiesList.length === 0 ? (
+              <p className="py-6 text-center text-foreground-muted">No faculties in this department.</p>
+            ) : (
+              <div className="rounded border border-border overflow-hidden">
+                <table className="min-w-full divide-y divide-border text-sm">
+                  <thead className="bg-surface-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Name</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Email</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Role</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Status</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Max units</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {viewFacultiesList.map((u) => (
+                      <tr key={u.id}>
+                        <td className="px-3 py-2 text-foreground">{u.name}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{u.email}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{u.role}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{u.status ?? "—"}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{(u.role === "FACULTY" || u.role === "CHAIRMAN") && u.maxUnits != null ? u.maxUnits : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Root>

@@ -10,6 +10,13 @@ const HOUR_END = 21;
 const SLOT_HEIGHT = 44;
 /** Header row height; must match scheduleGridConstants.GRID_HEADER_HEIGHT so ScheduleSlotOverlay aligns. */
 const HEADER_ROW_HEIGHT = 48;
+/** Minimum width per day column so block text (subject, faculty, time) is readable without heavy truncation. */
+const DAY_COLUMN_MIN_PX = 180;
+const TIME_COLUMN_WIDTH = "4.5rem";
+/** Grid min width: time column + 6 day columns at minimum. */
+const GRID_MIN_WIDTH_PX = 72 + 6 * DAY_COLUMN_MIN_PX; // 4.5rem ≈ 72px
+/** Smallest allowed day column when using a custom minWidth (e.g. in resizable panel). */
+const DAY_COLUMN_MIN_FLOOR_PX = 72;
 
 /** Format hour (0–23) as 12-hour time e.g. "8:00 AM", "12:00 PM" */
 function formatHour12(hour24: number): string {
@@ -186,8 +193,10 @@ function ScheduleBlock({
   const height = Math.max(20, durationPxVal - 2);
   const isResizing = resizePreviewEndMinutes !== null;
   const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
-  const facultyShort = formatFacultyShortName(load.faculty?.name);
-  const titleParts = [load.subject?.code ?? "—", load.room?.name ?? "", facultyShort, timeTooltip].filter(Boolean);
+  const facultyName = load.faculty?.name ?? load.facultyDisplayName ?? "";
+  const facultyShort = formatFacultyShortName(facultyName);
+  const roomName = load.room?.name ?? load.roomDisplayName ?? "";
+  const titleParts = [load.subject?.code ?? "—", roomName, facultyShort, timeTooltip].filter(Boolean);
 
   return (
     <div
@@ -202,7 +211,7 @@ function ScheduleBlock({
       style={{ top, height }}
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
-        {[load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ")}
+        {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
       </div>
       <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
@@ -249,8 +258,8 @@ export function LoadBlockPreview({
   className?: string;
 }) {
   const { palette } = useSchedulePalette();
-  const facultyShort = formatFacultyShortName(load.faculty?.name);
-  const line1 = [load.subject?.code ?? "—", load.room?.name].filter(Boolean).join(" · ");
+  const facultyShort = formatFacultyShortName(load.faculty?.name ?? load.facultyDisplayName ?? undefined);
+  const line1 = [load.subject?.code ?? "—", load.room?.name ?? load.roomDisplayName].filter(Boolean).join(" · ");
   const timeRange = timeRangeLabel ?? `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
   return (
     <div
@@ -305,6 +314,10 @@ interface ScheduleGridProps {
   hourEnd?: number;
   /** Unique prefix for draggable ids so multiple grids in one page don't conflict (e.g. "main", "room"). */
   draggableIdPrefix?: string;
+  /** When set (e.g. in resizable panel layout), grid can shrink to this width so the main panel resizes; day columns scale down. */
+  minWidth?: number;
+  /** When true, grid fits container width (no minWidth) so it doesn't cause horizontal scroll; use in footer panes. */
+  fitWidth?: boolean;
 }
 
 export function ScheduleGrid({
@@ -320,6 +333,8 @@ export function ScheduleGrid({
   hourStart: hourStartProp,
   hourEnd: hourEndProp,
   draggableIdPrefix,
+  minWidth: minWidthProp,
+  fitWidth = false,
 }: ScheduleGridProps) {
   const subjectIds = [...new Set(loads.map((l) => l.subjectId))];
   const hourStart = hourStartProp ?? HOUR_START;
@@ -328,8 +343,21 @@ export function ScheduleGrid({
 
   const timeToPx = (time: string) => (timeToMinutes(time) - hourStart * 60) * (SLOT_HEIGHT / 60);
 
+  const effectiveMinWidth = fitWidth ? undefined : (minWidthProp ?? GRID_MIN_WIDTH_PX);
+  const dayColumnMinPx =
+    fitWidth ? 0 : (minWidthProp != null
+      ? Math.max(DAY_COLUMN_MIN_FLOOR_PX, Math.floor((minWidthProp - 72) / 6))
+      : DAY_COLUMN_MIN_PX);
+
   const gridEl = (
-    <div className="relative grid min-w-[800px] rounded border border-border bg-surface" style={{ gridTemplateColumns: "4.5rem repeat(6, 1fr)", gridTemplateRows: `${HEADER_ROW_HEIGHT}px ${gridHeight}px` }}>
+    <div
+      className={`relative grid rounded border border-border bg-surface ${fitWidth ? "min-w-0 w-full" : ""}`}
+      style={{
+        gridTemplateColumns: `${TIME_COLUMN_WIDTH} repeat(6, minmax(${dayColumnMinPx}px, 1fr))`,
+        gridTemplateRows: `${HEADER_ROW_HEIGHT}px ${gridHeight}px`,
+        ...(effectiveMinWidth != null ? { minWidth: effectiveMinWidth } : {}),
+      }}
+    >
         {/* Header row: time label + weekday headers (fixed height so ScheduleSlotOverlay aligns) */}
         <div className="border-b border-border bg-surface-muted p-2 font-medium text-foreground-muted flex items-center" style={{ height: HEADER_ROW_HEIGHT, minHeight: 0 }} />
         {DAYS.map((d) => (

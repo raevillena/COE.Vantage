@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coe-vantage-prisma-migrate
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: raevillena21/coe-vantage-backend:v0.0.1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: coe-vantage-backend-config
+            - secretRef:
+                name: coe-vantage-backend-secrets
+          # In production, prefer prisma migrate deploy over migrate dev
+          command: ["npx"]
+          args: ["prisma", "migrate", "deploy"]
+

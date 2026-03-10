@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coe-vantage-backend-config
+data:
+  NODE_ENV: "production"
+  PORT: "4000"
+  ACCESS_TOKEN_EXPIRY: "15m"
+  REFRESH_TOKEN_EXPIRY: "7d"
+  FRONTEND_ORIGIN: "https://vantage.test.nbericmmsu.com"
+  # RESET_PASSWORD_BASE_URL: "https://vantage.test.nbericmmsu.com"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: coe-vantage-backend-secrets
+type: Opaque
+stringData:
+  # Fill these in using kubectl or your secret manager; values here are placeholders.
+  DATABASE_URL: "postgresql://user:password@db-host:5432/coe_vantage"
+  REDIS_URL: "redis://redis-host:6379"
+  JWT_ACCESS_SECRET: "replace-with-real-access-secret"
+  JWT_REFRESH_SECRET: "replace-with-real-refresh-secret"
+  # SMTP_HOST: ""
+  # SMTP_PORT: "587"
+  # SMTP_SECURE: "false"
+  # SMTP_USER: ""
+  # SMTP_PASS: ""
+  # SMTP_FROM: "COE.Vantage <noreply@example.com>"
+  # OPENAI_API_KEY: ""

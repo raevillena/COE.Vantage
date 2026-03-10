@@ -128,11 +128,20 @@ export async function getCollegeFacultyLoadsForReport(
   return { academicYearName, loads };
 }
 
-function drawGrid(
-  doc: PDFDoc,
-  loads: Array<{ dayOfWeek: number; startTime: string; endTime: string; subject: { code: string }; room?: { name: string }; faculty?: { name: string }; studentClass?: { name: string } }>,
-  opts: { title: string; subTitle?: string }
-) {
+/** Load shape for grid: room/faculty can be null when off-system. */
+type GridLoad = {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  subject: { code: string };
+  room?: { name: string } | null;
+  roomDisplayName?: string | null;
+  faculty?: { name: string } | null;
+  facultyDisplayName?: string | null;
+  studentClass?: { name: string };
+};
+
+function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: { title: string; subTitle?: string }) {
   const margin = 50;
   const colWidth = (doc.page.width - margin * 2 - 80) / 6;
   const gridLeft = margin + 80;
@@ -170,7 +179,8 @@ export function buildFacultyPdf(
     startTime: string;
     endTime: string;
     subject: { code: string; name: string; units: number };
-    room: { name: string };
+    room?: { name: string } | null;
+    roomDisplayName?: string | null;
     studentClass: { name: string };
     academicYear: { name: string };
   }>,
@@ -192,8 +202,10 @@ export function buildStudentClassPdf(
     startTime: string;
     endTime: string;
     subject: { code: string; name: string; units: number };
-    room: { name: string };
-    faculty: { name: string };
+    room?: { name: string } | null;
+    roomDisplayName?: string | null;
+    faculty?: { name: string } | null;
+    facultyDisplayName?: string | null;
     academicYear: { name: string };
   }>,
   academicYearName: string,
@@ -214,7 +226,8 @@ export function buildRoomPdf(
     startTime: string;
     endTime: string;
     subject: { code: string };
-    faculty: { name: string };
+    faculty?: { name: string } | null;
+    facultyDisplayName?: string | null;
     studentClass: { name: string };
     academicYear: { name: string };
   }>,
@@ -232,10 +245,12 @@ export async function buildCollegeWorkloadWorkbook(
     dayOfWeek: number;
     startTime: string;
     endTime: string;
-    faculty: { id: string; name: string; email: string | null; departmentId: string | null };
+    faculty?: { id: string; name: string; email: string | null; departmentId: string | null } | null;
+    facultyDisplayName?: string | null;
     subject: { code: string; name: string; units: number; isLab: boolean };
     studentClass: { name: string | null; yearLevel: number | null } | null;
-    room: { name: string | null; isLab: boolean | null } | null;
+    room?: { name: string | null; isLab: boolean | null } | null;
+    roomDisplayName?: string | null;
     academicYear: { name: string | null } | null;
   }>,
   academicYearName: string,
@@ -271,7 +286,7 @@ export async function buildCollegeWorkloadWorkbook(
     const timeLabel = `${load.startTime} – ${load.endTime}`;
 
     sheet.addRow({
-      faculty: load.faculty?.name ?? "",
+      faculty: load.faculty?.name ?? load.facultyDisplayName ?? "",
       email: load.faculty?.email ?? "",
       subjectCode: load.subject?.code ?? "",
       subjectName: load.subject?.name ?? "",
@@ -280,7 +295,7 @@ export async function buildCollegeWorkloadWorkbook(
       yearLevel: load.studentClass?.yearLevel ?? "",
       day: dayLabel,
       time: timeLabel,
-      room: load.room?.name ?? "",
+      room: load.room?.name ?? load.roomDisplayName ?? "",
       lab: load.subject?.isLab ? "Yes" : "",
     });
   }
@@ -299,11 +314,11 @@ export async function buildCollegeWorkloadWorkbook(
   >();
 
   for (const load of loads) {
-    const fid = load.faculty?.id;
+    const fid = load.faculty?.id ?? (load.facultyDisplayName ? `display:${load.facultyDisplayName}` : null);
     if (!fid || !load.subject?.code) continue;
     if (!byFaculty.has(fid)) {
       byFaculty.set(fid, {
-        name: load.faculty.name,
+        name: load.faculty?.name ?? load.facultyDisplayName ?? "—",
         subjectUnits: new Map<string, number>(),
       });
     }
@@ -351,12 +366,12 @@ export async function buildCollegeWorkloadWorkbook(
   >();
 
   for (const load of loads) {
-    const fid = load.faculty?.id;
+    const fid = load.faculty?.id ?? (load.facultyDisplayName ? `display:${load.facultyDisplayName}` : null);
     if (!fid) continue;
     if (!loadsByFaculty.has(fid)) {
       loadsByFaculty.set(fid, {
-        name: load.faculty.name,
-        email: load.faculty.email,
+        name: load.faculty?.name ?? load.facultyDisplayName ?? "—",
+        email: load.faculty?.email ?? null,
         rows: [],
       });
     }
@@ -415,7 +430,7 @@ export async function buildCollegeWorkloadWorkbook(
       for (const load of entry.rows) {
         if (!load.subject?.code) continue;
         const className = load.studentClass?.name ?? "";
-        const roomName = load.room?.name ?? "";
+        const roomName = load.room?.name ?? load.roomDisplayName ?? "";
         const key = [
           load.subject.code,
           className,
@@ -462,7 +477,7 @@ export async function buildCollegeWorkloadWorkbook(
           subjectUnits,
           timeLabel,
           pattern,
-          load.room?.name ?? "",
+          load.room?.name ?? load.roomDisplayName ?? "",
           entry.name,
         ];
         rowIndex += 1;

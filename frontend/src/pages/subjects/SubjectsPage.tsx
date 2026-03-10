@@ -7,6 +7,11 @@ import { Button } from "../../components/ui/button";
 import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import {
+  PrioritizedFacultyModal,
+  type FacultyWithDepartment,
+  type PrioritizedFacultyItem,
+} from "./PrioritizedFacultyModal";
 
 export function SubjectsPage() {
   const [list, setList] = useState<Subject[]>([]);
@@ -27,10 +32,11 @@ export function SubjectsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [prioritySubject, setPrioritySubject] = useState<Subject | null>(null);
-  const [priorityList, setPriorityList] = useState<{ facultyId: string; name: string; email: string; priority: number }[]>([]);
-  const [allFaculty, setAllFaculty] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [priorityList, setPriorityList] = useState<PrioritizedFacultyItem[]>([]);
+  const [allFaculty, setAllFaculty] = useState<FacultyWithDepartment[]>([]);
   const [priorityLoading, setPriorityLoading] = useState(false);
   const [prioritySaving, setPrioritySaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -130,13 +136,15 @@ export function SubjectsPage() {
   const openPriorityModal = async (s: Subject) => {
     setPrioritySubject(s);
     setPriorityList([]);
+    setAllFaculty([]);
     setPriorityLoading(true);
     try {
       const [priRes, facRes] = await Promise.all([
         apiClient.get<{ facultyId: string; name: string; email: string; priority: number }[]>(`/subjects/${s.id}/prioritized-faculty`),
-        apiClient.get<{ id: string; name: string; email: string }[]>("/users?role=FACULTY"),
+        apiClient.get<FacultyWithDepartment[]>("/users?role=FACULTY"),
       ]);
-      setPriorityList(priRes.data ?? []);
+      const pri = (priRes.data ?? []).map((p, i) => ({ ...p, priority: i }));
+      setPriorityList(pri);
       setAllFaculty(facRes.data ?? []);
     } catch {
       toast.error("Failed to load");
@@ -146,33 +154,11 @@ export function SubjectsPage() {
     }
   };
 
-  const addToPriority = (facultyId: string) => {
-    const f = allFaculty.find((x) => x.id === facultyId);
-    if (!f || priorityList.some((p) => p.facultyId === facultyId)) return;
-    setPriorityList((prev) => [...prev, { facultyId: f.id, name: f.name, email: f.email, priority: prev.length }]);
-  };
-
-  const removeFromPriority = (facultyId: string) => {
-    setPriorityList((prev) => prev.filter((p) => p.facultyId !== facultyId).map((p, i) => ({ ...p, priority: i })));
-  };
-
-  const movePriority = (index: number, direction: "up" | "down") => {
-    setPriorityList((prev) => {
-      const next = [...prev];
-      const j = direction === "up" ? index - 1 : index + 1;
-      if (j < 0 || j >= next.length) return prev;
-      [next[index], next[j]] = [next[j], next[index]];
-      return next.map((p, i) => ({ ...p, priority: i }));
-    });
-  };
-
-  const savePriority = async () => {
+  const savePriority = async (facultyIds: string[]) => {
     if (!prioritySubject) return;
     setPrioritySaving(true);
     try {
-      await apiClient.put(`/subjects/${prioritySubject.id}/prioritized-faculty`, {
-        facultyIds: priorityList.map((p) => p.facultyId),
-      });
+      await apiClient.put(`/subjects/${prioritySubject.id}/prioritized-faculty`, { facultyIds });
       toast.success("Prioritized faculty updated");
       setPrioritySubject(null);
     } catch (err: unknown) {
@@ -183,12 +169,38 @@ export function SubjectsPage() {
     }
   };
 
+  const searchLower = searchQuery.trim().toLowerCase();
+  const filteredList = searchLower
+    ? list.filter(
+        (s) =>
+          s.code.toLowerCase().includes(searchLower) ||
+          s.name.toLowerCase().includes(searchLower) ||
+          (s.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
+          (s.department?.name ?? "").toLowerCase().includes(searchLower)
+      )
+    : list;
+
   return (
     <div>
-      <div className="mb-4 flex justify-between items-center">
+      <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Subjects</h1>
         <Button type="button" onClick={openCreate}>Add Subject</Button>
       </div>
+      {list.length > 0 && (
+        <div className="mb-4 relative max-w-md">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Search by code, name, curriculum, or department…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+            aria-label="Search subjects"
+          />
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
@@ -197,6 +209,13 @@ export function SubjectsPage() {
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No subjects yet. Add one to get started.</p>
           <Button type="button" onClick={openCreate}>Add Subject</Button>
+        </div>
+      ) : filteredList.length === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="text-foreground-muted mb-4">No subjects match &quot;{searchQuery.trim()}&quot;.</p>
+          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search
+          </button>
         </div>
       ) : (
         <div className="rounded border border-border bg-surface overflow-hidden">
@@ -212,7 +231,7 @@ export function SubjectsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {list.map((s) => (
+              {filteredList.map((s) => (
                 <tr key={s.id}>
                   <td className="px-4 py-2 text-foreground">{s.code}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.name}</td>
@@ -306,64 +325,16 @@ export function SubjectsPage() {
         </Dialog.Content>
       </Dialog.Root>
 
-      <Dialog.Root open={prioritySubject !== null} onOpenChange={(open) => !open && setPrioritySubject(null)}>
-        <Dialog.Content
-          title={prioritySubject ? `Prioritized faculty — ${prioritySubject.code}` : "Prioritized faculty"}
-          description="Auto-assign will only assign this subject to faculty in the list below. Order = priority (first = preferred)."
-          className="max-w-lg"
-        >
-          {priorityLoading ? (
-            <div className="flex justify-center py-8" aria-busy="true">
-              <Spinner />
-            </div>
-          ) : (
-            <div className="space-y-4 mt-2">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Prioritized faculty (order = priority)</label>
-                <div className="rounded border border-border bg-surface-muted/50 max-h-40 overflow-y-auto space-y-1 p-2">
-                  {priorityList.length === 0 ? (
-                    <p className="text-sm text-foreground-muted">None. Add faculty below.</p>
-                  ) : (
-                    priorityList.map((p, i) => (
-                      <div key={p.facultyId} className="flex items-center justify-between gap-2 rounded border border-border bg-surface px-2 py-1.5 text-sm">
-                        <span className="font-medium">{i + 1}. {p.name}</span>
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => movePriority(i, "up")} disabled={i === 0} className="rounded p-1 text-foreground-muted hover:bg-surface-hover disabled:opacity-50" aria-label="Move up">↑</button>
-                          <button type="button" onClick={() => movePriority(i, "down")} disabled={i === priorityList.length - 1} className="rounded p-1 text-foreground-muted hover:bg-surface-hover disabled:opacity-50" aria-label="Move down">↓</button>
-                          <button type="button" onClick={() => removeFromPriority(p.facultyId)} className="rounded p-1 text-danger hover:bg-danger-muted" aria-label="Remove">×</button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Add faculty</label>
-                <select
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm bg-surface"
-                  value=""
-                  onChange={(e) => { const v = e.target.value; if (v) addToPriority(v); e.target.value = ""; }}
-                >
-                  <option value="">Select to add…</option>
-                  {allFaculty
-                    .filter((f) => !priorityList.some((p) => p.facultyId === f.id))
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>{f.name} ({f.email})</option>
-                    ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Dialog.Close asChild>
-                  <Button type="button" variant="secondary">Cancel</Button>
-                </Dialog.Close>
-                <Button type="button" onClick={savePriority} disabled={prioritySaving}>
-                  {prioritySaving ? "Saving…" : "Save"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </Dialog.Content>
-      </Dialog.Root>
+      <PrioritizedFacultyModal
+        subject={prioritySubject}
+        open={prioritySubject !== null}
+        onOpenChange={(open) => !open && setPrioritySubject(null)}
+        initialPriorityList={priorityList}
+        allFaculty={allFaculty}
+        onSave={savePriority}
+        saving={prioritySaving}
+        loading={priorityLoading}
+      />
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <Dialog.Content title="Move subject to trash" description="This subject will be moved to Trash. An admin can restore it or permanently delete it from the Trash page.">

@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
+import { prisma } from "../../prisma/client.js";
 import * as facultyLoadService from "./facultyLoadService.js";
+import * as assignmentRequestService from "../assignmentRequests/assignmentRequestService.js";
 import type {
   CreateFacultyLoadBody,
   UpdateFacultyLoadBody,
@@ -29,13 +31,47 @@ export async function preview(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateFacultyLoadBody;
-  const load = await facultyLoadService.createFacultyLoad(body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const effectiveFacultyId = body.facultyId?.trim() || null;
+  if (req.user?.role === "CHAIRMAN" && effectiveFacultyId) {
+    const [subject, studentClass, faculty] = await Promise.all([
+      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { departmentId: true } }),
+      prisma.studentClass.findUnique({
+        where: { id: body.studentClassId },
+        include: { curriculum: { select: { departmentId: true } } },
+      }),
+      prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { departmentId: true, role: true } }),
+    ]);
+    const subjectDeptId = subject?.departmentId ?? studentClass?.curriculum?.departmentId ?? null;
+    const facultyDeptId = faculty?.departmentId ?? null;
+    if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId && faculty?.role === "FACULTY") {
+      const request = await assignmentRequestService.createAssignmentRequest(
+        {
+          facultyId: effectiveFacultyId,
+          subjectId: body.subjectId,
+          studentClassId: body.studentClassId,
+          roomId: body.roomId ?? null,
+          roomDisplayName: body.roomDisplayName ?? null,
+          dayOfWeek: body.dayOfWeek,
+          startTime: body.startTime,
+          endTime: body.endTime,
+          semester: body.semester,
+          academicYearId: body.academicYearId,
+        },
+        req.user.id
+      );
+      res.status(201).json({ requestCreated: true, request });
+      return;
+    }
+  }
+  const load = await facultyLoadService.createFacultyLoad(body, caller);
   res.status(201).json(load);
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateFacultyLoadBody;
-  const load = await facultyLoadService.updateFacultyLoad(req.params.id, body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const load = await facultyLoadService.updateFacultyLoad(req.params.id, body, caller);
   res.json(load);
 }
 
@@ -46,7 +82,12 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
 export async function autoAssign(req: Request, res: Response): Promise<void> {
   const body = req.body as AutoAssignFacultyLoadBody;
-  const summary = await facultyLoadService.autoAssignForClass(body.academicYearId, body.semester, body.studentClassId);
+  const summary = await facultyLoadService.autoAssignForClass(
+    body.academicYearId,
+    body.semester,
+    body.studentClassId,
+    body.ruleSetId
+  );
   res.json(summary);
 }
 

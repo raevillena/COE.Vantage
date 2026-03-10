@@ -5,6 +5,7 @@ import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 
 interface AddFacultyLoadModalProps {
@@ -16,9 +17,11 @@ interface AddFacultyLoadModalProps {
 
 export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved }: AddFacultyLoadModalProps) {
   const [facultyId, setFacultyId] = useState("");
+  const [facultyDisplayName, setFacultyDisplayName] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [studentClassId, setStudentClassId] = useState("");
   const [roomId, setRoomId] = useState("");
+  const [roomDisplayName, setRoomDisplayName] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("09:00");
@@ -29,6 +32,9 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [rooms, setRooms] = useState<{ id: string; name: string; isLab: boolean }[]>([]);
 
+  const isOthersFaculty = facultyId === "__others__";
+  const isOffSystemRoom = roomId === "__off_system__";
+
   useEffect(() => {
     apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
     apiClient.get("/subjects").then(({ data }) => setSubjects(data));
@@ -37,18 +43,22 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
   }, []);
 
   const runPreview = async () => {
-    if (!facultyId || !subjectId || !studentClassId || !roomId) {
-      toast.error("Fill all fields");
+    const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
+    const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom;
+    if (!hasFaculty || !subjectId || !studentClassId || !hasRoom) {
+      toast.error("Fill all required fields");
       return;
     }
     setLoading(true);
     setPreview(null);
     try {
       const { data } = await apiClient.post<ConflictPreview>("/faculty-loads/preview", {
-        facultyId,
+        facultyId: isOthersFaculty ? null : (facultyId || null),
+        facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
         subjectId,
         studentClassId,
-        roomId,
+        roomId: isOffSystemRoom ? null : (roomId || null),
+        roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
         dayOfWeek,
         startTime,
         endTime,
@@ -74,20 +84,32 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
       toast.error(`${getConflictSummary(preview)}. Fix before saving.`);
       return;
     }
+    const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
+    const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom;
+    if (!hasFaculty || !subjectId || !studentClassId || !hasRoom) {
+      toast.error("Fill all required fields");
+      return;
+    }
     setLoading(true);
     try {
-      await apiClient.post("/faculty-loads", {
-        facultyId,
+      const { data } = await apiClient.post<{ requestCreated?: boolean }>("/faculty-loads", {
+        facultyId: isOthersFaculty ? null : (facultyId || null),
+        facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
         subjectId,
         studentClassId,
-        roomId,
+        roomId: isOffSystemRoom ? null : (roomId || null),
+        roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
         dayOfWeek,
         startTime,
         endTime,
         semester,
         academicYearId,
       });
-      toast.success("Load added");
+      if (data?.requestCreated) {
+        toast.success("Request sent to the faculty's department chairman for approval.");
+      } else {
+        toast.success("Load added");
+      }
       onSaved();
       onClose();
     } catch (err: unknown) {
@@ -109,9 +131,19 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
               </Select.Trigger>
               <Select.Content>
                 <Select.Item value="__none__">Select faculty</Select.Item>
+                <Select.Item value="__others__">Others (off-system)</Select.Item>
                 {faculties.map((f) => <Select.Item key={f.id} value={f.id}>{f.name}</Select.Item>)}
               </Select.Content>
             </Select.Root>
+            {isOthersFaculty && (
+              <Input
+                className="mt-1"
+                placeholder="Type faculty name"
+                value={facultyDisplayName}
+                onChange={(e) => setFacultyDisplayName(e.target.value)}
+                aria-label="Faculty display name"
+              />
+            )}
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Subject</label>
@@ -145,9 +177,19 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
               </Select.Trigger>
               <Select.Content>
                 <Select.Item value="__none__">Select room</Select.Item>
+                <Select.Item value="__off_system__">Off-system / Other</Select.Item>
                 {rooms.map((r) => <Select.Item key={r.id} value={r.id}>{r.name} {r.isLab ? " (Lab)" : ""}</Select.Item>)}
               </Select.Content>
             </Select.Root>
+            {isOffSystemRoom && (
+              <Input
+                className="mt-1"
+                placeholder="Room or location (optional)"
+                value={roomDisplayName}
+                onChange={(e) => setRoomDisplayName(e.target.value)}
+                aria-label="Room display name"
+              />
+            )}
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Day</label>

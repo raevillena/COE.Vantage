@@ -132,7 +132,7 @@ export function ScheduleSlotOverlay({
   const enablePointerEvents = active || Boolean(pendingValid);
   return (
     <div
-      className={`absolute z-10 grid min-w-[800px] ${enablePointerEvents ? "pointer-events-auto" : "pointer-events-none"} ${className ?? ""}`}
+      className={`absolute z-10 grid w-full ${enablePointerEvents ? "pointer-events-auto" : "pointer-events-none"} ${className ?? ""}`}
       style={{
         left: GRID_BORDER_WIDTH,
         top: topOffset,

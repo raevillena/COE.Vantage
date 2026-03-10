@@ -76,7 +76,7 @@ export function AvailabilityOverlay({
 
   return (
     <div
-      className={`absolute z-10 grid min-w-[800px] pointer-events-none ${className ?? ""}`}
+      className={`absolute z-10 grid w-full pointer-events-none ${className ?? ""}`}
       style={{
         left: GRID_BORDER_WIDTH,
         top: topOffset,

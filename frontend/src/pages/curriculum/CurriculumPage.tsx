@@ -10,6 +10,7 @@ import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
 import { parseIusisCurriculumHtml } from "../../utils/parseIusisCurriculumHtml";
+import { parseIusisCurriculumClipboard } from "../../utils/parseIusisCurriculumClipboard";
 
 export function CurriculumPage() {
   const user = useAppSelector((s) => s.auth.user);
@@ -31,16 +32,18 @@ export function CurriculumPage() {
   const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>([]);
   const [viewerLoading, setViewerLoading] = useState(false);
 
-  // Import: image (OCR) or IUSIS paste — shared two-phase flow
+  // Import: image (OCR), IUSIS HTML, or clipboard text — shared two-phase flow
   const [importOpen, setImportOpen] = useState(false);
-  const [importMode, setImportMode] = useState<"image" | "iusis">("image");
+  const [importMode, setImportMode] = useState<"image" | "iusis" | "clipboard">("image");
   const [importCurriculumId, setImportCurriculumId] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importIusisHtml, setImportIusisHtml] = useState("");
+  const [importClipboardText, setImportClipboardText] = useState("");
   const [extracting, setExtracting] = useState(false);
   const [extractedRows, setExtractedRows] = useState<ExtractedSubject[]>([]);
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -155,12 +158,13 @@ export function CurriculumPage() {
     }
   };
 
-  const openImport = useCallback((mode: "image" | "iusis" = "image") => {
+  const openImport = useCallback((mode: "image" | "iusis" | "clipboard" = "image") => {
     setImportOpen(true);
     setImportMode(mode);
     setImportCurriculumId(list[0]?.id ?? "");
     setImportFile(null);
     setImportIusisHtml("");
+    setImportClipboardText("");
     setExtractedRows([]);
     setApplyResult(null);
   }, [list]);
@@ -180,6 +184,24 @@ export function CurriculumPage() {
       toast.success(`Parsed ${rows.length} subjects. Review below and click Apply import.`);
     } catch (e) {
       toast.error("Failed to parse HTML. Check that it’s the full curriculum component.");
+    }
+  };
+
+  const handleParseClipboard = () => {
+    if (!importClipboardText.trim()) {
+      toast.error("Paste the curriculum text from IUSIS first");
+      return;
+    }
+    try {
+      const rows = parseIusisCurriculumClipboard(importClipboardText);
+      if (rows.length === 0) {
+        toast.error("No subjects found. Make sure you pasted the full checklist (year/semester headers and Code, Description, units table).");
+        return;
+      }
+      setExtractedRows(rows);
+      toast.success(`Parsed ${rows.length} subjects. Review below and click Apply import.`);
+    } catch (e) {
+      toast.error("Failed to parse clipboard text. Check that it matches the IUSIS checklist format.");
     }
   };
 
@@ -253,6 +275,15 @@ export function CurriculumPage() {
     setExtractedRows((prev) => [...prev, { yearLevel: 1, semester: 1, code: "", name: "", units: 3, isLab: false }]);
   };
 
+  const searchLower = searchQuery.trim().toLowerCase();
+  const filteredList = searchLower
+    ? list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(searchLower) ||
+          (c.department?.name ?? "").toLowerCase().includes(searchLower)
+      )
+    : list;
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
@@ -261,10 +292,26 @@ export function CurriculumPage() {
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={() => openImport("image")} disabled={list.length === 0}>Import from image</Button>
             <Button type="button" variant="secondary" onClick={() => openImport("iusis")} disabled={list.length === 0}>Import from IUSIS</Button>
+            <Button type="button" variant="secondary" onClick={() => openImport("clipboard")} disabled={list.length === 0}>Import from clipboard</Button>
             <Button type="button" onClick={openCreate}>Add Curriculum</Button>
           </div>
         )}
       </div>
+      {list.length > 0 && (
+        <div className="mb-4 relative max-w-md">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name or department…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+            aria-label="Search curriculum"
+          />
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
@@ -273,6 +320,13 @@ export function CurriculumPage() {
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No curriculum yet.{canEdit ? " Add one to get started." : ""}</p>
           {canEdit && <Button type="button" onClick={openCreate}>Add Curriculum</Button>}
+        </div>
+      ) : filteredList.length === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="text-foreground-muted mb-4">No curriculum match &quot;{searchQuery.trim()}&quot;.</p>
+          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search
+          </button>
         </div>
       ) : (
         <div className="rounded border border-border bg-surface overflow-hidden">
@@ -285,7 +339,7 @@ export function CurriculumPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {list.map((c) => (
+              {filteredList.map((c) => (
                 <tr key={c.id}>
                   <td className="px-4 py-2 text-foreground">{c.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.department?.name ?? "—"}</td>
@@ -479,6 +533,13 @@ export function CurriculumPage() {
               >
                 From IUSIS
               </button>
+              <button
+                type="button"
+                onClick={() => { setImportMode("clipboard"); setExtractedRows([]); setApplyResult(null); }}
+                className={`rounded px-3 py-1.5 text-sm font-medium ${importMode === "clipboard" ? "bg-primary text-primary-foreground" : "bg-surface-muted text-foreground-muted hover:bg-surface-hover"}`}
+              >
+                From clipboard
+              </button>
             </div>
             <div className="min-w-[200px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
@@ -523,6 +584,22 @@ export function CurriculumPage() {
                 />
                 <Button type="button" onClick={handleParseIusis} disabled={!importIusisHtml.trim()}>
                   Parse HTML
+                </Button>
+              </div>
+            )}
+            {importMode === "clipboard" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">Paste curriculum from IUSIS (plain text)</label>
+                <p className="text-xs text-foreground-muted">Copy the checklist from IUSIS (select the whole table or page and copy). Paste the plain text below — it should include &quot;First Year&quot;, &quot;First Semester&quot;, and rows with Code, Description, units.</p>
+                <textarea
+                  value={importClipboardText}
+                  onChange={(e) => setImportClipboardText(e.target.value)}
+                  placeholder="Paste the checklist text here (year/semester headers and tab-separated course rows)"
+                  className="w-full min-h-[160px] rounded border border-border-strong px-3 py-2 text-sm font-mono bg-surface focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  spellCheck={false}
+                />
+                <Button type="button" onClick={handleParseClipboard} disabled={!importClipboardText.trim()}>
+                  Parse clipboard
                 </Button>
               </div>
             )}

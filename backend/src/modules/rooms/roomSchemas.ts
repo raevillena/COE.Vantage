@@ -8,6 +8,7 @@ export const createRoomSchema = z.object({
     isLab: z.boolean().optional().default(false),
     hasAC: z.boolean().optional().default(false),
     departmentId: z.string().uuid(),
+    controlDepartmentId: z.string().uuid().optional().nullable(),
   }),
 });
 
@@ -19,8 +20,27 @@ export const updateRoomSchema = z.object({
     isLab: z.boolean().optional(),
     hasAC: z.boolean().optional(),
     departmentId: z.string().uuid().optional(),
+    controlDepartmentId: z.string().uuid().optional().nullable(),
   }),
 });
+
+export const roomAvailabilityQuerySchema = z.object({
+  query: z.object({
+    academicYearId: z.string().uuid(),
+    semester: z.coerce.number().int().min(1).max(2),
+  }),
+});
+
+export const setRoomAvailabilitySchema = z.object({
+  body: z.object({
+    academicYearId: z.string().uuid(),
+    semester: z.number().int().min(1).max(2),
+    isOpen: z.boolean(),
+  }),
+});
+
+export type RoomAvailabilityQuery = z.infer<typeof roomAvailabilityQuerySchema>["query"];
+export type SetRoomAvailabilityBody = z.infer<typeof setRoomAvailabilitySchema>["body"];
 
 export const listRoomsQuerySchema = z.object({
   query: z.object({

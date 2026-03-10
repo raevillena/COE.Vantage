@@ -15,6 +15,7 @@ export function AcademicYearsPage() {
   const [form, setForm] = useState({ name: "", isActive: false });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -84,12 +85,36 @@ export function AcademicYearsPage() {
     }
   };
 
+  const searchLower = searchQuery.trim().toLowerCase();
+  const filteredList = searchLower
+    ? list.filter(
+        (y) =>
+          y.name.toLowerCase().includes(searchLower) ||
+          (y.isActive ? "yes" : "no").includes(searchLower)
+      )
+    : list;
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-foreground">Academic Years</h1>
         <Button type="button" onClick={openCreate}>Add Academic Year</Button>
       </div>
+      {list.length > 0 && (
+        <div className="mb-4 relative max-w-md">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Search by name…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+            aria-label="Search academic years"
+          />
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
@@ -98,6 +123,13 @@ export function AcademicYearsPage() {
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No academic years yet. Add one to get started.</p>
           <Button type="button" onClick={openCreate}>Add Academic Year</Button>
+        </div>
+      ) : filteredList.length === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="text-foreground-muted mb-4">No academic years match &quot;{searchQuery.trim()}&quot;.</p>
+          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search
+          </button>
         </div>
       ) : (
         <div className="rounded border border-border bg-surface overflow-hidden">
@@ -110,7 +142,7 @@ export function AcademicYearsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {list.map((y) => (
+              {filteredList.map((y) => (
                 <tr key={y.id}>
                   <td className="px-4 py-2 text-foreground">{y.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{y.isActive ? "Yes" : "No"}</td>

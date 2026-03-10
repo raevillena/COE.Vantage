@@ -12,10 +12,12 @@ import { StudentClassesPage } from "./pages/studentClasses/StudentClassesPage";
 import { AcademicYearsPage } from "./pages/academicYears/AcademicYearsPage";
 import { DepartmentsPage } from "./pages/departments/DepartmentsPage";
 import { SchedulerPage } from "./pages/scheduler/SchedulerPage";
+import { SchedulingRulesPage } from "./pages/scheduler/SchedulingRulesPage";
 import { FacultySchedulePage } from "./pages/schedules/FacultySchedulePage";
 import { StudentSchedulePage } from "./pages/schedules/StudentSchedulePage";
 import { RoomAvailabilityPage } from "./pages/schedules/RoomAvailabilityPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
+import { RequestsPage } from "./pages/requests/RequestsPage";
 import { TrashPage } from "./pages/trash/TrashPage";
 import { UserProfilePage } from "./pages/profile/UserProfilePage";
 import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
@@ -45,6 +47,9 @@ function App() {
         <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AcademicYearsPage /></ProtectedRoute>} />
         <Route path="departments" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN"]}><DepartmentsPage /></ProtectedRoute>} />
         <Route path="scheduler" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
+        <Route path="scheduler/rules" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulingRulesPage backTo="/scheduler" title="Scheduling rule sets" /></ProtectedRoute>} />
+        <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules (admin)" isAdminPage /></ProtectedRoute>} />
+        <Route path="requests" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "ADMIN", "DEAN"]}><RequestsPage /></ProtectedRoute>} />
         <Route path="schedules/faculty" element={<FacultySchedulePage />} />
         <Route path="schedules/student-class" element={<StudentSchedulePage />} />
         <Route path="schedules/rooms" element={<RoomAvailabilityPage />} />

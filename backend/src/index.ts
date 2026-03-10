@@ -16,7 +16,9 @@ import { subjectRoutes } from "./modules/subjects/subjectRoutes.js";
 import { studentClassRoutes } from "./modules/studentClasses/studentClassRoutes.js";
 import { academicYearRoutes } from "./modules/academicYears/academicYearRoutes.js";
 import { facultyLoadRoutes } from "./modules/facultyLoads/facultyLoadRoutes.js";
+import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignmentRequestRoutes.js";
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
+import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
 
 const app = express();
 
@@ -44,7 +46,9 @@ app.use("/subjects", subjectRoutes);
 app.use("/student-classes", studentClassRoutes);
 app.use("/academic-years", academicYearRoutes);
 app.use("/faculty-loads", facultyLoadRoutes);
+app.use("/assignment-requests", assignmentRequestRoutes);
 app.use("/reports", reportRoutes);
+app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 
 app.use(errorHandler);
 

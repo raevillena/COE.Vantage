@@ -291,6 +291,30 @@ async function main() {
     await prisma.facultyLoad.create({ data: load });
   }
 
+  // Default scheduling rule set for auto-schedule (used when no assignment exists). Standard: avoid Friday.
+  const defaultRuleSetConfig = {
+    workStartMinutes: 8 * 60,
+    workEndMinutes: 17 * 60,
+    lunchStartMinutes: 12 * 60,
+    lunchEndMinutes: 13 * 60,
+    slotStepMinutes: 15,
+    avoidLunchSpan: true,
+    preferMwfFor3UnitLecture: true,
+    maxBlockMinutes: 300,
+    excludedDays: [5], // 5 = Friday; standard rule: avoid Friday
+  };
+  await prisma.schedulingRuleSet.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000001" },
+    update: { config: defaultRuleSetConfig },
+    create: {
+      id: "00000000-0000-0000-0000-000000000001",
+      name: "Default",
+      description: "Standard: 08:00–17:00, avoid lunch, prefer MWF for 3-unit lectures, avoid Friday.",
+      config: defaultRuleSetConfig,
+      isSystem: true,
+    },
+  });
+
   const totalLoads = loadsData.length + loadsData2425.length;
   console.log("Seed completed.");
   console.log(`  Departments: ${departments.length}`);

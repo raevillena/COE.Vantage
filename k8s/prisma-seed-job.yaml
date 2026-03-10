@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coe-vantage-prisma-seed
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: raevillena21/coe-vantage-backend:v0.0.1
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: coe-vantage-backend-config
+            - secretRef:
+                name: coe-vantage-backend-secrets
+          command: ["npm"]
+          args: ["run", "prisma:seed"]
+

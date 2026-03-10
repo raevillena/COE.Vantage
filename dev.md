@@ -356,10 +356,11 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 **Frontend**
 
-- **Subjects page:** Row action "Set prioritized faculty" opens a modal that:
-  - Fetches `GET /subjects/:id/prioritized-faculty` and `GET /users?role=FACULTY`.
-  - Shows an ordered list of prioritized faculty (move up/down, remove) and an "Add faculty" select.
-  - Save calls `PUT /subjects/:id/prioritized-faculty` with the ordered `facultyIds`.
+- **Subjects page:** Row action "Set prioritized faculty" opens a **drag-and-drop modal** (`PrioritizedFacultyModal.tsx`), similar to the curriculum builder:
+  - **Left panel — Faculty by department:** Faculty from `GET /users?role=FACULTY` (with `departmentId` / `department` for grouping) who are not yet in the priority list. Grouped by department (or "No department"). Each faculty is a draggable chip. The left panel is also a droppable zone: dragging a priority-row back here removes that faculty from the list.
+  - **Right panel — Priority sequence:** Droppable zone listing the current priority order. Each row is sortable (`@dnd-kit/sortable`): drag to reorder. Each row has a × button to remove. Empty state: "Drop faculty here to set priority order."
+  - **Drag behavior:** Pool → Priority = add faculty (at end or before the dropped-on item). Priority → Pool = remove. Within Priority = reorder via sortable.
+  - Fetches `GET /subjects/:id/prioritized-faculty` and `GET /users?role=FACULTY` on open. Save calls `PUT /subjects/:id/prioritized-faculty` with the ordered `facultyIds`.
 
 ---
 
@@ -394,21 +395,26 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 ---
 
-### 12. Import Curriculum from IUSIS (Laravel HTML)
+### 12. Import Curriculum (Image, IUSIS HTML, Clipboard)
 
 **Goal**
 
-- Paste HTML exported from the Laravel IUSIS curriculum view and parse it into subjects (with codes, names, units, lab flag, year level, semester).
+- Import curriculum subjects from three sources: an image (OCR), Laravel IUSIS HTML, or plain text copied from the IUSIS checklist. All produce the same review/apply flow with codes, names, units, lab flag, year level, and semester.
 
-**Behavior**
+**Sources**
 
-- Curriculum page (or import flow) offers an "Import from IUSIS" action that opens a dialog.
-- User pastes raw HTML from the Laravel curriculum page.
-- Parser detects:
-  - Rows for each subject (code, name, units, lab, etc.).
-  - **Semester:** "First Semester" / "Second Semester" / "Mid Year" (or similar) and sets `semester` to 1, 2, or 3.
-- Import review table shows parsed subjects with semester column; user can confirm and apply.
-- Apply creates/updates subjects and optionally assigns them to the current curriculum with `yearLevel` and `semester` set.
+1. **From image** — User uploads an image; backend uses Vision API (or Tesseract fallback) to extract subject rows. See `backend/src/modules/curriculum/importFromImage.ts`.
+2. **From IUSIS** — User pastes raw HTML from the Laravel curriculum component (right‑click → Inspect → copy outer HTML). Parser: `frontend/src/utils/parseIusisCurriculumHtml.ts`. Detects year/semester from headings and table structure; extracts code, name, units, lab, prerequisites from table rows.
+3. **From clipboard** — User copies the checklist from IUSIS as plain text (select table or page and copy). Parser: `frontend/src/utils/parseIusisCurriculumClipboard.ts`. Expects:
+   - Header lines (student id, program, name) — ignored.
+   - Blocks of: "First Year" / "Second Year" … "Fifth Year"; "First Semester" / "Second Semester" / "Mid Year"; then a header line containing "Code", "Description", "units"; then tab‑separated data rows (Code, Description, units, Grade, Pre-requisite/s). Year and semester are inferred from the last seen headers.
+
+**Behavior (shared)**
+
+- Curriculum page offers three buttons: "Import from image", "Import from IUSIS", "Import from clipboard". Each opens the same import dialog with a source tab (From image / From IUSIS / From clipboard).
+- User provides the chosen input (file, HTML paste, or plain-text paste) and clicks Extract / Parse HTML / Parse clipboard.
+- Import review table shows parsed subjects with code, name, units, year, semester, lab; user can edit rows, add/remove, then choose a curriculum and click "Apply import".
+- Apply creates/updates subjects and assigns them to the selected curriculum with `yearLevel` and `semester` set (`POST /curriculum/apply-import`).
 - Curriculum viewer and builder support semester (column and grouping).
 
 ---
@@ -721,5 +727,140 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
       - **Skipped** table (always shown, with a “no skipped blocks” message when empty) showing the same plus a **Reason** column built from the backend’s conflict explanation (e.g. faculty/room busy, capacity, lab-room mismatch).
     - A single **Close** button (Dialog.Close) dismisses the summary and dialog.
 
+---
 
+### 22. Users: Faculty Import, Status, Search & Departments: View Faculties
+
+**Faculty import (Users page, ADMIN only)**
+
+- **Import faculty** button opens a dialog with:
+  - **Paste**: Textarea for tab- or comma-separated data; "Parse and preview" builds a grouped preview.
+  - **Upload**: File input for CSV/TSV (e.g. exported from Excel/Sheets). File is read as UTF-8 so ñ and other Unicode in names are preserved.
+- **Expected CSV format**: First row = header. Columns detected by header names (order-independent):
+  - **Department**, **Name**, **Role**, **Max_Units** (or "Max Units"), **Status**.
+- **Parsing** (`facultyImportUtils.ts`):
+  - `splitLine`: Handles tab-separated (Excel paste) and CSV with quoted fields (commas inside quotes preserved).
+  - Header row is skipped; column indices are resolved from header labels (e.g. `Max_Units`, `max units`).
+  - Name column: supports "Last, First M." format; normalized to "First M. Last" for display and email generation.
+  - Names support Unicode (e.g. ñ/Ñ); no stripping of non-ASCII.
+- **Email generation**: `formatEmailFromName` — first letter of first name + middle initial + last name (no spaces) @ mmsu.edu.ph; Ñ lowercased to ñ. Example: "Juan Peña" → jpeña@mmsu.edu.ph.
+- **Preview**: Grouped by department; each group has a department dropdown (auto-matched from name/code when possible). Per row: Name, Status, Role (dropdown), Max units (read-only), Email (editable). Default password for all imported users; one "Create users" submits each as POST /users.
+- **Defaults**: Role from file or inferred from Status (e.g. "dean" → DEAN, "chair" → CHAIRMAN); if Role column empty, default FACULTY. Max units: from file; blank → 18 for FACULTY/CHAIRMAN; explicit **0** → stored as 0 (faculty cannot receive any load). Status from file is stored on the user (see below).
+
+**User model: status and maxUnits**
+
+- **status** (optional string): Added to `User` in Prisma; migration `add_user_status`. Stored from import or set in Add/Edit User form (e.g. Full-time, Part-time). Shown in Users table, View faculties dialog, and import preview; included in user search.
+- **maxUnits**: Backend validation changed from `.positive()` to `.min(0)`. Zero means faculty cannot receive any load; null = no cap. Add/Edit form and import support 0.
+
+**Backend: email validation and status**
+
+- **Email**: Custom Zod validator `emailWithUnicode` allows Unicode in the local part (e.g. jpeña@mmsu.edu.ph) so names with ñ save without validation errors. Used for create and update user.
+- **status**: In create/update user schemas as `z.string().max(100).optional().nullable()`; service and list/get/trash include `status` in select and data.
+
+**Users page: search and UI**
+
+- **Search bar** (when list is non-empty): Single input with search icon; filters by name, email, role, department name, or status (case-insensitive). "No users match …" + Clear search when no results.
+- **Add/Edit User**: Status field added (optional); password field has show/hide toggle (eye icon). Default max units 18 for new users.
+
+**Departments: View faculties**
+
+- Each department row has an **Actions** dropdown. First option: **View faculties** (all roles); then Edit / Move to trash (when `canManage`).
+- **View faculties** opens a dialog titled "Faculties — {Department name}", calls `GET /users?departmentId={id}` (ADMIN only for that endpoint), and shows a table: Name, Email, Role, Status, Max units.
+
+---
+
+### 23. Search on management pages
+
+**Goal**
+
+- On list/management pages where data can grow, provide a client-side search bar so users can quickly filter by visible fields without scrolling.
+
+**Pattern (shared across pages)**
+
+- **State:** `searchQuery` (string).
+- **Derived:** `searchLower = searchQuery.trim().toLowerCase()`, `filteredList = searchLower ? list.filter(...) : list`.
+- **UI:** When `list.length > 0`, show a search bar: relative wrapper, search icon on the left, input with `pl-9`, placeholder describing searchable fields, `aria-label` for accessibility.
+- **Table:** Renders `filteredList` instead of `list`.
+- **Empty filter state:** When `filteredList.length === 0` and `searchQuery.trim() !== ""`, show “No [items] match ‘…’.” and a **Clear search** button that sets `searchQuery` to `""`.
+
+**Pages and searchable fields**
+
+| Page | Searchable fields |
+|------|--------------------|
+| **Users** | Name, email, role, department, status |
+| **Subjects** | Code, name, curriculum name, department name |
+| **Departments** | Name |
+| **Rooms** | Name, capacity, department name, control department name, lab (yes/no) |
+| **Curriculum** | Name, department name |
+| **Student Classes** | Name, year level, student count, curriculum name |
+| **Academic Years** | Name, active (yes/no) |
+| **Requests** (assignment requests) | Faculty name, subject code/name, class name, room, requested-by name/department, status |
+
+Filtering is case-insensitive and substring-based. No backend changes; all filtering is done in the frontend on the already-loaded list.
+
+---
+
+### 24. Sidebar navigation icons
+
+**Goal**
+
+- Improve navigation scanability and consistency by showing an icon next to each sidebar link.
+
+**Implementation**
+
+- **Library:** `lucide-react` — tree-shakeable, consistent stroke icons; no other icon library is used in the frontend.
+- **Component:** `Sidebar.tsx` (`frontend/src/components/layout/Sidebar.tsx`):
+  - `NavItem` accepts an `icon` prop: a Lucide component (e.g. `LayoutDashboard`). The icon is rendered at 18px with `shrink-0` and `aria-hidden` (link text remains the accessible label).
+  - `RequestsNavItem` uses the `Inbox` icon and keeps the existing pending-count badge.
+- **Icon mapping** (for reference when adding/renaming nav items):
+  - Home: Dashboard → `LayoutDashboard`.
+  - Scheduler: Scheduler → `CalendarRange`, Requests → `Inbox`.
+  - Schedules: Faculty schedule → `UserCircle`, Class schedule → `GraduationCap`, Room availability → `DoorOpen`.
+  - Management: Rooms → `Building`, Departments → `Building2`, Curriculum → `BookOpen`, Subjects → `BookMarked`, Student classes → `GraduationCap`, Users → `Users`, Academic years → `Calendar`, Scheduling rules → `SlidersHorizontal`, Trash → `Trash2`.
+  - Reports → `FileText`.
+  - Profile → `User`, About → `Info`.
+
+**Conventions**
+
+- Use a single icon per nav item; prefer semantic fit (e.g. `Building` for room management, `DoorOpen` for room availability view).
+- Keep icon size at 18px for consistency with existing sidebar density.
+
+---
+
+## Parked / Incomplete Features
+
+### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED
+
+**Goal**
+
+- At 2xl (≥1536px), replace the fixed CSS grid layout with user-resizable panels (curriculum / main schedule / assignment) using `react-resizable-panels`. Panel sizes would persist to `localStorage` and survive reloads.
+
+**What was attempted**
+
+- `react-resizable-panels` (`Group`, `Panel`, `Separator`, `useDefaultLayout`) was integrated into `SchedulerLayout` behind a `useIs2xl()` breakpoint guard.
+- A custom `@dnd-kit` pointer sensor (`PointerSensorIgnoreResizeSeparator`) was created to prevent drag-and-drop from stealing pointer events on `[data-separator]` elements.
+- Multiple rounds of debugging (manual pointer capture, capture-phase listeners, layout validation, `localStorage` corruption detection) were attempted.
+
+**Why it was parked**
+
+- The `react-resizable-panels` library did not reliably resize panels. Events fired but panels did not visually move. Root causes investigated:
+  - `@dnd-kit`'s `DndContext` calling `preventDefault()` on pointer events before the library could process them.
+  - `localStorage` storing corrupted flex-grow values instead of 0–100 percentages, causing `ariaValueMin === ariaValueMax` (locked panels).
+  - `Separator` components rendering at 0px width (invisible, unclickable) without explicit styling.
+- Each fix resolved one symptom but resizing still failed. After significant iteration, the feature was parked to avoid further time investment.
+
+**What was reverted**
+
+- Removed `react-resizable-panels` dependency (`npm uninstall`).
+- Removed all `Group`, `Panel`, `Separator`, `useDefaultLayout` usage from `SchedulerPage.tsx`.
+- Removed `getValidatedStorageItem` localStorage validation helper.
+- Removed `PointerSensorIgnoreResizeSeparator` custom sensor file.
+- Reverted `SchedulerLayout` to a pure CSS grid layout (fixed proportions at each breakpoint).
+- Restored standard `PointerSensor` from `@dnd-kit/core`.
+
+**To revisit**
+
+- Consider an alternative library (e.g. `allotment`, `react-split`, or a custom flexbox + drag implementation).
+- Ensure any resize library coexists cleanly with `@dnd-kit`'s document-level pointer listeners.
+- Test on a minimal reproduction first before integrating into the scheduler's complex component tree.
 

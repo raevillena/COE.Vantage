@@ -46,3 +46,8 @@ export async function permanentDelete(req: Request, res: Response): Promise<void
   await userService.permanentDeleteUser(req.params.id);
   res.status(204).send();
 }
+
+export async function getPrioritizedSubjects(req: Request, res: Response): Promise<void> {
+  const list = await userService.getPrioritizedSubjects(req.params.id);
+  res.json(list);
+}

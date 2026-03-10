@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { list, getById, create, update, remove, listTrash, restore, permanentDelete } from "./roomController.js";
+import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getAvailability, setAvailability, getAvailabilityMap } from "./roomController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
-import { createRoomSchema, updateRoomSchema } from "./roomSchemas.js";
+import { createRoomSchema, updateRoomSchema, setRoomAvailabilitySchema } from "./roomSchemas.js";
 
 const router = Router();
 
@@ -17,7 +17,10 @@ router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
 router.get("/", authorize(...roomAccessRoles), list);
+router.get("/availability-map", authorize(...roomAccessRoles), getAvailabilityMap);
 router.get("/:id", authorize(...roomAccessRoles), getById);
+router.get("/:id/availability", authorize(...roomAccessRoles), getAvailability);
+router.patch("/:id/availability", authorize("ADMIN", "DEAN", "CHAIRMAN"), validate(setRoomAvailabilitySchema), setAvailability);
 router.post("/", authorize(...roomAccessRoles), validate(createRoomSchema), create);
 router.patch("/:id", authorize(...roomAccessRoles), validate(updateRoomSchema), update);
 // Soft delete: only ADMIN and DEAN
