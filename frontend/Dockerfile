@@ -6,11 +6,9 @@ RUN npm ci
 
 COPY tsconfig.json vite.config.* ./
 COPY index.html ./
+COPY .env.production .env.production
 COPY src ./src
 COPY public ./public
-
-ENV VITE_API_URL=""
-ENV VITE_APP_VERSION=""
 
 RUN npm run build
 
