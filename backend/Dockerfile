@@ -1,18 +1,20 @@
-FROM node:22-alpine
+FROM node:22-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json ./
-RUN npm ci --only=production
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# Expect pre-built artifacts in the build context:
-# - /dist from `npm run build`
-# - /prisma (with generated client) from `npx prisma generate`
-COPY dist ./dist
+COPY package.json package-lock.json ./
+RUN npm ci
+
 COPY prisma ./prisma
+RUN npx prisma generate
+
+RUN npm prune --production
+
+COPY dist ./dist
 
 EXPOSE 4000
 
 CMD ["node", "dist/index.js"]
-
