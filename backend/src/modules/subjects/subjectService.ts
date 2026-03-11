@@ -1,12 +1,32 @@
 import { prisma } from "../../prisma/client.js";
-import { badRequest, notFound, forbidden } from "../../utils/errors.js";
+import { badRequest, notFound, forbidden, conflict } from "../../utils/errors.js";
 import type { CreateSubjectBody, UpdateSubjectBody } from "./subjectSchemas.js";
 
-export async function listSubjects() {
+/** Caller context: CHAIRMAN sees only subjects in their department's curricula (or unassigned with their department). */
+export interface SubjectListCaller {
+  role: string;
+  departmentId: string | null;
+}
+
+export async function listSubjects(caller?: SubjectListCaller) {
+  const where: { isDeleted: boolean; OR?: Array<Record<string, unknown>> } = { isDeleted: false };
+  if (caller?.role === "CHAIRMAN" && caller.departmentId) {
+    where.OR = [
+      { curriculum: { departmentId: caller.departmentId } },
+      { curriculumId: null, departmentId: caller.departmentId },
+    ];
+  }
   return prisma.subject.findMany({
-    where: { isDeleted: false },
+    where,
     include: {
-      curriculum: { select: { id: true, name: true, code: true } },
+      curriculum: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          department: { select: { id: true, name: true, code: true } },
+        },
+      },
       department: { select: { id: true, name: true, code: true } },
     },
     orderBy: { code: "asc" },
@@ -38,6 +58,10 @@ export async function createSubject(body: CreateSubjectBody) {
   if (body.curriculumId) {
     const c = await prisma.curriculum.findUnique({ where: { id: body.curriculumId } });
     if (!c) throw badRequest("Curriculum not found");
+    const existing = await prisma.subject.findFirst({
+      where: { curriculumId: body.curriculumId, code: body.code },
+    });
+    if (existing) throw conflict("A subject with this code already exists in this curriculum.");
   }
   if (body.departmentId) {
     const d = await prisma.department.findUnique({ where: { id: body.departmentId } });
@@ -72,6 +96,18 @@ export async function updateSubject(id: string, body: UpdateSubjectBody) {
   if (body.departmentId) {
     const d = await prisma.department.findUnique({ where: { id: body.departmentId } });
     if (!d) throw badRequest("Department not found");
+  }
+  const effectiveCurriculumId = body.curriculumId !== undefined ? body.curriculumId : s.curriculumId;
+  const effectiveCode = body.code !== undefined ? body.code : s.code;
+  if (effectiveCurriculumId != null) {
+    const existing = await prisma.subject.findFirst({
+      where: {
+        curriculumId: effectiveCurriculumId,
+        code: effectiveCode,
+        id: { not: id },
+      },
+    });
+    if (existing) throw conflict("A subject with this code already exists in this curriculum.");
   }
   return prisma.subject.update({
     where: { id },

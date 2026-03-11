@@ -24,3 +24,7 @@ export function badRequest(message = "Bad request") {
 export function notFound(message = "Not found") {
   return new AppError(message, 404);
 }
+
+export function conflict(message = "Conflict") {
+  return new AppError(message, 409);
+}

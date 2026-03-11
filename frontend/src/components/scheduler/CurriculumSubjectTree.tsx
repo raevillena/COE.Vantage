@@ -6,7 +6,7 @@ import type { SubjectDragItem } from "./schedulerTypes";
 
 interface SubjectItemProps {
   subject: Subject;
-  status?: "none" | "partial" | "full";
+  status?: "none" | "partial" | "full" | "over";
   label?: string;
 }
 
@@ -22,10 +22,12 @@ function DraggableSubject({ subject, status = "none", label }: SubjectItemProps)
     id: `subject-${subject.id}`,
     data: item,
   });
-  // Solid status colors so full/partial/none are easy to read (full = green, partial = amber, none = rose).
+  // Status colors: full = green, over = blue (scheduled > required), partial = amber, none = rose.
   const stateClass =
     status === "full"
       ? "border-emerald-500 dark:border-emerald-500/70 bg-emerald-200 dark:bg-emerald-800/90"
+      : status === "over"
+      ? "border-blue-500 dark:border-blue-500/70 bg-blue-200 dark:bg-blue-800/90"
       : status === "partial"
       ? "border-amber-500 dark:border-amber-500/70 bg-amber-200 dark:bg-amber-800/90"
       : "border-rose-500 dark:border-rose-500/70 bg-rose-200 dark:bg-rose-800/90";
@@ -38,12 +40,12 @@ function DraggableSubject({ subject, status = "none", label }: SubjectItemProps)
         isDragging ? "opacity-50" : ""
       }`}
     >
-      <span className="font-medium truncate">{subject.code}</span>
-      <span className="truncate text-foreground-muted">
+      <span className="font-medium truncate shrink-0">{subject.code}</span>
+      <span className="truncate text-foreground-muted min-w-0" title={subject.name}>
         {subject.name}
         {label ? <span className="text-[11px] text-foreground-muted/80"> · {label}</span> : null}
       </span>
-      {subject.isLab && <span className="text-xs text-foreground-muted">(Lab)</span>}
+      {subject.isLab && <span className="text-xs text-foreground-muted shrink-0">(Lab)</span>}
     </div>
   );
 }
@@ -121,7 +123,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
     return map;
   }, [classLoads]);
 
-  const getStatusForSubject = (s: Subject): { status: "none" | "partial" | "full"; label: string } => {
+  const getStatusForSubject = (s: Subject): { status: "none" | "partial" | "full" | "over"; label: string } => {
     // Lectures: 1 unit = 1 hr/week; Labs: 1 unit = 3 hrs/week.
     const required = (s.isLab ? s.units * 3 : s.units) * 60;
     const scheduled = minutesBySubject.get(s.id) ?? 0;
@@ -133,6 +135,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
     const label = `${scheduledHours}/${requiredHours} hrs`;
     if (scheduled === 0) return { status: "none", label };
     if (scheduled < required) return { status: "partial", label };
+    if (scheduled > required) return { status: "over", label };
     return { status: "full", label };
   };
 

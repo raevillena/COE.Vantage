@@ -20,6 +20,9 @@ export function RoomsPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
@@ -124,6 +127,49 @@ export function RoomsPage() {
       )
     : list;
 
+  const filteredIds = filteredList.map((r) => r.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...filteredIds]));
+    }
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => apiClient.delete(`/rooms/${id}`)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      load();
+      if (failed === 0) toast.success(`${ok} room${ok === 1 ? "" : "s"} moved to trash`);
+      else if (ok === 0) toast.error("Failed to move to trash");
+      else toast.success(`${ok} moved to trash; ${failed} failed`);
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
@@ -162,10 +208,34 @@ export function RoomsPage() {
           </button>
         </div>
       ) : (
+        <>
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+              <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+              {canDeleteRoom && (
+                <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+                  Move selected to trash
+                </Button>
+              )}
+            </div>
+          )}
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                <th className="w-10 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                    className="rounded border-border-strong focus:ring-focus-ring"
+                  />
+                </th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Capacity</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Lab</th>
@@ -176,7 +246,16 @@ export function RoomsPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={selectedIds.has(r.id) ? "bg-primary-muted/30" : ""}>
+                  <td className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                      aria-label={`Select ${r.name}`}
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </td>
                   <td className="px-4 py-2 text-foreground">{r.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{r.capacity}</td>
                   <td className="px-4 py-2 text-foreground-muted">{r.isLab ? "Yes" : "No"}</td>
@@ -202,6 +281,7 @@ export function RoomsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Room" : "Add Room"}>
@@ -271,6 +351,21 @@ export function RoomsPage() {
           </div>
         </Dialog.Content>
       </Dialog.Root>
+
+      {canDeleteRoom && (
+        <Dialog.Root open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+          <Dialog.Content title="Move selected to trash" description={`${selectedIds.size} room${selectedIds.size === 1 ? "" : "s"} will be moved to Trash. You can restore them from the Trash page.`}>
+            <div className="mt-4 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button type="button" variant="secondary">Cancel</Button>
+              </Dialog.Close>
+              <Button type="button" variant="danger" onClick={handleBulkDeleteConfirm} disabled={bulkDeleteLoading}>
+                {bulkDeleteLoading ? "…" : "Move to trash"}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export function SubjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: "",
+    code: "",
     units: 3,
     isLab: false,
     yearLevel: "",
@@ -30,6 +31,9 @@ export function SubjectsPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [prioritySubject, setPrioritySubject] = useState<Subject | null>(null);
   const [priorityList, setPriorityList] = useState<PrioritizedFacultyItem[]>([]);
@@ -58,7 +62,7 @@ export function SubjectsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", units: 3, isLab: false, yearLevel: "", curriculumId: "", departmentId: "" });
+    setForm({ name: "", code: "", units: 3, isLab: false, yearLevel: "", curriculumId: "", departmentId: "" });
     setModalOpen(true);
   };
 
@@ -66,6 +70,7 @@ export function SubjectsPage() {
     setEditingId(s.id);
     setForm({
       name: s.name,
+      code: s.code,
       units: s.units,
       isLab: s.isLab,
       yearLevel: s.yearLevel != null ? String(s.yearLevel) : "",
@@ -87,13 +92,14 @@ export function SubjectsPage() {
       return;
     }
     try {
-      // When creating, derive code from name (slug) so user doesn't have to type it; when editing, omit code to keep existing.
-      const code =
-        editingId
-          ? undefined
-          : (nameTrimmed.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").toUpperCase() || `SUB-${Date.now()}`).slice(0, 32);
+      // When creating: use custom code if provided, else derive from name. Normalize: spaces→hyphens, alphanumeric+hyphen only, uppercase, max 32 chars.
+      const normalizeCode = (raw: string) =>
+        raw.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9-]/g, "").toUpperCase().slice(0, 32) || undefined;
+      const codeWhenCreating = editingId
+        ? undefined
+        : (form.code.trim() ? normalizeCode(form.code) : normalizeCode(nameTrimmed)) || `SUB-${Date.now()}`;
       const payload = {
-        ...(code !== undefined && { code }),
+        ...(codeWhenCreating !== undefined && { code: codeWhenCreating }),
         name: nameTrimmed,
         units: form.units,
         isLab: form.isLab,
@@ -105,7 +111,7 @@ export function SubjectsPage() {
         await apiClient.patch(`/subjects/${editingId}`, payload);
         toast.success("Subject updated");
       } else {
-        await apiClient.post("/subjects", { ...payload, code: code! });
+        await apiClient.post("/subjects", { ...payload, code: codeWhenCreating! });
         toast.success("Subject created");
       }
       setModalOpen(false);
@@ -176,9 +182,53 @@ export function SubjectsPage() {
           s.code.toLowerCase().includes(searchLower) ||
           s.name.toLowerCase().includes(searchLower) ||
           (s.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
-          (s.department?.name ?? "").toLowerCase().includes(searchLower)
+          (s.department?.name ?? "").toLowerCase().includes(searchLower) ||
+          (s.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
       )
     : list;
+
+  const filteredIds = filteredList.map((s) => s.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...filteredIds]));
+    }
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => apiClient.delete(`/subjects/${id}`)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      load();
+      if (failed === 0) toast.success(`${ok} subject${ok === 1 ? "" : "s"} moved to trash`);
+      else if (ok === 0) toast.error("Failed to move to trash");
+      else toast.success(`${ok} moved to trash; ${failed} failed`);
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -218,12 +268,35 @@ export function SubjectsPage() {
           </button>
         </div>
       ) : (
+        <>
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+              <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+              <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+                Move selected to trash
+              </Button>
+            </div>
+          )}
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                <th className="w-10 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                    className="rounded border-border-strong focus:ring-focus-ring"
+                  />
+                </th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Code</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Lab</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year level</th>
@@ -232,9 +305,21 @@ export function SubjectsPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((s) => (
-                <tr key={s.id}>
+                <tr key={s.id} className={selectedIds.has(s.id) ? "bg-primary-muted/30" : ""}>
+                  <td className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(s.id)}
+                      onChange={() => toggleSelect(s.id)}
+                      aria-label={`Select ${s.code}`}
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </td>
                   <td className="px-4 py-2 text-foreground">{s.code}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.name}</td>
+                  <td className="px-4 py-2 text-foreground-muted">
+                    {s.curriculum?.department?.name ?? s.department?.name ?? "—"}
+                  </td>
                   <td className="px-4 py-2 text-foreground-muted">{s.units}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.isLab ? "Yes" : "No"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
@@ -257,15 +342,30 @@ export function SubjectsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Subject" : "Add Subject"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            {editingId && (
+            {editingId ? (
               <p className="text-sm text-foreground-muted">
                 <span className="font-medium text-foreground">Code: </span>
                 {list.find((s) => s.id === editingId)?.code ?? "—"}
               </p>
+            ) : (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-foreground">Code</label>
+                <input
+                  placeholder="e.g. MATH101 or leave empty to generate from name"
+                  value={form.code}
+                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                  className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  aria-label="Subject code (optional)"
+                />
+                <p className="mt-1 text-[11px] text-foreground-muted">
+                  Optional. Uppercase letters, numbers, and hyphens only; max 32 characters. Empty = generated from name.
+                </p>
+              </div>
             )}
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <input type="number" min={0} placeholder="Units" value={form.units} onChange={(e) => setForm((f) => ({ ...f, units: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
@@ -344,6 +444,19 @@ export function SubjectsPage() {
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
               {deleteLoading ? "…" : "Move to trash"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <Dialog.Content title="Move selected to trash" description={`${selectedIds.size} subject${selectedIds.size === 1 ? "" : "s"} will be moved to Trash. You can restore them from the Trash page.`}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" variant="danger" onClick={handleBulkDeleteConfirm} disabled={bulkDeleteLoading}>
+              {bulkDeleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

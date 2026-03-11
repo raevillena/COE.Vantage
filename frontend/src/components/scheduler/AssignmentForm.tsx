@@ -127,6 +127,16 @@ export function AssignmentForm({
   const isOthersFaculty = facultyId === "__others__";
   const isOffSystemRoom = roomId === "__off_system__";
 
+  const facultyEmpty =
+    !facultyId ||
+    facultyId === "__none__" ||
+    (facultyId === "__others__" && !facultyDisplayName?.trim());
+  const subjectEmpty = !subjectId;
+  const studentClassEmpty = !studentClassId;
+  const roomEmpty = !roomId || roomId === "__none__";
+  const requiredFieldClass =
+    "border-danger ring-2 ring-danger/30 focus:ring-danger/50";
+
   // Sync from initialValues when formKey changes and data is ready. For edit mode, wait until the fetched load matches (initialValuesReady) so we don't show the previous block's data on click.
   useEffect(() => {
     if (!initialValuesReady) return;
@@ -344,7 +354,11 @@ export function AssignmentForm({
             onFacultyIdChange?.(id === "__others__" ? "" : id);
           }}
         >
-          <Select.Trigger aria-label="Faculty" className="w-full" disabled={lockFaculty}>
+        <Select.Trigger
+          aria-label="Faculty"
+          className={`w-full ${facultyEmpty ? requiredFieldClass : ""}`}
+          disabled={lockFaculty}
+        >
             <Select.Value placeholder="Select faculty" />
           </Select.Trigger>
           <Select.Content>
@@ -364,20 +378,24 @@ export function AssignmentForm({
             value={facultyDisplayName}
             onChange={(e) => setFacultyDisplayName(e.target.value)}
             aria-label="Faculty display name"
+            error={!facultyDisplayName?.trim()}
           />
         )}
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Subject</label>
         <Select.Root value={subjectId || "__none__"} onValueChange={(v) => setSubjectId(v === "__none__" ? "" : v)}>
-          <Select.Trigger aria-label="Subject" className="w-full">
+          <Select.Trigger
+            aria-label="Subject"
+            className={`w-full ${subjectEmpty ? requiredFieldClass : ""}`}
+          >
             <Select.Value placeholder="Select subject" />
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="__none__">Select subject</Select.Item>
             {subjects.map((s) => (
-              <Select.Item key={s.id} value={s.id}>
-                {s.code} {s.name} {s.isLab ? "(Lab)" : ""}
+              <Select.Item key={s.id} value={s.id} title={s.name}>
+                {s.code} <span className="truncate">{s.name}</span>{s.isLab ? " (Lab)" : ""}
               </Select.Item>
             ))}
           </Select.Content>
@@ -394,7 +412,11 @@ export function AssignmentForm({
             onStudentClassIdChange?.(id);
           }}
         >
-          <Select.Trigger aria-label="Student class" className="w-full" disabled={lockStudentClass}>
+          <Select.Trigger
+            aria-label="Student class"
+            className={`w-full ${studentClassEmpty ? requiredFieldClass : ""}`}
+            disabled={lockStudentClass}
+          >
             <Select.Value placeholder="Select class" />
           </Select.Trigger>
           <Select.Content>
@@ -417,7 +439,10 @@ export function AssignmentForm({
             onRoomIdChange?.(id === "__off_system__" ? "" : id);
           }}
         >
-          <Select.Trigger aria-label="Room" className="w-full">
+          <Select.Trigger
+            aria-label="Room"
+            className={`w-full ${roomEmpty ? requiredFieldClass : ""}`}
+          >
             <Select.Value placeholder="Select room" />
           </Select.Trigger>
           <Select.Content>

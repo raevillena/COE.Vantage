@@ -62,10 +62,11 @@ function DraggablePoolSubject({ subject }: { subject: SubjectForPool }) {
       {...listeners}
       {...attributes}
       className={`flex items-center gap-2 rounded border border-border bg-surface px-2 py-1.5 text-sm text-foreground cursor-grab active:cursor-grabbing hover:bg-surface-muted ${isDragging ? "opacity-50" : ""}`}
+      title={subject.name}
     >
-      <span className="font-medium truncate">{subject.code}</span>
-      <span className="truncate text-foreground-muted">{subject.name}</span>
-      {subject.isLab && <span className="text-xs text-foreground-muted">(Lab)</span>}
+      <span className="font-medium truncate shrink-0">{subject.code}</span>
+      <span className="truncate text-foreground-muted min-w-0">{subject.name}</span>
+      {subject.isLab && <span className="text-xs text-foreground-muted shrink-0">(Lab)</span>}
     </div>
   );
 }
@@ -82,10 +83,11 @@ function DraggableTreeSubject({ subject, onRemove }: { subject: CurriculumSubjec
       {...listeners}
       {...attributes}
       className={`flex items-center gap-2 rounded border border-border bg-surface-muted px-2 py-1.5 text-sm text-foreground cursor-grab active:cursor-grabbing hover:bg-surface ${isDragging ? "opacity-50" : ""}`}
+      title={subject.name}
     >
-      <span className="font-medium truncate">{subject.code}</span>
-      <span className="truncate text-foreground-muted flex-1">{subject.name}</span>
-      {subject.isLab && <span className="text-xs text-foreground-muted">(Lab)</span>}
+      <span className="font-medium truncate shrink-0">{subject.code}</span>
+      <span className="truncate text-foreground-muted min-w-0 flex-1">{subject.name}</span>
+      {subject.isLab && <span className="text-xs text-foreground-muted shrink-0">(Lab)</span>}
       {onRemove && (
         <button
           type="button"
@@ -222,7 +224,6 @@ export function CurriculumBuildPage() {
     const overId = over.id as string;
 
     if (overId === DROP_ID_POOL) {
-      // Remove from curriculum (same behavior as X button).
       void handleRemoveFromCurriculum(subjectId);
       return;
     }
@@ -233,51 +234,73 @@ export function CurriculumBuildPage() {
     const semester = isUngrouped ? null : yearSemMatch ? parseInt(yearSemMatch[2], 10) : null;
     if (!isUngrouped && !yearSemMatch) return;
 
-    // Optimistic update for move/add within this curriculum.
-    setCurriculumSubjects((prev) => {
-      const existing = prev.find((s) => s.id === subjectId);
-      if (existing) {
-        // Move within curriculum: just change year/semester.
-        return prev
+    const existingInCurriculum = curriculumSubjects.find((s) => s.id === subjectId);
+    const poolSubject = allSubjects.find((s) => s.id === subjectId);
+
+    if (existingInCurriculum) {
+      // Move within same curriculum: PATCH year/semester only.
+      setCurriculumSubjects((prev) =>
+        prev
           .map((s) =>
             s.id === subjectId ? { ...s, yearLevel, semester } : s
           )
-          .sort((a, b) => a.code.localeCompare(b.code));
+          .sort((a, b) => a.code.localeCompare(b.code))
+      );
+      try {
+        await apiClient.patch(`/subjects/${subjectId}`, {
+          yearLevel,
+          semester,
+        });
+        const msg = isUngrouped
+          ? "Moved to Ungrouped"
+          : `Moved to Year ${yearLevel} — ${SEMESTER_LABELS[semester as 1 | 2 | 3] ?? ""}`;
+        toast.success(msg);
+      } catch {
+        toast.error("Failed to update. Data was reloaded.");
+        loadData();
       }
-      // Added from pool: build from allSubjects entry.
-      const poolSubject = allSubjects.find((s) => s.id === subjectId);
-      if (!poolSubject) return prev;
-      const next: CurriculumSubject = {
-        id: poolSubject.id,
+      return;
+    }
+
+    // Add from pool: clone into this curriculum (POST new subject).
+    if (!poolSubject) return;
+    try {
+      const { data: newSubject } = await apiClient.post<SubjectForPool>("/subjects", {
         code: poolSubject.code,
         name: poolSubject.name,
         units: poolSubject.units,
         isLab: poolSubject.isLab,
-        yearLevel,
-        semester,
-      };
-      return [...prev, next].sort((a, b) => a.code.localeCompare(b.code));
-    });
-    setAllSubjects((prev) =>
-      prev.map((s) =>
-        s.id === subjectId
-          ? { ...s, curriculumId, yearLevel, semester }
-          : s
-      )
-    );
-
-    try {
-      await apiClient.patch(`/subjects/${subjectId}`, {
         curriculumId,
-        yearLevel,
-        semester,
+        yearLevel: yearLevel ?? undefined,
+        semester: semester ?? undefined,
+        departmentId: curriculum?.departmentId ?? undefined,
       });
+      setCurriculumSubjects((prev) =>
+        [
+          ...prev,
+          {
+            id: newSubject.id,
+            code: newSubject.code,
+            name: newSubject.name,
+            units: newSubject.units,
+            isLab: newSubject.isLab,
+            yearLevel,
+            semester,
+          },
+        ].sort((a, b) => a.code.localeCompare(b.code))
+      );
+      setAllSubjects((prev) => [...prev, newSubject]);
       const msg = isUngrouped
-        ? "Moved to Ungrouped"
-        : `Moved to Year ${yearLevel} — ${SEMESTER_LABELS[semester as 1 | 2 | 3] ?? ""}`;
+        ? "Added to Ungrouped"
+        : `Added to Year ${yearLevel} — ${SEMESTER_LABELS[semester as 1 | 2 | 3] ?? ""}`;
       toast.success(msg);
-    } catch {
-      toast.error("Failed to update. Data was reloaded.");
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        toast.error("A subject with this code is already in this curriculum.");
+      } else {
+        toast.error("Failed to add subject. Data was reloaded.");
+      }
       loadData();
     }
   };

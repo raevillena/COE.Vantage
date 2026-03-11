@@ -76,29 +76,34 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await facultyLoadService.deleteFacultyLoad(req.params.id);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  await facultyLoadService.deleteFacultyLoad(req.params.id, caller);
   res.status(204).send();
 }
 
 export async function autoAssign(req: Request, res: Response): Promise<void> {
   const body = req.body as AutoAssignFacultyLoadBody;
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
   const summary = await facultyLoadService.autoAssignForClass(
     body.academicYearId,
     body.semester,
     body.studentClassId,
-    body.ruleSetId
+    body.ruleSetId,
+    caller
   );
   res.json(summary);
 }
 
 export async function resetForClass(req: Request, res: Response): Promise<void> {
   const body = req.body as ResetFacultyLoadBody;
-  await facultyLoadService.resetForClass(body.academicYearId, body.semester, body.studentClassId);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  await facultyLoadService.resetForClass(body.academicYearId, body.semester, body.studentClassId, caller);
   res.status(204).send();
 }
 
 export async function copyFromPrevious(req: Request, res: Response): Promise<void> {
   const body = req.body as CopyFromPreviousFacultyLoadBody;
-  const summary = await facultyLoadService.copyClassSchedule(body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const summary = await facultyLoadService.copyClassSchedule(body, caller);
   res.json(summary);
 }

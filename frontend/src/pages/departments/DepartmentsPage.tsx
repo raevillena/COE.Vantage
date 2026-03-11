@@ -18,6 +18,9 @@ export function DepartmentsPage() {
   const [form, setForm] = useState({ name: "" });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewFacultiesDept, setViewFacultiesDept] = useState<{ id: string; name: string } | null>(null);
   const [viewFacultiesList, setViewFacultiesList] = useState<UserListItem[]>([]);
   const [viewFacultiesLoading, setViewFacultiesLoading] = useState(false);
@@ -112,6 +115,49 @@ export function DepartmentsPage() {
     ? list.filter((d) => d.name.toLowerCase().includes(searchLower))
     : list;
 
+  const filteredIds = filteredList.map((d) => d.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...filteredIds]));
+    }
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => apiClient.delete(`/departments/${id}`)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      load();
+      if (failed === 0) toast.success(`${ok} department${ok === 1 ? "" : "s"} moved to trash`);
+      else if (ok === 0) toast.error("Failed to move to trash");
+      else toast.success(`${ok} moved to trash; ${failed} failed`);
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
@@ -150,17 +196,52 @@ export function DepartmentsPage() {
           </button>
         </div>
       ) : (
+        <>
+          {canManage && selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+              <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+              <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+                Move selected to trash
+              </Button>
+            </div>
+          )}
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                {canManage && (
+                  <th className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all on page"
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((d) => (
-                <tr key={d.id}>
+                <tr key={d.id} className={canManage && selectedIds.has(d.id) ? "bg-primary-muted/30" : ""}>
+                  {canManage && (
+                    <td className="w-10 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(d.id)}
+                        onChange={() => toggleSelect(d.id)}
+                        aria-label={`Select ${d.name}`}
+                        className="rounded border-border-strong focus:ring-focus-ring"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
                   <td className="px-4 py-2 text-right">
                     <DropdownMenu.Root>
@@ -185,6 +266,7 @@ export function DepartmentsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Department" : "Add Department"}>
@@ -212,6 +294,21 @@ export function DepartmentsPage() {
           </div>
         </Dialog.Content>
       </Dialog.Root>
+
+      {canManage && (
+        <Dialog.Root open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+          <Dialog.Content title="Move selected to trash" description={`${selectedIds.size} department${selectedIds.size === 1 ? "" : "s"} will be moved to Trash. You can restore them from the Trash page.`}>
+            <div className="mt-4 flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <Button type="button" variant="secondary">Cancel</Button>
+              </Dialog.Close>
+              <Button type="button" variant="danger" onClick={handleBulkDeleteConfirm} disabled={bulkDeleteLoading}>
+                {bulkDeleteLoading ? "…" : "Move to trash"}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
+      )}
 
       <Dialog.Root open={viewFacultiesDept !== null} onOpenChange={(open) => !open && setViewFacultiesDept(null)}>
         <Dialog.Content className="!max-w-2xl" title={`Faculties — ${viewFacultiesDept?.name ?? ""}`} description="Users assigned to this department.">

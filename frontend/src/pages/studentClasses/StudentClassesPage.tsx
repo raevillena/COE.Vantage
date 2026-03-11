@@ -17,6 +17,9 @@ export function StudentClassesPage() {
   const [curricula, setCurricula] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
@@ -107,9 +110,53 @@ export function StudentClassesPage() {
           c.name.toLowerCase().includes(searchLower) ||
           String(c.yearLevel).includes(searchLower) ||
           String(c.studentCount).includes(searchLower) ||
-          (c.curriculum?.name ?? "").toLowerCase().includes(searchLower)
+          (c.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
+          (c.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
       )
     : list;
+
+  const filteredIds = filteredList.map((c) => c.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...filteredIds]));
+    }
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => apiClient.delete(`/student-classes/${id}`)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      load();
+      if (failed === 0) toast.success(`${ok} class${ok === 1 ? "" : "es"} moved to trash`);
+      else if (ok === 0) toast.error("Failed to move to trash");
+      else toast.success(`${ok} moved to trash; ${failed} failed`);
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -124,7 +171,7 @@ export function StudentClassesPage() {
           </span>
           <input
             type="search"
-            placeholder="Search by name, year level, curriculum…"
+            placeholder="Search by name, year level, curriculum, or department…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
@@ -149,11 +196,34 @@ export function StudentClassesPage() {
           </button>
         </div>
       ) : (
+        <>
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+              <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+              <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+                Move selected to trash
+              </Button>
+            </div>
+          )}
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                <th className="w-10 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                    className="rounded border-border-strong focus:ring-focus-ring"
+                  />
+                </th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year Level</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Student Count</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Curriculum</th>
@@ -162,8 +232,18 @@ export function StudentClassesPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((c) => (
-                <tr key={c.id}>
+                <tr key={c.id} className={selectedIds.has(c.id) ? "bg-primary-muted/30" : ""}>
+                  <td className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelect(c.id)}
+                      aria-label={`Select ${c.name}`}
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </td>
                   <td className="px-4 py-2 text-foreground">{c.name}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.yearLevel}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.studentCount}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.name ?? "—"}</td>
@@ -185,6 +265,7 @@ export function StudentClassesPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Student Class" : "Add Student Class"}>
@@ -233,6 +314,19 @@ export function StudentClassesPage() {
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
               {deleteLoading ? "…" : "Move to trash"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <Dialog.Content title="Move selected to trash" description={`${selectedIds.size} class${selectedIds.size === 1 ? "" : "es"} will be moved to Trash. You can restore them from the Trash page.`}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" variant="danger" onClick={handleBulkDeleteConfirm} disabled={bulkDeleteLoading}>
+              {bulkDeleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>

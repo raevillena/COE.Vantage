@@ -49,38 +49,56 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
 }
 
 export async function listAssignmentRequests(query: ListAssignmentRequestsQuery, caller: CallerContext) {
-  const where: { status?: "PENDING" | "APPROVED" | "REJECTED" } = {};
-  if (query.status) where.status = query.status;
-  if (caller.role === "CHAIRMAN" && caller.departmentId) {
+  const forScheduleDisplay =
+    query.studentClassId != null &&
+    query.academicYearId != null &&
+    query.semester != null;
+
+  if (forScheduleDisplay) {
     const list = await prisma.crossDepartmentLoadRequest.findMany({
       where: {
-        ...where,
-        faculty: { departmentId: caller.departmentId },
+        status: "PENDING",
+        studentClassId: query.studentClassId!,
+        academicYearId: query.academicYearId!,
+        semester: Number(query.semester),
       },
       include: {
         faculty: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
-        subject: { select: { id: true, code: true, name: true } },
+        subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
         studentClass: { select: { id: true, name: true } },
         room: { select: { id: true, name: true } },
         requestedBy: { select: { id: true, name: true, department: { select: { name: true } } } },
         academicYear: { select: { id: true, name: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
     });
     return list;
   }
-  return prisma.crossDepartmentLoadRequest.findMany({
+
+  const where: {
+    status?: "PENDING" | "APPROVED" | "REJECTED";
+    faculty?: { departmentId: string | null };
+  } = {};
+  if (query.status) where.status = query.status;
+
+  if (caller.role === "CHAIRMAN" && caller.departmentId) {
+    // Incoming requests: faculty is in the chairman's department.
+    where.faculty = { departmentId: caller.departmentId };
+  }
+
+  const list = await prisma.crossDepartmentLoadRequest.findMany({
     where,
     include: {
       faculty: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
-      subject: { select: { id: true, code: true, name: true } },
+      subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
       studentClass: { select: { id: true, name: true } },
       room: { select: { id: true, name: true } },
       requestedBy: { select: { id: true, name: true, department: { select: { name: true } } } },
       academicYear: { select: { id: true, name: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
   });
+  return list;
 }
 
 export async function getPendingCount(caller: CallerContext): Promise<number> {

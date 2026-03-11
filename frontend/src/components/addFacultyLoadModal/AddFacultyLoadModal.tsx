@@ -153,7 +153,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
               </Select.Trigger>
               <Select.Content>
                 <Select.Item value="__none__">Select subject</Select.Item>
-                {subjects.map((s) => <Select.Item key={s.id} value={s.id}>{s.code} {s.name}</Select.Item>)}
+                {subjects.map((s) => <Select.Item key={s.id} value={s.id} title={s.name}>{s.code} <span className="truncate">{s.name}</span>{s.isLab ? " (Lab)" : ""}</Select.Item>)}
               </Select.Content>
             </Select.Root>
           </div>

@@ -22,6 +22,7 @@ import { TrashPage } from "./pages/trash/TrashPage";
 import { UserProfilePage } from "./pages/profile/UserProfilePage";
 import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
 import { AboutPage } from "./pages/about/AboutPage";
+import { NotFoundPage } from "./pages/notFound/NotFoundPage";
 
 function App() {
   return (
@@ -58,7 +59,7 @@ function App() {
         <Route path="profile" element={<UserProfilePage />} />
         <Route path="about" element={<AboutPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

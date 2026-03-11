@@ -53,7 +53,12 @@ export interface Subject {
   semester?: number | null;
   curriculumId: string | null;
   departmentId: string | null;
-  curriculum?: { id: string; name: string; code: string | null } | null;
+  curriculum?: {
+    id: string;
+    name: string;
+    code: string | null;
+    department?: { id: string; name: string; code: string | null } | null;
+  } | null;
   department?: { id: string; name: string; code: string | null } | null;
   deletedAt?: string | null;
 }
@@ -64,7 +69,12 @@ export interface StudentClass {
   yearLevel: number;
   curriculumId: string;
   studentCount: number;
-  curriculum?: { id: string; name: string; code: string | null };
+  curriculum?: {
+    id: string;
+    name: string;
+    code: string | null;
+    department?: { id: string; name: string; code: string | null };
+  };
   deletedAt?: string | null;
 }
 
@@ -105,6 +115,8 @@ export interface FacultyLoad {
   studentClass?: { id: string; name: string; yearLevel: number; studentCount: number };
   room?: { id: string; name: string; capacity: number; isLab: boolean } | null;
   academicYear?: { id: string; name: string };
+  /** True when this block is a pending cross-department request (not yet approved). */
+  pendingApproval?: boolean;
 }
 
 /** Cross-department assignment request (chairman-to-chairman). */
@@ -121,10 +133,10 @@ export interface AssignmentRequest {
   semester: number;
   academicYearId: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
-  faculty?: { id: string; name: string; email: string; department?: { name: string } };
-  subject?: { id: string; code: string; name: string };
+  faculty?: { id: string; name: string; email?: string; department?: { name: string } };
+  subject?: { id: string; code: string; name: string; units?: number; isLab?: boolean };
   studentClass?: { id: string; name: string };
-  room?: { id: string; name: string } | null;
+  room?: { id: string; name: string; capacity?: number; isLab?: boolean } | null;
   requestedBy?: { id: string; name: string; department?: { name: string } };
   academicYear?: { id: string; name: string };
   respondedById?: string | null;

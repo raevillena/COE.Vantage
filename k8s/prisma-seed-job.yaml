@@ -9,7 +9,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: seed
-          image: raevillena21/coe-vantage-backend:v0.0.4
+          image: raevillena21/coe-vantage-backend:v0.0.8
           imagePullPolicy: Always
           envFrom:
             - configMapRef:

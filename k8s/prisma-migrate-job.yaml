@@ -9,8 +9,8 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: raevillena21/coe-vantage-backend:v0.0.4
-          imagePullPolicy: IfNotPresent
+          image: raevillena21/coe-vantage-backend:v0.0.8
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: coe-vantage-backend-config

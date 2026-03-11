@@ -136,11 +136,12 @@ function ScheduleBlock({
   onLoadResizeEnd,
 }: ScheduleBlockProps) {
   const { palette } = useSchedulePalette();
+  const pending = Boolean(load.pendingApproval);
   const draggableId = draggableIdPrefix ? `${draggableIdPrefix}-load-${load.id}` : `load-${load.id}`;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: draggableId,
     data: { type: "load" as const, load },
-    disabled: !onLoadMove,
+    disabled: !onLoadMove || pending,
   });
 
   const [resizePreviewEndMinutes, setResizePreviewEndMinutes] = useState<number | null>(null);
@@ -196,27 +197,28 @@ function ScheduleBlock({
   const facultyName = load.faculty?.name ?? load.facultyDisplayName ?? "";
   const facultyShort = formatFacultyShortName(facultyName);
   const roomName = load.room?.name ?? load.roomDisplayName ?? "";
-  const titleParts = [load.subject?.code ?? "—", roomName, facultyShort, timeTooltip].filter(Boolean);
+  const titleParts = [load.subject?.code ?? "—", load.subject?.name, roomName, facultyShort, timeTooltip].filter(Boolean);
 
   return (
     <div
       ref={setNodeRef}
-      {...(onLoadMove ? { ...attributes, ...listeners } : {})}
-      role={onLoadClick ? "button" : undefined}
-      tabIndex={onLoadClick ? 0 : undefined}
-      onClick={onLoadClick ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
-      onKeyDown={onLoadClick ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
-      title={titleParts.join(" · ")}
-      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${isConflict ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick ? "cursor-pointer" : ""} ${onLoadMove ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      {...(onLoadMove && !pending ? { ...attributes, ...listeners } : {})}
+      role={onLoadClick && !pending ? "button" : undefined}
+      tabIndex={onLoadClick && !pending ? 0 : undefined}
+      onClick={onLoadClick && !pending ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
+      onKeyDown={onLoadClick && !pending ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
+      title={titleParts.join(" · ") + (pending ? " · Awaiting chairman approval" : "")}
+      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={{ top, height }}
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
+        {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
       </div>
       <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
-        {[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
+        {pending ? "Cross-dept · " : ""}{[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
       </div>
-      {onLoadResize && height >= 24 && (
+      {onLoadResize && !pending && height >= 24 && (
         <div
           data-resize-handle
           className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center border-t border-foreground-muted/50 hover:border-foreground-muted hover:bg-black/10 rounded-b"

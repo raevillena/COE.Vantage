@@ -139,6 +139,7 @@ model Subject {
   facultyLoads  FacultyLoad[]
   subjectFacultyPriorities SubjectFacultyPriority[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
+  @@unique([curriculumId, code])
   @@index([isDeleted])
 }
 

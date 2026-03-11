@@ -29,6 +29,19 @@ async function assertRoomAssignable(
   if (caller.role === "CHAIRMAN" && caller.departmentId === room.controlDepartmentId) return;
   throw forbidden("This room is closed for the selected term. Only the control department can assign until they open it.");
 }
+
+/** CHAIRMAN can only create/update loads for student classes in their department's curricula. */
+async function assertStudentClassInDepartment(studentClassId: string, caller: CallerContext): Promise<void> {
+  if (!caller || caller.role !== "CHAIRMAN" || caller.departmentId == null) return;
+  const sc = await prisma.studentClass.findUnique({
+    where: { id: studentClassId },
+    include: { curriculum: { select: { departmentId: true } } },
+  });
+  if (!sc) return;
+  if (sc.curriculum.departmentId !== caller.departmentId) {
+    throw forbidden("You can only schedule for student classes in your department's curricula.");
+  }
+}
 import type {
   CreateFacultyLoadBody,
   UpdateFacultyLoadBody,
@@ -130,6 +143,7 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
   if (effectiveRoomId && caller) {
     await assertRoomAssignable(effectiveRoomId, body.academicYearId, body.semester, caller);
   }
+  if (caller) await assertStudentClassInDepartment(body.studentClassId, caller);
   const effectiveFacultyId = body.facultyId?.trim() || null;
   if (effectiveFacultyId) {
     const [subject, user, currentUnits] = await Promise.all([
@@ -196,6 +210,11 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
 export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody, caller?: CallerContext) {
   const existing = await prisma.facultyLoad.findUnique({ where: { id }, include: { subject: { select: { units: true } } } });
   if (!existing) throw notFound("Faculty load not found");
+
+  if (caller) {
+    const effectiveStudentClassId = body.studentClassId ?? existing.studentClassId;
+    await assertStudentClassInDepartment(effectiveStudentClassId, caller);
+  }
 
   const facultyId = body.facultyId !== undefined ? (body.facultyId?.trim() || null) : existing.facultyId;
   const facultyDisplayName = body.facultyDisplayName !== undefined ? (body.facultyDisplayName?.trim() || null) : existing.facultyDisplayName;
@@ -274,13 +293,23 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
   });
 }
 
-export async function deleteFacultyLoad(id: string) {
-  const load = await prisma.facultyLoad.findUnique({ where: { id } });
+export async function deleteFacultyLoad(id: string, caller?: CallerContext) {
+  const load = await prisma.facultyLoad.findUnique({
+    where: { id },
+    include: { studentClass: { include: { curriculum: { select: { departmentId: true } } } } },
+  });
   if (!load) throw notFound("Faculty load not found");
+  if (caller) await assertStudentClassInDepartment(load.studentClassId, caller);
   await prisma.facultyLoad.delete({ where: { id } });
 }
 
-export async function resetForClass(academicYearId: string, semester: number, studentClassId: string) {
+export async function resetForClass(
+  academicYearId: string,
+  semester: number,
+  studentClassId: string,
+  caller?: CallerContext
+) {
+  if (caller) await assertStudentClassInDepartment(studentClassId, caller);
   await prisma.facultyLoad.deleteMany({
     where: { academicYearId, semester, studentClassId },
   });
@@ -305,8 +334,10 @@ export interface CopyClassScheduleResult {
   skipped: SkippedFacultyLoadSummary[];
 }
 
-export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody): Promise<CopyClassScheduleResult> {
+export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, caller?: CallerContext): Promise<CopyClassScheduleResult> {
   const { studentClassId, sourceAcademicYearId, sourceSemester, targetAcademicYearId, targetSemester } = body;
+
+  if (caller) await assertStudentClassInDepartment(studentClassId, caller);
 
   if (sourceAcademicYearId === targetAcademicYearId && sourceSemester === targetSemester) {
     throw badRequest("Source and target term must be different");
@@ -442,8 +473,10 @@ export async function autoAssignForClass(
   academicYearId: string,
   semester: number,
   studentClassId: string,
-  ruleSetIdOverride?: string
+  ruleSetIdOverride?: string,
+  caller?: CallerContext
 ) {
+  if (caller) await assertStudentClassInDepartment(studentClassId, caller);
   const studentClass = await prisma.studentClass.findUnique({
     where: { id: studentClassId },
     include: { curriculum: { select: { id: true, departmentId: true } } },
@@ -451,10 +484,14 @@ export async function autoAssignForClass(
   if (!studentClass) throw notFound("Student class not found");
 
   const curriculumId = studentClass.curriculumId;
-  // Only auto-schedule subjects that belong to this curriculum AND this class year level.
-  // \"Others\" (different yearLevel or null) are meant to be handled manually.
+  // Only auto-schedule subjects that belong to this curriculum, this class year level, and the selected semester.
+  // Include subjects with semester null (offer in both semesters). Exclude subjects that belong to the other semester.
   const subjects = await prisma.subject.findMany({
-    where: { curriculumId, yearLevel: studentClass.yearLevel },
+    where: {
+      curriculumId,
+      yearLevel: studentClass.yearLevel,
+      OR: [{ semester: null }, { semester }],
+    },
   });
   if (!subjects.length) {
     throw badRequest("No subjects found for this curriculum");
@@ -494,6 +531,20 @@ export async function autoAssignForClass(
     scheduledBySubject.set(l.subjectId, (scheduledBySubject.get(l.subjectId) ?? 0) + mins);
   }
 
+  // Treat pending cross-department requests as placed: count their minutes and block those slots.
+  const pendingRequests = await prisma.crossDepartmentLoadRequest.findMany({
+    where: {
+      studentClassId,
+      academicYearId,
+      semester,
+      status: "PENDING",
+    },
+  });
+  for (const req of pendingRequests) {
+    const mins = timeToMinutes(req.endTime) - timeToMinutes(req.startTime);
+    scheduledBySubject.set(req.subjectId, (scheduledBySubject.get(req.subjectId) ?? 0) + mins);
+  }
+
   // Preload faculty (with maxUnits for cap check) and rooms.
   const faculties = await prisma.user.findMany({
     where: { role: "FACULTY" },
@@ -505,6 +556,10 @@ export async function autoAssignForClass(
     if (l.facultyId == null) continue;
     const u = subjectUnitsMap.get(l.subjectId) ?? 0;
     currentUnitsByFaculty.set(l.facultyId, (currentUnitsByFaculty.get(l.facultyId) ?? 0) + u);
+  }
+  for (const req of pendingRequests) {
+    const u = subjectUnitsMap.get(req.subjectId) ?? 0;
+    currentUnitsByFaculty.set(req.facultyId, (currentUnitsByFaculty.get(req.facultyId) ?? 0) + u);
   }
   const rooms = await prisma.room.findMany({
     select: { id: true, name: true, capacity: true, isLab: true, departmentId: true },
@@ -533,6 +588,20 @@ export async function autoAssignForClass(
     addInterval(classBusy, l.studentClassId, interval);
   }
 
+  for (const req of pendingRequests) {
+    const start = timeToMinutes(req.startTime);
+    const end = timeToMinutes(req.endTime);
+    const mins = end - start;
+    const interval: Interval = { dayOfWeek: req.dayOfWeek, start, end };
+    addInterval(facultyBusy, req.facultyId, interval);
+    facultyMinutes.set(req.facultyId, (facultyMinutes.get(req.facultyId) ?? 0) + mins);
+    if (req.roomId != null) {
+      addInterval(roomBusy, req.roomId, interval);
+      roomMinutes.set(req.roomId, (roomMinutes.get(req.roomId) ?? 0) + mins);
+    }
+    addInterval(classBusy, req.studentClassId, interval);
+  }
+
   const newLoads: CreateFacultyLoadBody[] = [];
   /** Subjects that could not be fully scheduled, with reason (no faculty, no room, no slot). */
   const skippedSummary: { subjectCode: string; subjectName: string; reason: string }[] = [];
@@ -558,7 +627,27 @@ export async function autoAssignForClass(
   const TTH = [2, 4].filter((d) => !excludedDays.includes(d));
 
   // Track long (>= 3hr) lab sessions per class for enforcing breaks between them.
+  // Include existing and pending blocks so we don't place a long lab too close to an awaiting-approval one.
+  const subjectIsLab = new Map<string, boolean>(subjects.map((s) => [s.id, s.isLab]));
   const classLongLabBusy = new Map<string, Interval[]>();
+  for (const l of classLoads) {
+    if (!subjectIsLab.get(l.subjectId)) continue;
+    const start = timeToMinutes(l.startTime);
+    const end = timeToMinutes(l.endTime);
+    if (end - start < 180) continue;
+    const arr = classLongLabBusy.get(l.studentClassId) ?? [];
+    arr.push({ dayOfWeek: l.dayOfWeek, start, end });
+    classLongLabBusy.set(l.studentClassId, arr);
+  }
+  for (const req of pendingRequests) {
+    if (!subjectIsLab.get(req.subjectId)) continue;
+    const start = timeToMinutes(req.startTime);
+    const end = timeToMinutes(req.endTime);
+    if (end - start < 180) continue;
+    const arr = classLongLabBusy.get(req.studentClassId) ?? [];
+    arr.push({ dayOfWeek: req.dayOfWeek, start, end });
+    classLongLabBusy.set(req.studentClassId, arr);
+  }
 
   function violatesLabBreak(
     dayOfWeek: number,

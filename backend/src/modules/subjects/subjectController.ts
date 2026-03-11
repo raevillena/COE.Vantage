@@ -6,8 +6,8 @@ function caller(req: Request) {
   return req.user ? { role: req.user.role, departmentId: req.user.departmentId } : undefined;
 }
 
-export async function list(_req: Request, res: Response): Promise<void> {
-  const list = await subjectService.listSubjects();
+export async function list(req: Request, res: Response): Promise<void> {
+  const list = await subjectService.listSubjects(caller(req));
   res.json(list);
 }
 

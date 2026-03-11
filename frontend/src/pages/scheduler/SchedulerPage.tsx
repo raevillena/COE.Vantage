@@ -14,6 +14,7 @@ import type {
   AutoAssignSummary,
   SchedulingRuleSet,
   ResolvedSchedulingRuleSet,
+  AssignmentRequest,
 } from "../../types/api";
 import { getApiErrorMessage } from "../../types/api";
 import type { SubjectDragItem, LoadDragItem } from "../../components/scheduler/schedulerTypes";
@@ -185,7 +186,7 @@ function SchedulerLayout({
 }: SchedulerLayoutProps) {
   return (
     <div
-      className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(18rem,2fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface"
+      className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface"
     >
       <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
         {renderCurriculum()}
@@ -215,6 +216,8 @@ export function SchedulerPage() {
   const [faculties, setFaculties] = useState<UserListItem[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
+  /** Pending cross-department assignment requests for the current class (shown as "Awaiting approval" blocks). */
+  const [pendingRequests, setPendingRequests] = useState<AssignmentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<SubjectDragItem | null>(null);
@@ -269,6 +272,31 @@ export function SchedulerPage() {
 
   const currentAcademicYear = academicYears.find((y) => y.id === academicYearId);
   const previousAcademicYears = academicYears.filter((y) => y.id !== academicYearId);
+
+  /** Map a pending cross-department request to a FacultyLoad-like block for the grid (id prefixed so it doesn't collide). */
+  const requestToDisplayLoad = useCallback((r: AssignmentRequest): FacultyLoad => ({
+    id: `pending-${r.id}`,
+    facultyId: r.facultyId,
+    subjectId: r.subjectId,
+    studentClassId: r.studentClassId,
+    roomId: r.roomId,
+    roomDisplayName: r.roomDisplayName ?? null,
+    dayOfWeek: r.dayOfWeek,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    semester: r.semester,
+    academicYearId: r.academicYearId,
+    faculty: r.faculty ? { id: r.faculty.id, name: r.faculty.name, email: r.faculty.email ?? "" } : undefined,
+    subject: r.subject ? { id: r.subject.id, code: r.subject.code, name: r.subject.name, units: r.subject.units ?? 0, isLab: r.subject.isLab ?? false } : undefined,
+    studentClass: r.studentClass ? { id: r.studentClass.id, name: r.studentClass.name, yearLevel: 0, studentCount: 0 } : undefined,
+    room: r.room ? { id: r.room.id, name: r.room.name, capacity: r.room.capacity ?? 0, isLab: r.room.isLab ?? false } : undefined,
+    pendingApproval: true,
+  }), []);
+
+  /** In class view, merge confirmed loads with pending cross-dept requests so both show on the grid. */
+  const displayLoads = viewMode === "class" && pendingRequests.length > 0
+    ? [...loads, ...pendingRequests.map(requestToDisplayLoad)]
+    : loads;
 
   // In faculty view, keep overlay faculty in sync with the selected faculty so pending blocks
   // and the faculty preview table work the same way as in class view.
@@ -470,6 +498,10 @@ export function SchedulerPage() {
     if (viewMode === "class" && studentClassId) params.set("studentClassId", studentClassId);
     if (viewMode === "faculty" && selectedFacultyId) params.set("facultyId", selectedFacultyId);
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data));
+    if (viewMode === "class" && studentClassId) {
+      const pendingParams = new URLSearchParams({ studentClassId, academicYearId, semester: String(semester), status: "PENDING" });
+      apiClient.get<AssignmentRequest[]>(`/assignment-requests?${pendingParams}`).then(({ data }) => setPendingRequests(data ?? [])).catch(() => setPendingRequests([]));
+    }
   }, [academicYearId, semester, viewMode, studentClassId, selectedFacultyId]);
 
   const refreshRoomLoads = useCallback(() => {
@@ -485,6 +517,7 @@ export function SchedulerPage() {
   useEffect(() => {
     if (!academicYearId) {
       setLoads([]);
+      setPendingRequests([]);
       setLoading(false);
       return;
     }
@@ -499,8 +532,30 @@ export function SchedulerPage() {
       .finally(() => setLoading(false));
   }, [academicYearId, semester, viewMode, studentClassId, selectedFacultyId]);
 
+  // Fetch pending cross-department requests for the current class so they show as "Awaiting approval" blocks.
+  useEffect(() => {
+    if (viewMode !== "class" || !academicYearId || !studentClassId) {
+      setPendingRequests([]);
+      return;
+    }
+    const params = new URLSearchParams({
+      studentClassId,
+      academicYearId,
+      semester: String(semester),
+      status: "PENDING",
+    });
+    apiClient
+      .get<AssignmentRequest[]>(`/assignment-requests?${params}`)
+      .then(({ data }) => setPendingRequests(data ?? []))
+      .catch(() => setPendingRequests([]));
+  }, [viewMode, academicYearId, semester, studentClassId]);
+
   useEffect(() => {
     if (!editingLoadId) {
+      setEditingLoad(null);
+      return;
+    }
+    if (editingLoadId.startsWith("pending-")) {
       setEditingLoad(null);
       return;
     }
@@ -1211,6 +1266,13 @@ export function SchedulerPage() {
         </div>
       </div>
 
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragCancel={handleDragCancel}
+      >
       <SchedulerLayout
         renderCurriculum={() => (
             <div className="flex-1 min-h-0 overflow-auto">
@@ -1225,13 +1287,6 @@ export function SchedulerPage() {
             </div>
           )}
           renderMain={() => (
-            <DndContext
-              sensors={sensors}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              onDragCancel={handleDragCancel}
-            >
             <>
             <div className="shrink-0 mb-2">
               {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground mb-2">Class schedule</h2>}
@@ -1256,7 +1311,7 @@ export function SchedulerPage() {
                     style={{ minWidth: is2xl ? 520 : GRID_MIN_WIDTH_PX }}
                   >
                     <ScheduleGrid
-                      loads={loads}
+                      loads={displayLoads}
                       wrapInScroll={false}
                       selectedLoadId={editingLoadId}
                       hourEnd={scheduleHourEnd}
@@ -1417,64 +1472,7 @@ export function SchedulerPage() {
                 </div>
               )}
             </div>
-
-            <DragOverlay dropAnimation={null}>
-              {activeDragItem ? (
-                <div
-                  className="flex items-center gap-1.5 rounded border border-primary bg-surface px-2 py-1 text-xs text-foreground shadow-md pointer-events-none max-w-[200px]"
-                  aria-hidden
-                >
-                  <span className="font-medium truncate shrink-0">{activeDragItem.code}</span>
-                  <span className="truncate text-foreground-muted min-w-0">{activeDragItem.name}</span>
-                  {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
-                </div>
-              ) : activeDragLoad ? (
-                (() => {
-                  let dropTimeLabel: string | null = null;
-                  let timeRangeLabel: string | null = null;
-                  if (overSlotId) {
-                    const slot = parseSlotId(overSlotId);
-                    if (slot) {
-                      const dropStartMins = timeToMinutes(slotStartTime(slot));
-                      const durationMins = Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime));
-                      const dropEndMins = dropStartMins + durationMins;
-                      const format12 = (mins: number) => {
-                        const h = Math.floor(mins / 60);
-                        const m = mins % 60;
-                        const hour12 = h % 12 || 12;
-                        const ampm = h < 12 ? "AM" : "PM";
-                        return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
-                      };
-                      dropTimeLabel = `Drop at ${format12(dropStartMins)}`;
-                      timeRangeLabel = `${format12(dropStartMins)} – ${format12(dropEndMins)}`;
-                    }
-                  }
-                  return (
-                    <div className="pointer-events-none flex flex-col items-center gap-1">
-                      <LoadBlockPreview
-                        load={activeDragLoad}
-                        subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
-                        heightPx={Math.max(
-                          20,
-                          ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
-                            SLOT_HEIGHT -
-                            2
-                        )}
-                        dropTimeLabel={dropTimeLabel}
-                        timeRangeLabel={timeRangeLabel}
-                      />
-                      {dropTimeLabel && (
-                        <span className="text-[10px] font-medium text-primary bg-primary/15 px-2 py-0.5 rounded">
-                          {dropTimeLabel}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()
-              ) : null}
-            </DragOverlay>
             </>
-            </DndContext>
           )}
           renderAssignment={() => (
             <>
@@ -1681,6 +1679,64 @@ export function SchedulerPage() {
             </section>
           ) : null)}
         />
+
+        <DragOverlay dropAnimation={null}>
+          {activeDragItem ? (
+            <div
+              className="flex items-center gap-1.5 rounded border border-primary bg-surface px-2 py-1 text-xs text-foreground shadow-md pointer-events-none max-w-[200px] min-w-0"
+              aria-hidden
+              title={activeDragItem.name}
+            >
+              <span className="font-medium truncate shrink-0">{activeDragItem.code}</span>
+              <span className="truncate text-foreground-muted min-w-0">{activeDragItem.name}</span>
+              {activeDragItem.isLab && <span className="text-foreground-muted shrink-0">(L)</span>}
+            </div>
+          ) : activeDragLoad ? (
+            (() => {
+              let dropTimeLabel: string | null = null;
+              let timeRangeLabel: string | null = null;
+              if (overSlotId) {
+                const slot = parseSlotId(overSlotId);
+                if (slot) {
+                  const dropStartMins = timeToMinutes(slotStartTime(slot));
+                  const durationMins = Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime));
+                  const dropEndMins = dropStartMins + durationMins;
+                  const format12 = (mins: number) => {
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    const hour12 = h % 12 || 12;
+                    const ampm = h < 12 ? "AM" : "PM";
+                    return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+                  };
+                  dropTimeLabel = `Drop at ${format12(dropStartMins)}`;
+                  timeRangeLabel = `${format12(dropStartMins)} – ${format12(dropEndMins)}`;
+                }
+              }
+              return (
+                <div className="pointer-events-none flex flex-col items-center gap-1">
+                  <LoadBlockPreview
+                    load={activeDragLoad}
+                    subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
+                    heightPx={Math.max(
+                      20,
+                      ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
+                        SLOT_HEIGHT -
+                        2
+                    )}
+                    dropTimeLabel={dropTimeLabel}
+                    timeRangeLabel={timeRangeLabel}
+                  />
+                  {dropTimeLabel && (
+                    <span className="text-[10px] font-medium text-primary bg-primary/15 px-2 py-0.5 rounded">
+                      {dropTimeLabel}
+                    </span>
+                  )}
+                </div>
+              );
+            })()
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {addModalOpen && academicYearId && (
         <AddFacultyLoadModal

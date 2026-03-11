@@ -15,6 +15,9 @@ export function AcademicYearsPage() {
   const [form, setForm] = useState({ name: "", isActive: false });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
@@ -94,6 +97,49 @@ export function AcademicYearsPage() {
       )
     : list;
 
+  const filteredIds = filteredList.map((y) => y.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...filteredIds]));
+    }
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    try {
+      const results = await Promise.allSettled(ids.map((id) => apiClient.delete(`/academic-years/${id}`)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      load();
+      if (failed === 0) toast.success(`${ok} academic year${ok === 1 ? "" : "s"} moved to trash`);
+      else if (ok === 0) toast.error("Failed to move to trash");
+      else toast.success(`${ok} moved to trash; ${failed} failed`);
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkDeleteLoading(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
@@ -132,10 +178,32 @@ export function AcademicYearsPage() {
           </button>
         </div>
       ) : (
+        <>
+          {selectedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
+              <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+              <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+              <Button type="button" variant="danger" onClick={() => setBulkDeleteOpen(true)}>
+                Move selected to trash
+              </Button>
+            </div>
+          )}
         <div className="rounded border border-border bg-surface overflow-hidden">
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                <th className="w-10 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                    className="rounded border-border-strong focus:ring-focus-ring"
+                  />
+                </th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Active</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
@@ -143,7 +211,16 @@ export function AcademicYearsPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((y) => (
-                <tr key={y.id}>
+                <tr key={y.id} className={selectedIds.has(y.id) ? "bg-primary-muted/30" : ""}>
+                  <td className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(y.id)}
+                      onChange={() => toggleSelect(y.id)}
+                      aria-label={`Select ${y.name}`}
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </td>
                   <td className="px-4 py-2 text-foreground">{y.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{y.isActive ? "Yes" : "No"}</td>
                   <td className="px-4 py-2 text-right">
@@ -164,6 +241,7 @@ export function AcademicYearsPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Academic Year" : "Add Academic Year"}>
@@ -191,6 +269,19 @@ export function AcademicYearsPage() {
             </Dialog.Close>
             <Button type="button" variant="danger" onClick={handleDeleteConfirm} disabled={deleteLoading}>
               {deleteLoading ? "…" : "Move to trash"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <Dialog.Content title="Move selected to trash" description={`${selectedIds.size} academic year${selectedIds.size === 1 ? "" : "s"} will be moved to Trash. You can restore them from the Trash page.`}>
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" variant="danger" onClick={handleBulkDeleteConfirm} disabled={bulkDeleteLoading}>
+              {bulkDeleteLoading ? "…" : "Move to trash"}
             </Button>
           </div>
         </Dialog.Content>
