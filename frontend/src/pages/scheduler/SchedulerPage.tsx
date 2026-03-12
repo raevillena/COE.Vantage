@@ -33,6 +33,7 @@ import {
 import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOverlay";
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
@@ -185,19 +186,17 @@ function SchedulerLayout({
   renderFooter,
 }: SchedulerLayoutProps) {
   return (
-    <div
-      className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface"
-    >
+    <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface min-h-[48vh]">
       <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
         {renderCurriculum()}
       </aside>
       <main
-        className="order-1 xl:order-none 2xl:order-none xl:col-span-1 2xl:col-span-1 min-h-0 overflow-hidden flex flex-col p-3 min-h-[50vh] 2xl:min-h-0 xl:[grid-column:2] xl:[grid-row:1] 2xl:[grid-column:2] 2xl:[grid-row:1]"
+        className="order-1 xl:order-none 2xl:order-none xl:col-span-1 2xl:col-span-1 min-h-0 overflow-hidden flex flex-col p-3 min-h-[40vh] xl:[grid-column:2] xl:[grid-row:1] 2xl:[grid-column:2] 2xl:[grid-row:1]"
         style={{ display: "grid", gridTemplateRows: "auto 1fr" }}
       >
         {renderMain()}
       </main>
-      <aside className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 p-3 min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
+      <aside className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 p-3 min-h-[16rem] 2xl:min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
         {renderAssignment()}
       </aside>
       {renderFooter()}
@@ -1057,7 +1056,7 @@ export function SchedulerPage() {
   const scheduleHourEnd = showLateHours ? SCHEDULE_HOUR_END_FULL : SCHEDULE_HOUR_END_DEFAULT;
 
   return (
-    <div className="flex flex-col min-h-[400px] h-auto overflow-y-auto">
+    <div className="flex flex-col min-h-[55vh] h-auto overflow-y-auto">
       <h1 className="text-2xl font-semibold text-foreground mb-4 shrink-0">Scheduler</h1>
       <div className="mb-4 flex flex-col gap-3 shrink-0 w-full 2xl:flex-row 2xl:items-end 2xl:justify-between">
         {/* Filters group */}
@@ -1124,19 +1123,14 @@ export function SchedulerPage() {
           {viewMode === "faculty" && (
             <div className="min-w-[180px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
-              <Select.Root value={selectedFacultyId || "__none__"} onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}>
-                <Select.Trigger aria-label="Faculty" className="w-full">
-                  <Select.Value placeholder="Select faculty" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">Select faculty</Select.Item>
-                  {faculties.map((f) => (
-                    <Select.Item key={f.id} value={f.id}>
-                      {f.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchableSelect
+                options={faculties.map((f) => ({ value: f.id, label: f.name }))}
+                value={selectedFacultyId || "__none__"}
+                onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
+                noneOption={{ value: "__none__", label: "Select faculty" }}
+                placeholder="Search faculty…"
+                aria-label="Faculty"
+              />
             </div>
           )}
         </div>
@@ -1292,7 +1286,7 @@ export function SchedulerPage() {
               {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground mb-2">Class schedule</h2>}
               {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground mb-2">Faculty schedule</h2>}
             </div>
-            <div className="min-h-0 flex flex-col overflow-hidden w-full min-w-0 overflow-x-auto">
+            <div className="flex flex-col overflow-hidden w-full min-w-0 overflow-x-auto min-h-[22rem]">
               {loading ? (
                 <div className="flex-1 flex items-center justify-center rounded border border-border bg-surface" aria-busy="true">
                   <Spinner />
@@ -1534,42 +1528,35 @@ export function SchedulerPage() {
             </>
           )}
           renderFooter={() => (academicYearId ? (
-            <section className="order-4 xl:order-none 2xl:order-none border-t border-border p-3 min-h-0 min-w-0 overflow-hidden xl:[grid-column:1/3] xl:[grid-row:3] 2xl:[grid-column:1/4] 2xl:[grid-row:2]">
-              <div className="grid gap-3 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <section className="order-4 xl:order-none 2xl:order-none border-t border-border p-3 min-h-[220px] 2xl:min-h-[280px] min-w-0 overflow-hidden xl:[grid-column:1/3] xl:[grid-row:3] 2xl:[grid-column:1/4] 2xl:[grid-row:2]">
+              <div className="grid gap-3 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] h-full min-h-[220px] 2xl:min-h-[260px]">
                 {/* Room availability (left) */}
-                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-0">
+                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-[250px]">
                   <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Room availability</h3>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
                     <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Room</label>
-                      <Select.Root
+                      <SearchableSelect
+                        options={rooms.map((r) => ({ value: r.id, label: `${r.name}${r.isLab ? " (Lab)" : ""} — cap. ${r.capacity}` }))}
                         value={selectedRoomId || "__none__"}
                         onValueChange={(v) => setSelectedRoomId(v === "__none__" ? "" : v)}
-                      >
-                        <Select.Trigger aria-label="Select room to preview" className="w-full">
-                          <Select.Value placeholder="Select room" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="__none__">Select room</Select.Item>
-                          {rooms.map((r) => (
-                            <Select.Item key={r.id} value={r.id}>
-                              {r.name}
-                              {r.isLab ? " (Lab)" : ""} — cap. {r.capacity}
-                            </Select.Item>
-                          ))}
-                        </Select.Content>
-                      </Select.Root>
+                        noneOption={{ value: "__none__", label: "Select room" }}
+                        placeholder="Search room…"
+                        aria-label="Select room to preview"
+                      />
                     </div>
                     {selectedRoomId && (
                       <span className="text-xs text-foreground-muted">
                         {rooms.find((r) => r.id === selectedRoomId)?.name} · same year &amp; semester as above
                       </span>
                     )}
-                    {selectedRoomId && user?.role === "CHAIRMAN" && (() => {
+                    {selectedRoomId && (() => {
                       const room = rooms.find((r) => r.id === selectedRoomId);
-                      const isClosed = room?.controlDepartmentId && (roomAvailabilityMap[selectedRoomId] !== true);
-                      const canOpen = room?.controlDepartmentId && user.departmentId === room.controlDepartmentId;
-                      if (!canOpen || !isClosed) return null;
+                      const isOpen = roomAvailabilityMap[selectedRoomId] === true;
+                      const chairmanControls = user?.role === "CHAIRMAN" && room?.controlDepartmentId && user.departmentId === room.controlDepartmentId;
+                      const adminControls = user?.role === "ADMIN";
+                      const canControl = chairmanControls || adminControls;
+                      if (!canControl || !room?.controlDepartmentId) return null;
                       return (
                         <Button
                           type="button"
@@ -1582,20 +1569,20 @@ export function SchedulerPage() {
                               await apiClient.patch(`/rooms/${selectedRoomId}/availability`, {
                                 academicYearId,
                                 semester,
-                                isOpen: true,
+                                isOpen: !isOpen,
                               });
-                              setRoomAvailabilityMap((prev) => ({ ...prev, [selectedRoomId]: true }));
+                              setRoomAvailabilityMap((prev) => ({ ...prev, [selectedRoomId]: !isOpen }));
                               const params = new URLSearchParams({ academicYearId, semester: String(semester) });
                               const { data } = await apiClient.get<Record<string, boolean>>(`/rooms/availability-map?${params}`);
                               setRoomAvailabilityMap(data ?? {});
                             } catch (err) {
-                              toast.error(getApiErrorMessage(err, "Failed to open room"));
+                              toast.error(getApiErrorMessage(err, isOpen ? "Failed to close room" : "Failed to open room"));
                             } finally {
                               setOpeningRoom(false);
                             }
                           }}
                         >
-                          {openingRoom ? "…" : "Open room for other departments"}
+                          {openingRoom ? "…" : isOpen ? "Close room (only control dept can assign)" : "Open room for other departments"}
                         </Button>
                       );
                     })()}
@@ -1625,27 +1612,19 @@ export function SchedulerPage() {
                 </div>
 
                 {/* Faculty schedule preview (right) */}
-                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-0">
+                <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-[250px]">
                   <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Faculty schedule</h3>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
                     <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Faculty</label>
-                      <Select.Root
+                      <SearchableSelect
+                        options={faculties.map((f) => ({ value: f.id, label: f.name }))}
                         value={overlayFacultyId || "__none__"}
                         onValueChange={(v) => setOverlayFacultyId(v === "__none__" ? "" : v)}
-                      >
-                        <Select.Trigger aria-label="Select faculty to preview" className="w-full">
-                          <Select.Value placeholder="Select faculty" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Item value="__none__">Select faculty</Select.Item>
-                          {faculties.map((f) => (
-                            <Select.Item key={f.id} value={f.id}>
-                              {f.name}
-                            </Select.Item>
-                          ))}
-                        </Select.Content>
-                      </Select.Root>
+                        noneOption={{ value: "__none__", label: "Select faculty" }}
+                        placeholder="Search faculty…"
+                        aria-label="Select faculty to preview"
+                      />
                     </div>
                   </div>
                   {overlayFacultyId ? (

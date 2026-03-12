@@ -4,7 +4,7 @@ import type { Subject } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
-import { Select } from "../../components/ui/select";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import {
@@ -389,31 +389,25 @@ export function SubjectsPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
-              <Select.Root value={form.curriculumId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, curriculumId: v === "__none__" ? "" : v }))}>
-                <Select.Trigger aria-label="Curriculum">
-                  <Select.Value placeholder="No curriculum" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">No curriculum</Select.Item>
-                  {curricula.map((c) => (
-                    <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchableSelect
+                options={curricula.map((c) => ({ value: c.id, label: c.name }))}
+                value={form.curriculumId || "__none__"}
+                onValueChange={(v) => setForm((f) => ({ ...f, curriculumId: v === "__none__" ? "" : v }))}
+                noneOption={{ value: "__none__", label: "No curriculum" }}
+                placeholder="Search curricula…"
+                aria-label="Curriculum"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
-              <Select.Root value={form.departmentId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}>
-                <Select.Trigger aria-label="Department">
-                  <Select.Value placeholder="No department" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">No department</Select.Item>
-                  {departments.map((d) => (
-                    <Select.Item key={d.id} value={d.id}>{d.name}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchableSelect
+                options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                value={form.departmentId || "__none__"}
+                onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}
+                noneOption={{ value: "__none__", label: "No department" }}
+                placeholder="Search departments…"
+                aria-label="Department"
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>

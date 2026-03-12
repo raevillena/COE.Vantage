@@ -1,11 +1,36 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { AssignmentRequest } from "../../types/api";
+import type { AssignmentRequest, FacultyLoad } from "../../types/api";
 import { getApiErrorMessage } from "../../types/api";
 import toast from "react-hot-toast";
 import { Button } from "../../components/ui/button";
+import { Dialog } from "../../components/ui/dialog";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
+import { useAppSelector } from "../../store/hooks";
+
+/** Map a request to a FacultyLoad for the schedule grid (shows as "Awaiting approval" when pending). */
+function requestToDisplayLoad(r: AssignmentRequest): FacultyLoad {
+  return {
+    id: `pending-${r.id}`,
+    facultyId: r.facultyId,
+    subjectId: r.subjectId,
+    studentClassId: r.studentClassId,
+    roomId: r.roomId,
+    roomDisplayName: r.roomDisplayName ?? null,
+    dayOfWeek: r.dayOfWeek,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    semester: r.semester,
+    academicYearId: r.academicYearId,
+    faculty: r.faculty ? { id: r.faculty.id, name: r.faculty.name, email: r.faculty.email ?? "" } : undefined,
+    subject: r.subject ? { id: r.subject.id, code: r.subject.code, name: r.subject.name, units: r.subject.units ?? 0, isLab: r.subject.isLab ?? false } : undefined,
+    studentClass: r.studentClass ? { id: r.studentClass.id, name: r.studentClass.name, yearLevel: 0, studentCount: 0 } : undefined,
+    room: r.room ? { id: r.room.id, name: r.room.name, capacity: r.room.capacity ?? 0, isLab: r.room.isLab ?? false } : undefined,
+    pendingApproval: r.status === "PENDING",
+  };
+}
 
 const DAY_NAMES: Record<number, string> = {
   1: "Mon",
@@ -28,17 +53,23 @@ function roomDisplay(r: AssignmentRequest): string {
 }
 
 export function RequestsPage() {
+  const user = useAppSelector((s) => s.auth.user);
   const [list, setList] = useState<AssignmentRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("PENDING");
+  const [statusFilter, setStatusFilter] = useState<string>("__all__");
+  const [scopeFilter, setScopeFilter] = useState<"all" | "mine" | "other">("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewRequest, setPreviewRequest] = useState<AssignmentRequest | null>(null);
+  const [scheduleLoads, setScheduleLoads] = useState<FacultyLoad[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      // "__all__" = show all statuses (don't send status param); Radix Select forbids value=""
-      const params = statusFilter && statusFilter !== "__all__" ? { status: statusFilter } : {};
+      const params: Record<string, string> =
+        statusFilter && statusFilter !== "__all__" ? { status: statusFilter } : {};
+      if (scopeFilter !== "all") params.scope = scopeFilter;
       const { data } = await apiClient.get<AssignmentRequest[]>("/assignment-requests", { params });
       setList(Array.isArray(data) ? data : []);
     } catch {
@@ -50,7 +81,26 @@ export function RequestsPage() {
 
   useEffect(() => {
     load();
-  }, [statusFilter]);
+  }, [statusFilter, scopeFilter]);
+
+  // Fetch faculty schedule when preview dialog opens so the approver sees the faculty's week with the request block.
+  useEffect(() => {
+    if (!previewRequest?.facultyId || !previewRequest?.academicYearId) {
+      setScheduleLoads([]);
+      return;
+    }
+    setScheduleLoading(true);
+    const params = new URLSearchParams({
+      facultyId: previewRequest.facultyId,
+      academicYearId: previewRequest.academicYearId,
+      semester: String(previewRequest.semester),
+    });
+    apiClient
+      .get<FacultyLoad[]>(`/faculty-loads?${params}`)
+      .then(({ data }) => setScheduleLoads(Array.isArray(data) ? data : []))
+      .catch(() => setScheduleLoads([]))
+      .finally(() => setScheduleLoading(false));
+  }, [previewRequest?.id, previewRequest?.facultyId, previewRequest?.academicYearId, previewRequest?.semester]);
 
   const handleApprove = async (id: string) => {
     setActionLoading(id);
@@ -106,27 +156,45 @@ export function RequestsPage() {
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold text-foreground">Assignment requests</h1>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-foreground-muted">Status</span>
-          <Select.Root
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v)}
-          >
-            <Select.Trigger className="w-[140px]">
-              <Select.Value />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="PENDING">Pending</Select.Item>
-              <Select.Item value="APPROVED">Approved</Select.Item>
-              <Select.Item value="REJECTED">Rejected</Select.Item>
-              <Select.Item value="__all__">All</Select.Item>
-            </Select.Content>
-          </Select.Root>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-foreground-muted">View</span>
+            <Select.Root value={scopeFilter} onValueChange={(v) => setScopeFilter(v as "all" | "mine" | "other")}>
+              <Select.Trigger className="w-[160px]">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="all">All requests</Select.Item>
+                <Select.Item value="mine">My requests</Select.Item>
+                <Select.Item value="other">Incoming requests</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-foreground-muted">Status</span>
+            <Select.Root value={statusFilter} onValueChange={(v) => setStatusFilter(v)}>
+              <Select.Trigger className="w-[140px]">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="PENDING">Pending</Select.Item>
+                <Select.Item value="APPROVED">Approved</Select.Item>
+                <Select.Item value="REJECTED">Rejected</Select.Item>
+                <Select.Item value="__all__">All</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
       </div>
 
       <p className="text-sm text-foreground-muted">
-        Cross-department assignment requests. When a chairman assigns a faculty from another department, the request appears here for the faculty’s department chairman to approve or reject.
+        {scopeFilter === "mine" ? (
+          <>Requests you created. Track their status here.</>
+        ) : scopeFilter === "other" ? (
+          <>Incoming requests for your department to approve or reject.</>
+        ) : (
+          <>All assignment requests, including yours and others. Use the view dropdown to filter.</>
+        )}
       </p>
 
       {list.length > 0 && (
@@ -172,9 +240,10 @@ export function RequestsPage() {
                 <th className="px-3 py-2 text-left font-medium text-foreground">Time</th>
                 <th className="px-3 py-2 text-left font-medium text-foreground">Requested by</th>
                 <th className="px-3 py-2 text-left font-medium text-foreground">Status</th>
-                {(statusFilter === "PENDING" || statusFilter === "__all__") && (
+                {scopeFilter !== "mine" && (statusFilter === "PENDING" || statusFilter === "__all__") && (
                   <th className="px-3 py-2 text-right font-medium text-foreground">Actions</th>
                 )}
+                <th className="px-3 py-2 text-right font-medium text-foreground w-20">Preview</th>
               </tr>
             </thead>
             <tbody>
@@ -206,9 +275,9 @@ export function RequestsPage() {
                       {r.status}
                     </span>
                   </td>
-                  {(statusFilter === "PENDING" || statusFilter === "__all__") && (
+                  {scopeFilter !== "mine" && (statusFilter === "PENDING" || statusFilter === "__all__") && (
                     <td className="px-3 py-2 text-right">
-                      {r.status === "PENDING" ? (
+                      {r.status === "PENDING" && r.requestedBy?.id !== user?.id ? (
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="primary"
@@ -230,11 +299,154 @@ export function RequestsPage() {
                       )}
                     </td>
                   )}
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewRequest(r)}
+                      className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded"
+                    >
+                      Preview
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {previewRequest && (
+        <Dialog.Root open={!!previewRequest} onOpenChange={(open) => !open && setPreviewRequest(null)}>
+          <Dialog.Content
+            title="Request details"
+            className="!max-w-[min(60rem,95vw)] max-h-[90vh] overflow-hidden flex flex-col"
+            aria-describedby="request-preview-description"
+          >
+            <p id="request-preview-description" className="sr-only">
+              Request details and faculty schedule with this request shown as awaiting approval when pending.
+            </p>
+
+            {/* Scrollable area: schedule table + request details */}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            {/* Class schedule: confirmed loads + this request as "Awaiting approval" when pending */}
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-foreground mb-2">
+                Faculty schedule: {previewRequest.faculty?.name ?? "—"}
+                {previewRequest.academicYear?.name ? ` · ${previewRequest.academicYear.name}` : ""} · Sem {previewRequest.semester}
+              </h3>
+              {scheduleLoading ? (
+                <div className="flex justify-center py-8 rounded border border-border bg-surface-muted/30">
+                  <Spinner />
+                </div>
+              ) : (
+                <div className="rounded border border-border overflow-x-auto">
+                  <ScheduleGrid
+                    loads={
+                      previewRequest.status === "PENDING"
+                        ? [...scheduleLoads, requestToDisplayLoad(previewRequest)]
+                        : scheduleLoads
+                    }
+                    readOnly
+                    wrapInScroll={false}
+                    draggableIdPrefix="request-preview"
+                  />
+                </div>
+              )}
+            </div>
+
+            <dl className="mt-6 space-y-2 text-sm border-t border-border pt-4">
+              <div>
+                <dt className="font-medium text-foreground-muted">Faculty</dt>
+                <dd className="text-foreground">{previewRequest.faculty?.name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Subject</dt>
+                <dd className="text-foreground">
+                  {previewRequest.subject ? `${previewRequest.subject.code} ${previewRequest.subject.name}` : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Class</dt>
+                <dd className="text-foreground">{previewRequest.studentClass?.name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Room</dt>
+                <dd className="text-foreground">{roomDisplay(previewRequest)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Time</dt>
+                <dd className="text-foreground">{formatTime(previewRequest)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Semester / Academic year</dt>
+                <dd className="text-foreground">
+                  {previewRequest.semester}
+                  {previewRequest.academicYear?.name ? ` · ${previewRequest.academicYear.name}` : ""}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Requested by</dt>
+                <dd className="text-foreground">
+                  {previewRequest.requestedBy?.name ?? "—"}
+                  {previewRequest.requestedBy?.department?.name && (
+                    <span className="text-foreground-muted"> ({previewRequest.requestedBy.department.name})</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground-muted">Status</dt>
+                <dd>
+                  <span
+                    className={
+                      previewRequest.status === "PENDING"
+                        ? "text-amber-600"
+                        : previewRequest.status === "APPROVED"
+                          ? "text-green-600"
+                          : "text-red-600"
+                    }
+                  >
+                    {previewRequest.status}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4 flex-shrink-0">
+              {previewRequest.status === "PENDING" && previewRequest.requestedBy?.id !== user?.id ? (
+                <>
+                  <Dialog.Close asChild>
+                    <Button type="button" variant="secondary">Cancel</Button>
+                  </Dialog.Close>
+                  <Button
+                    variant="secondary"
+                    disabled={actionLoading !== null}
+                    onClick={async () => {
+                      await handleReject(previewRequest.id);
+                      setPreviewRequest(null);
+                    }}
+                  >
+                    {actionLoading === previewRequest.id ? <Spinner className="h-4 w-4" /> : "Reject"}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={actionLoading !== null}
+                    onClick={async () => {
+                      await handleApprove(previewRequest.id);
+                      setPreviewRequest(null);
+                    }}
+                  >
+                    {actionLoading === previewRequest.id ? <Spinner className="h-4 w-4" /> : "Approve"}
+                  </Button>
+                </>
+              ) : (
+                <Dialog.Close asChild>
+                  <Button type="button" variant="secondary">Close</Button>
+                </Dialog.Close>
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
       )}
     </div>
   );

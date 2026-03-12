@@ -21,7 +21,8 @@ export async function create(req: Request, res: Response): Promise<void> {
 
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateRoomBody;
-  const room = await roomService.updateRoom(req.params.id, body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : { role: "", departmentId: null };
+  const room = await roomService.updateRoom(req.params.id, body, caller);
   res.json(room);
 }
 

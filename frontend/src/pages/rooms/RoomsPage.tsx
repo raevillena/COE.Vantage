@@ -4,7 +4,7 @@ import type { Room } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
-import { Select } from "../../components/ui/select";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
@@ -16,7 +16,7 @@ export function RoomsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", capacity: 20, hasComputer: false, isLab: false, hasAC: false, departmentId: "", controlDepartmentId: "" });
+  const [form, setForm] = useState<{ name: string; capacity: number | ""; hasComputer: boolean; isLab: boolean; hasAC: boolean; departmentId: string; controlDepartmentId: string }>({ name: "", capacity: 20, hasComputer: false, isLab: false, hasAC: false, departmentId: "", controlDepartmentId: "" });
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -24,6 +24,17 @@ export function RoomsPage() {
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Chairman can edit details only for rooms in their department; admin/dean/officer can always edit details.
+  const editingRoom = editingId ? list.find((r) => r.id === editingId) : null;
+  const canEditRoomDetails =
+    user?.role === "ADMIN" ||
+    user?.role === "DEAN" ||
+    user?.role === "OFFICER" ||
+    (user?.role === "CHAIRMAN" && editingRoom?.departmentId === user?.departmentId);
+  // Only admin can change control for any room; chairman can change control only for rooms in their department.
+  const canEditControl =
+    user?.role === "ADMIN" || (user?.role === "CHAIRMAN" && editingRoom?.departmentId === user?.departmentId);
 
   const load = async () => {
     setLoading(true);
@@ -64,12 +75,29 @@ export function RoomsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Chairman can only submit control department; backend will ignore other fields.
+    const chairmanOnlyControl = editingId && canEditControl && !canEditRoomDetails;
+    if (chairmanOnlyControl) {
+      try {
+        await apiClient.patch(`/rooms/${editingId}`, {
+          controlDepartmentId: form.controlDepartmentId || null,
+        });
+        toast.success("Room updated");
+        setModalOpen(false);
+        load();
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
+        toast.error(msg);
+      }
+      return;
+    }
     const nameTrimmed = form.name.trim();
     if (!nameTrimmed) {
       toast.error("Name is required");
       return;
     }
-    if (form.capacity < 1) {
+    const capacityNum = Number(form.capacity);
+    if (form.capacity === "" || capacityNum < 1) {
       toast.error("Capacity must be at least 1");
       return;
     }
@@ -81,6 +109,7 @@ export function RoomsPage() {
       const payload = {
         ...form,
         name: nameTrimmed,
+        capacity: capacityNum,
         controlDepartmentId: form.controlDepartmentId || null,
       };
       if (editingId) {
@@ -174,7 +203,9 @@ export function RoomsPage() {
     <div>
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-foreground">Rooms</h1>
-        <Button type="button" onClick={openCreate}>Add Room</Button>
+        {canEditRoomDetails && (
+          <Button type="button" onClick={openCreate}>Add Room</Button>
+        )}
       </div>
       {list.length > 0 && (
         <div className="mb-4 relative max-w-md">
@@ -197,8 +228,8 @@ export function RoomsPage() {
         </div>
       ) : list.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No rooms yet. Add one to get started.</p>
-          <Button type="button" onClick={openCreate}>Add Room</Button>
+          <p className="text-foreground-muted mb-4">No rooms yet.{canEditRoomDetails ? " Add one to get started." : ""}</p>
+          {canEditRoomDetails && <Button type="button" onClick={openCreate}>Add Room</Button>}
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
@@ -286,54 +317,56 @@ export function RoomsPage() {
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
         <Dialog.Content title={editingId ? "Edit Room" : "Add Room"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input type="number" min={1} placeholder="Capacity" value={form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Name</label>
+              <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} disabled={!canEditRoomDetails} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Capacity</label>
+              <input type="number" min={1} placeholder="Capacity" value={form.capacity === "" ? "" : form.capacity} onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value === "" ? "" : Number(e.target.value) }))} disabled={!canEditRoomDetails} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed" />
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
-              <Select.Root value={form.departmentId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}>
-                <Select.Trigger aria-label="Department">
-                  <Select.Value placeholder="Select department" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">Select department</Select.Item>
-                  {departments.map((d) => (
-                    <Select.Item key={d.id} value={d.id}>{d.name}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchableSelect
+                options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                value={form.departmentId || "__none__"}
+                onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}
+                noneOption={{ value: "__none__", label: "Select department" }}
+                placeholder="Search departments…"
+                disabled={!canEditRoomDetails}
+                aria-label="Department"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Control department</label>
-              <Select.Root value={form.controlDepartmentId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, controlDepartmentId: v === "__none__" ? "" : v }))}>
-                <Select.Trigger aria-label="Control department">
-                  <Select.Value placeholder="None (open for all)" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">None (open for all)</Select.Item>
-                  {departments.map((d) => (
-                    <Select.Item key={d.id} value={d.id}>{d.name}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
+              <SearchableSelect
+                options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                value={form.controlDepartmentId || "__none__"}
+                onValueChange={(v) => setForm((f) => ({ ...f, controlDepartmentId: v === "__none__" ? "" : v }))}
+                noneOption={{ value: "__none__", label: "None (open for all)" }}
+                placeholder="Search departments…"
+                disabled={!canEditControl}
+                aria-label="Control department"
+              />
               <p className="mt-0.5 text-xs text-foreground-muted">When set, room is closed by default each term; only this department can assign until they open it.</p>
             </div>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.isLab} onChange={(e) => setForm((f) => ({ ...f, isLab: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />
+              <input type="checkbox" checked={form.isLab} onChange={(e) => setForm((f) => ({ ...f, isLab: e.target.checked }))} disabled={!canEditRoomDetails} className="rounded border-border-strong focus:ring-focus-ring disabled:opacity-60 disabled:cursor-not-allowed" />
               <span>Lab</span>
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.hasComputer} onChange={(e) => setForm((f) => ({ ...f, hasComputer: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />
+              <input type="checkbox" checked={form.hasComputer} onChange={(e) => setForm((f) => ({ ...f, hasComputer: e.target.checked }))} disabled={!canEditRoomDetails} className="rounded border-border-strong focus:ring-focus-ring disabled:opacity-60 disabled:cursor-not-allowed" />
               <span>Has computer</span>
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.hasAC} onChange={(e) => setForm((f) => ({ ...f, hasAC: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />
+              <input type="checkbox" checked={form.hasAC} onChange={(e) => setForm((f) => ({ ...f, hasAC: e.target.checked }))} disabled={!canEditRoomDetails} className="rounded border-border-strong focus:ring-focus-ring disabled:opacity-60 disabled:cursor-not-allowed" />
               <span>Has AC</span>
             </label>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">Cancel</Button>
               </Dialog.Close>
-              <Button type="submit">Save</Button>
+              {(canEditRoomDetails || canEditControl) && <Button type="submit">Save</Button>}
             </div>
           </form>
         </Dialog.Content>

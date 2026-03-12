@@ -63,21 +63,48 @@ export async function createRoom(body: CreateRoomBody) {
   });
 }
 
-export async function updateRoom(id: string, body: UpdateRoomBody) {
+/** Caller: who is performing the update. CHAIRMAN can only edit rooms in their own department (details + control). DEAN/OFFICER cannot change control; ADMIN can change all. */
+export async function updateRoom(
+  id: string,
+  body: UpdateRoomBody,
+  caller: { role: string; departmentId: string | null }
+) {
   const room = await prisma.room.findUnique({ where: { id } });
   if (!room) throw notFound("Room not found");
   if (room.isDeleted) throw badRequest("Cannot update a deleted room. Restore it from Trash first.");
-  if (body.departmentId) {
-    const dept = await prisma.department.findUnique({ where: { id: body.departmentId } });
+
+  const isChairmanOwnRoom = caller.role === "CHAIRMAN" && caller.departmentId != null && room.departmentId === caller.departmentId;
+
+  let data: UpdateRoomBody;
+  if (caller.role === "CHAIRMAN") {
+    if (!isChairmanOwnRoom) {
+      throw forbidden("You can only edit rooms in your own department");
+    }
+    // Chairman can edit details and control for their department's rooms, but cannot reassign the room to another department.
+    const { departmentId: _drop, ...rest } = body;
+    data = rest;
+  } else if (caller.role === "DEAN" || caller.role === "OFFICER") {
+    // Dean and officer can change details but not control department.
+    const { controlDepartmentId: _drop, ...rest } = body;
+    data = rest;
+  } else if (caller.role === "ADMIN") {
+    data = body;
+  } else {
+    throw forbidden("You cannot update this room");
+  }
+
+  if (data.departmentId) {
+    const dept = await prisma.department.findUnique({ where: { id: data.departmentId } });
     if (!dept) throw badRequest("Department not found");
   }
-  if (body.controlDepartmentId !== undefined && body.controlDepartmentId !== null) {
-    const controlDept = await prisma.department.findUnique({ where: { id: body.controlDepartmentId } });
+  if (data.controlDepartmentId !== undefined && data.controlDepartmentId !== null) {
+    const controlDept = await prisma.department.findUnique({ where: { id: data.controlDepartmentId } });
     if (!controlDept || controlDept.isDeleted) throw badRequest("Control department not found");
   }
+
   return prisma.room.update({
     where: { id },
-    data: body,
+    data,
     include: {
       department: { select: { id: true, name: true, code: true } },
       controlDepartment: { select: { id: true, name: true, code: true } },

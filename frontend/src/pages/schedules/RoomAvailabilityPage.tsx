@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, Room } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 
@@ -43,15 +44,14 @@ export function RoomAvailabilityPage() {
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
-          <Select.Root value={academicYearId || "__none__"} onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}>
-            <Select.Trigger aria-label="Academic year" className="w-full">
-              <Select.Value placeholder="Academic Year" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="__none__">Academic Year</Select.Item>
-              {academicYears.map((y) => <Select.Item key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</Select.Item>)}
-            </Select.Content>
-          </Select.Root>
+          <SearchableSelect
+            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            value={academicYearId || "__none__"}
+            onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
+            noneOption={{ value: "__none__", label: "Academic Year" }}
+            placeholder="Search academic year…"
+            aria-label="Academic year"
+          />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
@@ -67,15 +67,14 @@ export function RoomAvailabilityPage() {
         </div>
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
-          <Select.Root value={selectedRoomId || "__none__"} onValueChange={(v) => setSelectedRoomId(v === "__none__" ? "" : v)}>
-            <Select.Trigger aria-label="Room">
-              <Select.Value placeholder="Select room" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="__none__">Select room</Select.Item>
-              {rooms.map((r) => <Select.Item key={r.id} value={r.id}>{r.name} (cap: {r.capacity}{r.isLab ? ", Lab" : ""})</Select.Item>)}
-            </Select.Content>
-          </Select.Root>
+          <SearchableSelect
+            options={rooms.map((r) => ({ value: r.id, label: `${r.name} (cap: ${r.capacity}${r.isLab ? ", Lab" : ""})` }))}
+            value={selectedRoomId || "__none__"}
+            onValueChange={(v) => setSelectedRoomId(v === "__none__" ? "" : v)}
+            noneOption={{ value: "__none__", label: "Select room" }}
+            placeholder="Search room…"
+            aria-label="Room"
+          />
         </div>
       </div>
       {room && <p className="text-foreground-muted mb-2">{room.name} — Capacity: {room.capacity} {room.isLab ? "— Lab" : ""}</p>}

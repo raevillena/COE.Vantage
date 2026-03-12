@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 
@@ -41,15 +42,14 @@ export function FacultySchedulePage() {
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
-          <Select.Root value={academicYearId || "__none__"} onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}>
-            <Select.Trigger aria-label="Academic year" className="w-full">
-              <Select.Value placeholder="Academic Year" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="__none__">Academic Year</Select.Item>
-              {academicYears.map((y) => <Select.Item key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</Select.Item>)}
-            </Select.Content>
-          </Select.Root>
+          <SearchableSelect
+            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            value={academicYearId || "__none__"}
+            onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
+            noneOption={{ value: "__none__", label: "Academic Year" }}
+            placeholder="Search academic year…"
+            aria-label="Academic year"
+          />
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
@@ -65,15 +65,14 @@ export function FacultySchedulePage() {
         </div>
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
-          <Select.Root value={selectedFacultyId || "__none__"} onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}>
-            <Select.Trigger aria-label="Faculty">
-              <Select.Value placeholder="Select faculty" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="__none__">Select faculty</Select.Item>
-              {faculties.map((f) => <Select.Item key={f.id} value={f.id}>{f.name}</Select.Item>)}
-            </Select.Content>
-          </Select.Root>
+          <SearchableSelect
+            options={faculties.map((f) => ({ value: f.id, label: f.name }))}
+            value={selectedFacultyId || "__none__"}
+            onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
+            noneOption={{ value: "__none__", label: "Select faculty" }}
+            placeholder="Search faculty…"
+            aria-label="Faculty"
+          />
         </div>
       </div>
       {loading ? (

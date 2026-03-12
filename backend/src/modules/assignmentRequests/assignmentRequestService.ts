@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma/client.js";
+import type { Prisma } from "@prisma/client";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
@@ -75,19 +76,30 @@ export async function listAssignmentRequests(query: ListAssignmentRequestsQuery,
     return list;
   }
 
-  const where: {
-    status?: "PENDING" | "APPROVED" | "REJECTED";
-    faculty?: { departmentId: string | null };
-  } = {};
+  const where: Record<string, unknown> = {};
   if (query.status) where.status = query.status;
 
-  if (caller.role === "CHAIRMAN" && caller.departmentId) {
-    // Incoming requests: faculty is in the chairman's department.
-    where.faculty = { departmentId: caller.departmentId };
+  const scope = query.scope ?? "all";
+
+  if (scope === "mine") {
+    where.requestedById = caller.id;
+  } else if (scope === "other") {
+    where.requestedById = { not: caller.id };
+    if (caller.role === "CHAIRMAN" && caller.departmentId) {
+      where.faculty = { departmentId: caller.departmentId };
+    }
+  } else {
+    // all: chairman sees incoming to their dept + their own requests; admin/dean see everything
+    if (caller.role === "CHAIRMAN" && caller.departmentId) {
+      where.OR = [
+        { faculty: { departmentId: caller.departmentId } },
+        { requestedById: caller.id },
+      ];
+    }
   }
 
   const list = await prisma.crossDepartmentLoadRequest.findMany({
-    where,
+    where: where as Prisma.CrossDepartmentLoadRequestWhereInput,
     include: {
       faculty: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
       subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },

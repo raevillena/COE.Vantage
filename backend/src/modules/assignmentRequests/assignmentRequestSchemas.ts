@@ -20,6 +20,8 @@ export const createAssignmentRequestSchema = z.object({
 export const listAssignmentRequestsQuerySchema = z.object({
   query: z.object({
     status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+    /** all = mine + others (default); mine = only my requests; other = only external/others' requests. */
+    scope: z.enum(["all", "mine", "other"]).optional(),
     /** When provided with academicYearId and semester, return PENDING requests for this class (for schedule display). */
     studentClassId: z.string().uuid().optional(),
     academicYearId: z.string().uuid().optional(),
