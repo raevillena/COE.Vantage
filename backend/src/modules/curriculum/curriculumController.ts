@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import * as curriculumService from "./curriculumService.js";
 import * as subjectService from "../subjects/subjectService.js";
-import * as importFromImage from "./importFromImage.js";
+import * as applyImportModule from "./applyImport.js";
 import type { CreateCurriculumBody, UpdateCurriculumBody, ApplyImportBody } from "./curriculumSchemas.js";
 import { forbidden } from "../../utils/errors.js";
 
@@ -54,18 +54,6 @@ export async function permanentDelete(req: Request, res: Response): Promise<void
   res.status(204).send();
 }
 
-/** Extract subjects from image (no DB write). Expects req.file from multer (memoryStorage adds buffer). */
-export async function extractFromImage(req: Request, res: Response): Promise<void> {
-  const file = req.file as (Express.Multer.File & { buffer?: Buffer }) | undefined;
-  const buffer = file?.buffer;
-  if (!buffer) {
-    res.status(400).json({ error: "No image file uploaded. Use multipart field 'image'." });
-    return;
-  }
-  const result = await importFromImage.extractFromImage(buffer, file.mimetype || "image/png");
-  res.json(result);
-}
-
 /** Apply imported subjects (create/update). Body: { curriculumId, subjects }. */
 export async function applyImport(req: Request, res: Response): Promise<void> {
   const { curriculumId, subjects } = req.body as ApplyImportBody;
@@ -75,7 +63,7 @@ export async function applyImport(req: Request, res: Response): Promise<void> {
       throw forbidden("You can only import subjects into curricula for your own department.");
     }
   }
-  const result = await importFromImage.applyImport(curriculumId, subjects);
+  const result = await applyImportModule.applyImport(curriculumId, subjects);
   res.json(result);
 }
 

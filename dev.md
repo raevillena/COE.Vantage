@@ -411,8 +411,8 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 **Behavior (shared)**
 
-- Curriculum page offers three buttons: "Import from image", "Import from IUSIS", "Import from clipboard". Each opens the same import dialog with a source tab (From image / From IUSIS / From clipboard).
-- User provides the chosen input (file, HTML paste, or plain-text paste) and clicks Extract / Parse HTML / Parse clipboard.
+- Curriculum page offers two buttons: "Import from IUSIS", "Import from clipboard". Each opens the same import dialog with a source tab (From IUSIS / From clipboard).
+- User provides the chosen input (HTML paste or plain-text paste) and clicks Parse HTML / Parse clipboard.
 - Import review table shows parsed subjects with code, name, units, year, semester, lab; user can edit rows, add/remove, then choose a curriculum and click "Apply import".
 - Apply creates/updates subjects and assigns them to the selected curriculum with `yearLevel` and `semester` set (`POST /curriculum/apply-import`).
 - Curriculum viewer and builder support semester (column and grouping).
@@ -645,7 +645,6 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
   - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ACCESS_TOKEN_EXPIRY`, `REFRESH_TOKEN_EXPIRY`.
   - `FRONTEND_ORIGIN` (e.g. `http://localhost:5173`) for CORS and password reset link generation.
   - Optional password reset + SMTP settings for emailing reset links.
-  - Optional `OPENAI_API_KEY` for AI features.
 - **Frontend** (`frontend/.env` – sample in `frontend/.env.example`):
   - `VITE_API_URL` — base URL for the backend API (e.g. `http://localhost:4000/api`).
   - `VITE_APP_VERSION` — string shown in the auth footer (e.g. `v1.0.0`); when unset, the UI falls back to `v0.0.0`.

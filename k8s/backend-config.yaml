@@ -27,4 +27,3 @@ stringData:
   # SMTP_USER: ""
   # SMTP_PASS: ""
   # SMTP_FROM: "COE.Vantage <noreply@example.com>"
-  # OPENAI_API_KEY: ""

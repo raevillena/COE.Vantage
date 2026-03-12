@@ -32,14 +32,12 @@ export function CurriculumPage() {
   const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>([]);
   const [viewerLoading, setViewerLoading] = useState(false);
 
-  // Import: image (OCR), IUSIS HTML, or clipboard text — shared two-phase flow
+  // Import: IUSIS HTML or clipboard text — shared two-phase flow
   const [importOpen, setImportOpen] = useState(false);
-  const [importMode, setImportMode] = useState<"image" | "iusis" | "clipboard">("image");
+  const [importMode, setImportMode] = useState<"iusis" | "clipboard">("iusis");
   const [importCurriculumId, setImportCurriculumId] = useState("");
-  const [importFile, setImportFile] = useState<File | null>(null);
   const [importIusisHtml, setImportIusisHtml] = useState("");
   const [importClipboardText, setImportClipboardText] = useState("");
-  const [extracting, setExtracting] = useState(false);
   const [extractedRows, setExtractedRows] = useState<ExtractedSubject[]>([]);
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null);
@@ -158,11 +156,10 @@ export function CurriculumPage() {
     }
   };
 
-  const openImport = useCallback((mode: "image" | "iusis" | "clipboard" = "image") => {
+  const openImport = useCallback((mode: "iusis" | "clipboard" = "iusis") => {
     setImportOpen(true);
     setImportMode(mode);
     setImportCurriculumId(list[0]?.id ?? "");
-    setImportFile(null);
     setImportIusisHtml("");
     setImportClipboardText("");
     setExtractedRows([]);
@@ -205,40 +202,13 @@ export function CurriculumPage() {
     }
   };
 
-  const handleExtract = async () => {
-    if (!importFile) {
-      toast.error("Select an image file first");
-      return;
-    }
-    setExtracting(true);
-    setApplyResult(null);
-    try {
-      const formData = new FormData();
-      formData.append("image", importFile);
-      const { data } = await apiClient.post<{ extracted: ExtractedSubject[] }>(
-        "/curriculum/extract-from-image",
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-      setExtractedRows(data.extracted ?? []);
-      if ((data.extracted?.length ?? 0) === 0) toast.error("No subjects extracted. Try a clearer image.");
-      else toast.success(`Extracted ${data.extracted!.length} subjects. Review and edit below, then Apply import.`);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data?.error
-        ?? (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Extract failed";
-      toast.error(msg);
-    } finally {
-      setExtracting(false);
-    }
-  };
-
   const handleApplyImport = async () => {
     if (!importCurriculumId) {
       toast.error("Select a curriculum");
       return;
     }
     if (extractedRows.length === 0) {
-      toast.error("No subjects to import. Extract from an image first.");
+      toast.error("No subjects to import. Parse from IUSIS or clipboard first.");
       return;
     }
     setApplying(true);
@@ -290,7 +260,6 @@ export function CurriculumPage() {
         <h1 className="text-2xl font-semibold text-foreground">Curriculum</h1>
         {canEdit && (
           <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={() => openImport("image")} disabled={list.length === 0}>Import from image</Button>
             <Button type="button" variant="secondary" onClick={() => openImport("iusis")} disabled={list.length === 0}>Import from IUSIS</Button>
             <Button type="button" variant="secondary" onClick={() => openImport("clipboard")} disabled={list.length === 0}>Import from clipboard</Button>
             <Button type="button" onClick={openCreate}>Add Curriculum</Button>
@@ -515,17 +484,10 @@ export function CurriculumPage() {
       </Dialog.Root>
 
       <Dialog.Root open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setApplyResult(null); }}>
-        <Dialog.Content title="Import curriculum" description="Import from an image (OCR) or paste HTML from the IUSIS curriculum component. Review and apply to save." className="!max-w-[min(70rem,95vw)] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
+        <Dialog.Content title="Import curriculum" description="Import by pasting HTML from the IUSIS curriculum component or plain text from the clipboard. Review and apply to save." className="!max-w-[min(70rem,95vw)] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
           <div className="space-y-4 overflow-y-auto min-h-0">
             <div className="flex flex-wrap gap-3 items-center border-b border-border pb-3">
               <span className="text-sm font-medium text-foreground">Source:</span>
-              <button
-                type="button"
-                onClick={() => { setImportMode("image"); setExtractedRows([]); setApplyResult(null); }}
-                className={`rounded px-3 py-1.5 text-sm font-medium ${importMode === "image" ? "bg-primary text-primary-foreground" : "bg-surface-muted text-foreground-muted hover:bg-surface-hover"}`}
-              >
-                From image
-              </button>
               <button
                 type="button"
                 onClick={() => { setImportMode("iusis"); setExtractedRows([]); setApplyResult(null); }}
@@ -555,22 +517,6 @@ export function CurriculumPage() {
                 </Select.Content>
               </Select.Root>
             </div>
-            {importMode === "image" && (
-              <div className="flex flex-wrap gap-3 items-end">
-                <div className="min-w-[200px]">
-                  <label className="mb-1 block text-sm font-medium text-foreground">Image file</label>
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    className="block w-full text-sm text-foreground file:mr-2 file:rounded file:border-0 file:bg-surface-muted file:px-3 file:py-1.5 file:text-sm"
-                    onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
-                <Button type="button" onClick={handleExtract} disabled={extracting || !importFile}>
-                  {extracting ? "Extracting…" : "Extract"}
-                </Button>
-              </div>
-            )}
             {importMode === "iusis" && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-foreground">Paste IUSIS curriculum HTML</label>
