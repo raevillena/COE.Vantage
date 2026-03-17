@@ -43,6 +43,11 @@ export function DashboardPage() {
               subtitle="Assign teaching loads to faculty and resolve conflicts"
               primary
             />
+            <DashboardCard
+              to="/faculty"
+              title="Faculty"
+              subtitle="View department faculty and set possible subjects to teach"
+            />
           </div>
         </section>
       )}

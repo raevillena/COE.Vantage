@@ -3,7 +3,12 @@ import * as userService from "./userService.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const query = req.query as unknown as ListUsersQuery;
+  const query = { ...(req.query as unknown as ListUsersQuery) };
+  // Chairman sees only users in their department (used by Chairman Faculty page).
+  if (req.user?.role === "CHAIRMAN" && req.user.departmentId) {
+    query.departmentId = req.user.departmentId;
+    if (!query.role) query.role = "FACULTY";
+  }
   const list = await userService.listUsers(query);
   res.json(list);
 }

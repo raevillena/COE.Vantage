@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { Select } from "../../components/ui/select";
+import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
@@ -329,39 +330,48 @@ export function CurriculumPage() {
                           Build
                         </Link>
                       )}
-                      <DropdownMenu.Root>
-                        <DropdownMenu.Trigger asChild>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {canEdit && (
                           <button
                             type="button"
+                            onClick={() => openEdit(c)}
                             className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                            aria-label="More actions"
+                            aria-label={`Edit ${c.name}`}
+                            title="Edit"
                           >
-                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                              <circle cx="12" cy="6" r="1.5" />
-                              <circle cx="12" cy="12" r="1.5" />
-                              <circle cx="12" cy="18" r="1.5" />
-                            </svg>
+                            <Pencil size={20} className="shrink-0" aria-hidden />
                           </button>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Content align="end">
-                          <DropdownMenu.Item onSelect={() => openViewer(c)}>View</DropdownMenu.Item>
-                          {canEdit && (
-                            <>
-                              <DropdownMenu.Item asChild>
-                                <Link to={`/curriculum/${c.id}/build`}>Build</Link>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
-                              <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
-                              <DropdownMenu.Item
-                                onSelect={() => handleDeleteClick(c.id)}
-                                className="text-danger focus:bg-danger-muted focus:text-danger-hover"
-                              >
-                                Move to trash
-                              </DropdownMenu.Item>
-                            </>
-                          )}
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Root>
+                        )}
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger asChild>
+                            <button
+                              type="button"
+                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                              aria-label={`Actions for ${c.name}`}
+                            >
+                              <MoreVertical size={20} className="shrink-0" aria-hidden />
+                            </button>
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item onSelect={() => openViewer(c)}>View</DropdownMenu.Item>
+                            {canEdit && (
+                              <>
+                                <DropdownMenu.Item asChild>
+                                  <Link to={`/curriculum/${c.id}/build`}>Build</Link>
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
+                                <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                  onSelect={() => handleDeleteClick(c.id)}
+                                  className="text-danger focus:bg-danger-muted focus:text-danger-hover"
+                                >
+                                  Move to trash
+                                </DropdownMenu.Item>
+                              </>
+                            )}
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Root>
+                      </div>
                     </div>
                   </td>
                 </tr>

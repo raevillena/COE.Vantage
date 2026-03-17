@@ -4,10 +4,17 @@ import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { store } from "./store/store";
+import { setAccessTokenOnly } from "./store/authSlice";
 import App from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SchedulePaletteProvider } from "./context/SchedulePaletteContext";
 import "./style.css";
+
+if (typeof window !== "undefined") {
+  window.addEventListener("authTokenRefreshed", ((e: CustomEvent<string>) => {
+    store.dispatch(setAccessTokenOnly(e.detail));
+  }) as EventListener);
+}
 
 createRoot(document.getElementById("app")!).render(
   <StrictMode>

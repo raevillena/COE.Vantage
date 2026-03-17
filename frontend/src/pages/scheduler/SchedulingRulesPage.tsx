@@ -15,8 +15,9 @@ import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
 import { Select } from "../../components/ui/select";
 import { Dialog } from "../../components/ui/dialog";
+import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { useAppSelector } from "../../store/hooks";
-import { Edit3, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -291,27 +292,36 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
                   <td className="p-3">{set.isSystem ? "System (default)" : "Custom"}</td>
                   <td className="p-3 text-right">
                     {!set.isSystem && (isAdminPage || isAdmin) && (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button
                           type="button"
-                          variant="ghost"
-                          className="p-1.5"
                           onClick={() => openEdit(set)}
-                          aria-label="Edit rule set"
+                          className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                          aria-label={`Edit ${set.name}`}
                           title="Edit rule set"
                         >
-                          <Edit3 className="h-4 w-4" aria-hidden />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="p-1.5"
-                          onClick={() => handleDeleteSet(set.id)}
-                          aria-label="Delete rule set"
-                          title="Delete rule set"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </Button>
+                          <Pencil size={20} className="shrink-0" aria-hidden />
+                        </button>
+                        <DropdownMenu.Root>
+                          <DropdownMenu.Trigger asChild>
+                            <button
+                              type="button"
+                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                              aria-label={`Actions for ${set.name}`}
+                            >
+                              <MoreVertical size={20} className="shrink-0" aria-hidden />
+                            </button>
+                          </DropdownMenu.Trigger>
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item onSelect={() => openEdit(set)}>Edit rule set</DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              onSelect={() => handleDeleteSet(set.id)}
+                              className="text-danger focus:bg-danger-muted focus:text-danger-hover"
+                            >
+                              Delete rule set
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Root>
                       </div>
                     )}
                   </td>

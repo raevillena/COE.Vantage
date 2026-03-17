@@ -48,8 +48,18 @@ apiClient.interceptors.response.use(
     return apiClient
       .post<{ accessToken: string }>("/auth/refresh")
       .then(({ data }) => {
-        (originalRequest.headers as Record<string, string>).Authorization = `Bearer ${data.accessToken}`;
-        processQueue(null, data.accessToken);
+        const newToken = data.accessToken;
+        setAccessToken(newToken);
+        try {
+          sessionStorage.setItem("accessToken", newToken);
+        } catch {
+          // ignore
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("authTokenRefreshed", { detail: newToken }));
+        }
+        (originalRequest.headers as Record<string, string>).Authorization = `Bearer ${newToken}`;
+        processQueue(null, newToken);
         return apiClient(originalRequest);
       })
       .catch((refreshErr) => {

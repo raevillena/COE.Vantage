@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { Department, UserListItem } from "../../types/api";
 import toast from "react-hot-toast";
+import { MoreVertical, Pencil } from "lucide-react";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
@@ -244,22 +245,35 @@ export function DepartmentsPage() {
                   )}
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
                   <td className="px-4 py-2 text-right">
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger asChild>
-                        <button type="button" className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" aria-label="Actions">
-                          <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="18" r="1.5" /></svg>
+                    <div className="flex items-center justify-end gap-0.5">
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(d)}
+                          className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                          aria-label={`Edit ${d.name}`}
+                          title="Edit"
+                        >
+                          <Pencil size={20} className="shrink-0" aria-hidden />
                         </button>
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item onSelect={() => openViewFaculties(d)}>View faculties</DropdownMenu.Item>
-                        {canManage && (
-                          <>
-                            <DropdownMenu.Item onSelect={() => openEdit(d)}>Edit</DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => handleDeleteClick(d.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
-                          </>
-                        )}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
+                      )}
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                          <button type="button" className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" aria-label={`Actions for ${d.name}`}>
+                            <MoreVertical size={20} className="shrink-0" aria-hidden />
+                          </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onSelect={() => openViewFaculties(d)}>View faculties</DropdownMenu.Item>
+                          {canManage && (
+                            <>
+                              <DropdownMenu.Item onSelect={() => openEdit(d)}>Edit</DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => handleDeleteClick(d.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
+                            </>
+                          )}
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Root>
+                    </div>
                   </td>
                 </tr>
               ))}

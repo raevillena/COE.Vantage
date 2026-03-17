@@ -145,6 +145,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                     <>
                       <NavItem to="/subjects" icon={BookMarked} onClose={onClose}>Subjects</NavItem>
                       <NavItem to="/student-classes" icon={GraduationCap} onClose={onClose}>Student classes</NavItem>
+                      {user?.role === "CHAIRMAN" && <NavItem to="/faculty" icon={Users} onClose={onClose}>Faculty</NavItem>}
                     </>
                   )}
                   {user?.role === "ADMIN" && (
