@@ -464,7 +464,10 @@ export function SchedulerPage() {
         setAcademicYearId(active?.id ?? data[0].id);
       }
     });
-    apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
+    apiClient
+      .get<UserListItem[]>("/users")
+      .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
+      .catch(() => setFaculties([]));
     apiClient.get("/student-classes").then(({ data }) => setStudentClasses(data));
     apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(data));
   }, []);
@@ -921,6 +924,23 @@ export function SchedulerPage() {
     setEditingLoadId(null);
     setMoveConflict(null);
   };
+
+  const handleAddAnotherSessionFromEdit = useCallback(() => {
+    if (!editingLoad) return;
+    setPendingAssignment({
+      subjectId: editingLoad.subjectId,
+      subjectCode: editingLoad.subject?.code,
+      subjectName: editingLoad.subject?.name,
+      studentClassId: editingLoad.studentClassId,
+    });
+    setPendingAssignmentDragged(false);
+    setEditingLoadId(null);
+    setOverlayFacultyId(viewMode === "faculty" ? selectedFacultyId : "");
+    setOverlayRoomId("");
+    if (viewMode === "faculty" && editingLoad.studentClassId) {
+      setOverlayClassId(editingLoad.studentClassId);
+    }
+  }, [editingLoad, viewMode, selectedFacultyId]);
 
   useEffect(() => {
     if (!overlayFacultyId || !academicYearId) {
@@ -1514,6 +1534,7 @@ export function SchedulerPage() {
                     setOverlayRoomId(id);
                   }}
                   roomAvailabilityMap={roomAvailabilityMap}
+                  onAddAnotherSession={handleAddAnotherSessionFromEdit}
                   onSaved={() => {
                     refreshLoads();
                     refreshRoomLoads();

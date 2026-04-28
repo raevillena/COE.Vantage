@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { ConflictPreview } from "../../types/api";
+import type { ConflictPreview, UserListItem } from "../../types/api";
 import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../ui/dialog";
@@ -36,7 +36,16 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
   const isOffSystemRoom = roomId === "__off_system__";
 
   useEffect(() => {
-    apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
+    apiClient
+      .get<UserListItem[]>("/users")
+      .then(({ data }) =>
+        setFaculties(
+          (data ?? [])
+            .filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")
+            .map((u) => ({ id: u.id, name: u.name }))
+        )
+      )
+      .catch(() => setFaculties([]));
     apiClient.get("/subjects").then(({ data }) => setSubjects(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
     apiClient.get("/rooms").then(({ data }) => setRooms(data));

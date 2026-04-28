@@ -77,29 +77,70 @@ function overlaps(a: { startTime: string; endTime: string }, b: { startTime: str
   return aStart < bEnd && aEnd > bStart;
 }
 
-/**
- * Assign each load a lane index so that overlapping loads never share a lane.
- * Lanes are laid out as separate columns, so this prevents any visual overlap.
- */
-function assignLanes(dayLoads: FacultyLoad[]): Map<string, number> {
-  const sorted = [...dayLoads].sort(
-    (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+/** Same class time for team rows; room may differ (co-instructor elsewhere). */
+function sameTeamTeachingSlot(a: FacultyLoad, b: FacultyLoad): boolean {
+  const clip = (t: string) => t.trim().slice(0, 5);
+  return (
+    a.studentClassId === b.studentClassId &&
+    a.subjectId === b.subjectId &&
+    a.dayOfWeek === b.dayOfWeek &&
+    clip(a.startTime) === clip(b.startTime) &&
+    clip(a.endTime) === clip(b.endTime)
   );
-  const laneByLoadId = new Map<string, number>();
-  const lanes: FacultyLoad[][] = [];
+}
 
-  for (const load of sorted) {
+/**
+ * Merge loads that share the exact same slot into one group so lane assignment treats them as one interval.
+ * Those groups are rendered side-by-side inside one column cell; other loads keep full lane width.
+ */
+function groupTeamTeachingSlots(dayLoads: FacultyLoad[]): FacultyLoad[][] {
+  const groups: FacultyLoad[][] = [];
+  for (const load of dayLoads) {
+    let placed = false;
+    for (const g of groups) {
+      if (sameTeamTeachingSlot(g[0], load)) {
+        g.push(load);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) groups.push([load]);
+  }
+  for (const g of groups) {
+    g.sort((a, b) => String(a.facultyId ?? a.id).localeCompare(String(b.facultyId ?? b.id)));
+  }
+  return groups;
+}
+
+/** Each lane holds disjoint slot-groups; each group is one or more team-teaching loads at the same time. */
+function buildDayLanes(dayLoads: FacultyLoad[]): FacultyLoad[][][] {
+  const groups = groupTeamTeachingSlots(dayLoads);
+  const sorted = [...groups].sort(
+    (a, b) => timeToMinutes(a[0].startTime) - timeToMinutes(b[0].startTime)
+  );
+  const lanes: FacultyLoad[][][] = [];
+  for (const group of sorted) {
+    const rep = group[0];
     let lane = 0;
     while (lane < lanes.length) {
-      const hasOverlap = lanes[lane].some((existing) => overlaps(load, existing));
+      const hasOverlap = lanes[lane].some((g) => overlaps(rep, g[0]));
       if (!hasOverlap) break;
       lane++;
     }
     if (lane === lanes.length) lanes.push([]);
-    lanes[lane].push(load);
-    laneByLoadId.set(load.id, lane);
+    lanes[lane].push(group);
   }
-  return laneByLoadId;
+  return sorted.length === 0 ? [[]] : lanes;
+}
+
+function blockTopHeight(load: FacultyLoad, timeToPx: (time: string) => number, hourStart: number): { top: number; height: number } {
+  const startPx = timeToPx(load.startTime);
+  const endMinutesForHeight = timeToMinutes(load.endTime);
+  const endPxForHeight = (endMinutesForHeight - hourStart * 60) * (SLOT_HEIGHT / 60);
+  const durationPxVal = endPxForHeight - startPx;
+  const top = startPx + 1;
+  const height = Math.max(20, durationPxVal - 2);
+  return { top, height };
 }
 
 interface ScheduleBlockProps {
@@ -118,6 +159,8 @@ interface ScheduleBlockProps {
   /** Optional callbacks so parent can react to resize lifecycle (e.g. show overlays). */
   onLoadResizeStart?: (load: FacultyLoad) => void;
   onLoadResizeEnd?: (load: FacultyLoad) => void;
+  /** When true, block fills a team-teaching flex cell (parent provides slot position/size). */
+  embeddedInTeamSlot?: boolean;
 }
 
 function ScheduleBlock({
@@ -134,6 +177,7 @@ function ScheduleBlock({
   onLoadResize,
   onLoadResizeStart,
   onLoadResizeEnd,
+  embeddedInTeamSlot = false,
 }: ScheduleBlockProps) {
   const { palette } = useSchedulePalette();
   const pending = Boolean(load.pendingApproval);
@@ -193,6 +237,10 @@ function ScheduleBlock({
   const top = startPx + 1;
   const height = Math.max(20, durationPxVal - 2);
   const isResizing = resizePreviewEndMinutes !== null;
+  const positionClass = embeddedInTeamSlot
+    ? "relative z-20 h-full w-full min-w-0"
+    : "absolute z-20 left-0.5 right-0.5";
+  const positionStyle = embeddedInTeamSlot ? undefined : ({ top, height } as const);
   const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
   const facultyName = load.faculty?.name ?? load.facultyDisplayName ?? "";
   const facultyShort = formatFacultyShortName(facultyName);
@@ -208,8 +256,8 @@ function ScheduleBlock({
       onClick={onLoadClick && !pending ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
       onKeyDown={onLoadClick && !pending ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
       title={titleParts.join(" · ") + (pending ? " · Awaiting chairman approval" : "")}
-      className={`absolute z-20 left-0.5 right-0.5 rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
-      style={{ top, height }}
+      className={`${positionClass} rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      style={positionStyle ?? undefined}
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
@@ -218,7 +266,7 @@ function ScheduleBlock({
       <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {pending ? "Cross-dept · " : ""}{[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
       </div>
-      {onLoadResize && !pending && height >= 24 && (
+      {onLoadResize && !pending && height >= 24 && !embeddedInTeamSlot && (
         <div
           data-resize-handle
           className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center border-t border-foreground-muted/50 hover:border-foreground-muted hover:bg-black/10 rounded-b"
@@ -373,13 +421,8 @@ export function ScheduleGrid({
         </div>
         {[1, 2, 3, 4, 5, 6].map((dayOfWeek) => {
           const dayLoads = loads.filter((l) => l.dayOfWeek === dayOfWeek);
-          const laneMap = assignLanes(dayLoads);
-          const numLanes = dayLoads.length ? Math.max(...Array.from(laneMap.values())) + 1 : 1;
-          const loadsByLane: FacultyLoad[][] = Array.from({ length: numLanes }, () => []);
-          for (const load of dayLoads) {
-            const lane = laneMap.get(load.id) ?? 0;
-            loadsByLane[lane].push(load);
-          }
+          const lanes = buildDayLanes(dayLoads);
+          const numLanes = Math.max(1, lanes.length);
           return (
             <div
               key={dayOfWeek}
@@ -392,26 +435,60 @@ export function ScheduleGrid({
                 gridTemplateColumns: `repeat(${numLanes}, 1fr)`,
               }}
             >
-              {loadsByLane.map((laneLoads, laneIndex) => (
+              {lanes.map((laneGroups, laneIndex) => (
                 <div key={laneIndex} className="relative min-w-0 overflow-hidden">
-                  {laneLoads.map((load) => (
-                    <ScheduleBlock
-                      key={load.id}
-                      load={load}
-                      subjectIds={subjectIds}
-                      timeToPx={timeToPx}
-                      isConflict={conflictLoadIds.has(load.id)}
-                      selected={selectedLoadId === load.id}
-                      hourStart={hourStart}
-                      hourEnd={hourEnd}
-                      draggableIdPrefix={draggableIdPrefix}
-                      onLoadClick={onLoadClick}
-                      onLoadMove={onLoadMove}
-                      onLoadResize={onLoadResize}
-                      onLoadResizeStart={onLoadResizeStart}
-                      onLoadResizeEnd={onLoadResizeEnd}
-                    />
-                  ))}
+                  {laneGroups.map((group) => {
+                    const rep = group[0];
+                    const { top, height } = blockTopHeight(rep, timeToPx, hourStart);
+                    if (group.length === 1) {
+                      return (
+                        <ScheduleBlock
+                          key={rep.id}
+                          load={rep}
+                          subjectIds={subjectIds}
+                          timeToPx={timeToPx}
+                          isConflict={conflictLoadIds.has(rep.id)}
+                          selected={selectedLoadId === rep.id}
+                          hourStart={hourStart}
+                          hourEnd={hourEnd}
+                          draggableIdPrefix={draggableIdPrefix}
+                          onLoadClick={onLoadClick}
+                          onLoadMove={onLoadMove}
+                          onLoadResize={onLoadResize}
+                          onLoadResizeStart={onLoadResizeStart}
+                          onLoadResizeEnd={onLoadResizeEnd}
+                        />
+                      );
+                    }
+                    return (
+                      <div
+                        key={`team-${rep.id}-${group.map((l) => l.id).join("-")}`}
+                        className="absolute z-20 left-0.5 right-0.5 flex min-h-0 min-w-0 gap-0.5"
+                        style={{ top, height }}
+                      >
+                        {group.map((load) => (
+                          <div key={load.id} className="relative min-h-0 min-w-0 flex-1">
+                            <ScheduleBlock
+                              load={load}
+                              subjectIds={subjectIds}
+                              timeToPx={timeToPx}
+                              isConflict={conflictLoadIds.has(load.id)}
+                              selected={selectedLoadId === load.id}
+                              hourStart={hourStart}
+                              hourEnd={hourEnd}
+                              draggableIdPrefix={draggableIdPrefix}
+                              onLoadClick={onLoadClick}
+                              onLoadMove={onLoadMove}
+                              onLoadResize={onLoadResize}
+                              onLoadResizeStart={onLoadResizeStart}
+                              onLoadResizeEnd={onLoadResizeEnd}
+                              embeddedInTeamSlot
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>

@@ -30,19 +30,24 @@ const roomFields = z.object({
 );
 
 export const createFacultyLoadSchema = z.object({
-  body: z.object({
-    facultyId: uuidOptional,
-    facultyDisplayName: displayNameOptional,
-    subjectId: z.string().uuid(),
-    studentClassId: z.string().uuid(),
-    roomId: uuidOptional,
-    roomDisplayName: displayNameOptional,
-    dayOfWeek: z.number().int().min(1).max(7),
-    startTime: timeString,
-    endTime: timeString,
-    semester: z.number().int().min(1).max(2),
-    academicYearId: z.string().uuid(),
-  }).and(facultyFields).and(roomFields),
+  body: z
+    .object({
+      facultyId: uuidOptional,
+      facultyDisplayName: displayNameOptional,
+      subjectId: z.string().uuid(),
+      studentClassId: z.string().uuid(),
+      roomId: uuidOptional,
+      roomDisplayName: displayNameOptional,
+      dayOfWeek: z.number().int().min(1).max(7),
+      startTime: timeString,
+      endTime: timeString,
+      semester: z.number().int().min(1).max(2),
+      academicYearId: z.string().uuid(),
+      /** Same-slot co-instructor: ignore this load in conflict checks; validated in createFacultyLoad. */
+      excludeLoadId: z.string().uuid().optional(),
+    })
+    .and(facultyFields)
+    .and(roomFields),
 });
 
 export const updateFacultyLoadSchema = z.object({

@@ -22,6 +22,7 @@ import { TrashPage } from "./pages/trash/TrashPage";
 import { ChairmanFacultyPage } from "./pages/faculty/ChairmanFacultyPage";
 import { UserProfilePage } from "./pages/profile/UserProfilePage";
 import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
+import { ForgotPasswordPage } from "./pages/forgotPassword/ForgotPasswordPage";
 import { AboutPage } from "./pages/about/AboutPage";
 import { NotFoundPage } from "./pages/notFound/NotFoundPage";
 
@@ -29,6 +30,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/"

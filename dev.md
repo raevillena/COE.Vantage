@@ -590,7 +590,7 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 **Auth layout**
 
-- `src/components/layout/AuthLayout.tsx` is the shared layout for unauthenticated pages (`LoginPage`, `ResetPasswordPage`):
+- `src/components/layout/AuthLayout.tsx` is the shared layout for unauthenticated pages (`LoginPage`, `ForgotPasswordPage`, `ResetPasswordPage`):
   - Left side: branded banner (`/banner.svg` in light mode, `/banner-dark.svg` in dark mode) within a bordered panel.
   - Right side: centered card with logo, app title/subtitle, and the actual form.
   - The outer wrapper uses `auth-bg` to apply a subtle, CSS-only abstract background; the login card itself is rendered above it (`relative z-10`) so the card surface stays clean.
@@ -625,6 +625,14 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
       - Network: "Could not reach server. Check your connection and try again." (or a generic failure).
       - HTTP 400 with `ZodError` shape: maps first `email` / `password` messages from `errors.body` (or top-level `errors`) to inline field errors.
       - HTTP 401 with `AppError`: uses `data.message` (e.g. "Invalid email or password") as the main message.
+
+**Forgot password flow**
+
+- Login now includes a **"Forgot password?"** link (top-right of the password field) to `/forgot-password`.
+- `src/pages/forgotPassword/ForgotPasswordPage.tsx` posts `{ email }` to `POST /auth/forgot-password` and always shows a generic success message to avoid account enumeration.
+- Backend route `POST /auth/forgot-password` (in `authRoutes.ts`) reuses email validation (`sendPasswordResetEmailSchema`) and calls `requestPasswordResetByEmail` in `authService.ts`.
+- `requestPasswordResetByEmail` performs case-insensitive email lookup, issues a Redis token when the account exists, and sends reset email; when the account does not exist, it returns silently (same client response).
+- `POST /auth/forgot-password` is intentionally **public** (no `authenticate` middleware), while `POST /auth/send-password-reset-email` remains the admin-only path.
 - `LoginPage`:
   - No longer uses HTML `required`; the form adds `noValidate` and relies on `validateLoginFields` on submit.
   - Tracks `fieldErrors` for `email` and `password`, shows inline messages and `aria-invalid`/`aria-describedby` for accessibility.
@@ -644,7 +652,7 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
   - `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`.
   - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ACCESS_TOKEN_EXPIRY`, `REFRESH_TOKEN_EXPIRY`.
   - `FRONTEND_ORIGIN` (e.g. `http://localhost:5173`) for CORS and password reset link generation.
-  - Optional password reset + SMTP settings for emailing reset links.
+  - Optional password reset + SMTP settings for emailing reset links. HTML + plain-text bodies are built in [`backend/src/utils/passwordResetEmailTemplate.ts`](backend/src/utils/passwordResetEmailTemplate.ts) and sent from [`backend/src/utils/email.ts`](backend/src/utils/email.ts).
 - **Frontend** (`frontend/.env` – sample in `frontend/.env.example`):
   - `VITE_API_URL` — base URL for the backend API (e.g. `http://localhost:4000/api`).
   - `VITE_APP_VERSION` — string shown in the auth footer (e.g. `v1.0.0`); when unset, the UI falls back to `v0.0.0`.
@@ -823,6 +831,39 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 
 - Use a single icon per nav item; prefer semantic fit (e.g. `Building` for room management, `DoorOpen` for room availability view).
 - Keep icon size at 18px for consistency with existing sidebar density.
+
+---
+
+### 25. Split schedule / team teaching — UI design (minimal, opt-in)
+
+**Context**
+
+- Most assignments stay **single**: one subject, one class, one faculty, one slot — this must remain the default path with **no extra clicks**.
+- A **minority** of cases need either (a) **same slot, multiple faculty** (team teaching), or (b) **same subject + class, different times** (split sessions).
+
+**Principles**
+
+1. **Default unchanged** — Drag subject → `PendingAssignment` / `AssignmentForm` behaves as today (single load). No new required fields on the happy path.
+2. **Opt-in only** — Split/team is behind a **secondary, explicit control** so choosing it is intentional, e.g.:
+   - A **tertiary text link or small button** in the assignment panel: “Add co-instructor (same time)” or “Split into another session…” — not a prominent tab or first-class mode switch.
+   - Or: **overflow / “More”** menu on the assignment form with those actions.
+3. **No mode chooser up front** — Avoid asking “Single vs Team vs Split” when the user picks a subject; that would disrupt the majority flow.
+4. **Progressive disclosure** — After the user saves a **normal** assignment, optional actions appear: “Duplicate slot for another faculty” (team) or “Add another meeting time for this subject” (split), only where product rules allow.
+
+**Concrete minimal UI options (pick one when implementing)**
+
+- **Team (same time):** User completes one assignment as today → clicks **“Add co-instructor (same time)”** → form opens with day/time/room/subject/class **read-only**, user picks only **additional faculty(ies)** → batch create matching `FacultyLoad` rows.
+- **Split (different times):** User completes first block as today → **“Add another session for this subject & class”** → new pending state with subject + class pre-filled, user picks time/room/faculty as usual (second placement on grid or form).
+
+**Backend note**
+
+- Multiple `FacultyLoad` rows already support this; optional future `splitGroupId` only if grouping in the grid/list is required.
+- **Implemented:** `POST /faculty-loads` accepts optional `excludeLoadId` for same-slot co-instructor creates; the server checks that the excluded row matches the same slot and a different faculty, then passes `excludeLoadId` into conflict detection so room/class checks ignore the sibling load.
+- **Grid:** Loads that share the same slot (same class, subject, day, start/end; room may differ) are **one layout unit** for lane assignment, so adding a co-instructor no longer forces the whole day column into multiple narrow strips. Co-instructors render **side-by-side inside that one slot** (`ScheduleGrid.tsx`).
+- **Conflicts:** Preview/create/update use `checkConflicts`; overlapping loads with the **same** class+subject+time (room may differ) are treated as **team teaching** and do **not** set student-class conflicts against each other. Room conflicts are evaluated per proposed room. `excludeLoadId` on create still only needs the anchor row to match subject, class, and time — co-instructor may use another room.
+- **Co-instructor UI:** The add co-instructor dialog includes **Room (co-instructor)**, defaulting from the assignment being edited but editable to another in-system or off-system room.
+- **Instructor search:** Assignment form instructor pickers (including co-instructor search) load both `FACULTY` and `CHAIRMAN` roles, so chairmen are selectable as instructors.
+- **Scheduler lists:** Scheduler faculty datasets now use `/users` filtered to `FACULTY` + `CHAIRMAN` (instead of `/users?role=FACULTY`) in `AssignmentForm`, `SchedulerPage`, `AddFacultyLoadModal`, and `FacultySchedulePage` to keep instructor search/options consistent.
 
 ---
 

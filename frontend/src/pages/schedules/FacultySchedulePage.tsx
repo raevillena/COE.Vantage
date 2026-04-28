@@ -23,7 +23,10 @@ export function FacultySchedulePage() {
         setAcademicYearId(active?.id ?? data[0].id);
       }
     });
-    apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
+    apiClient
+      .get<UserListItem[]>("/users")
+      .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
+      .catch(() => setFaculties([]));
   }, []);
 
   useEffect(() => {

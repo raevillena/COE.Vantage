@@ -108,6 +108,48 @@ export async function getFacultyAssignedUnits(
   return loads.reduce((sum, l) => sum + (l.subject?.units ?? 0), 0);
 }
 
+/** Validates excludeLoadId for team teaching: same slot as proposed row, different faculty/off-system identity. */
+async function assertValidCoInstructorExclude(
+  excludeLoadId: string,
+  proposed: {
+    facultyId: string | null;
+    facultyDisplayName: string | null;
+    subjectId: string;
+    studentClassId: string;
+    roomId: string | null;
+    roomDisplayName: string | null;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    semester: number;
+    academicYearId: string;
+  }
+): Promise<void> {
+  const excluded = await prisma.facultyLoad.findUnique({ where: { id: excludeLoadId } });
+  if (!excluded) throw badRequest("Invalid excludeLoadId");
+  const clip = (t: string) => t.trim().slice(0, 5);
+  const sameSlot =
+    excluded.academicYearId === proposed.academicYearId &&
+    excluded.semester === proposed.semester &&
+    excluded.subjectId === proposed.subjectId &&
+    excluded.studentClassId === proposed.studentClassId &&
+    excluded.dayOfWeek === proposed.dayOfWeek &&
+    clip(excluded.startTime) === clip(proposed.startTime) &&
+    clip(excluded.endTime) === clip(proposed.endTime);
+  if (!sameSlot) {
+    throw badRequest("excludeLoadId must refer to the same subject, class, and time as this assignment (room may differ)");
+  }
+  const exFac = excluded.facultyId ?? null;
+  const prFac = proposed.facultyId ?? null;
+  const sameInSystemFaculty = exFac != null && prFac != null && exFac === prFac;
+  const exName = (excluded.facultyDisplayName?.trim().toLowerCase() ?? "") || null;
+  const prName = (proposed.facultyDisplayName?.trim().toLowerCase() ?? "") || null;
+  const sameOffSystemOthers = exFac == null && prFac == null && exName != null && exName === prName;
+  if (sameInSystemFaculty || sameOffSystemOthers) {
+    throw badRequest("Co-instructor must be a different faculty than the existing load");
+  }
+}
+
 /** Normalize faculty/room payload for DB: empty string -> null; trim display names. */
 function normalizeFacultyLoadData<T extends Record<string, unknown>>(data: T): T & { facultyId?: string | null; facultyDisplayName?: string | null; roomId?: string | null; roomDisplayName?: string | null } {
   const out = { ...data } as T & { facultyId?: string | null; facultyDisplayName?: string | null; roomId?: string | null; roomDisplayName?: string | null };
@@ -161,18 +203,37 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
     }
   }
 
+  const trimmedRoomDisplay = body.roomDisplayName?.trim() || null;
+  const trimmedFacultyDisplay = body.facultyDisplayName?.trim() || null;
+  if (body.excludeLoadId) {
+    await assertValidCoInstructorExclude(body.excludeLoadId, {
+      facultyId: effectiveFacultyId,
+      facultyDisplayName: trimmedFacultyDisplay,
+      subjectId: body.subjectId,
+      studentClassId: body.studentClassId,
+      roomId: effectiveRoomId,
+      roomDisplayName: trimmedRoomDisplay,
+      dayOfWeek: body.dayOfWeek,
+      startTime: body.startTime,
+      endTime: body.endTime,
+      semester: body.semester,
+      academicYearId: body.academicYearId,
+    });
+  }
+
   const payload: PreviewFacultyLoadBody = {
     facultyId: effectiveFacultyId,
-    facultyDisplayName: body.facultyDisplayName?.trim() || null,
+    facultyDisplayName: trimmedFacultyDisplay,
     subjectId: body.subjectId,
     studentClassId: body.studentClassId,
-    roomId: body.roomId?.trim() || null,
-    roomDisplayName: body.roomDisplayName?.trim() || null,
+    roomId: effectiveRoomId,
+    roomDisplayName: trimmedRoomDisplay,
     dayOfWeek: body.dayOfWeek,
     startTime: body.startTime,
     endTime: body.endTime,
     semester: body.semester,
     academicYearId: body.academicYearId,
+    excludeLoadId: body.excludeLoadId,
   };
   const conflicts = await checkConflicts(payload);
   assertNoConflicts(conflicts);

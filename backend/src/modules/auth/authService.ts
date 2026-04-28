@@ -148,6 +148,26 @@ export async function sendPasswordResetEmailForUser(email: string): Promise<void
   await sendEmail(user.email, link);
 }
 
+/**
+ * Public forgot-password request from login page.
+ * Always returns success semantics to avoid exposing whether an email exists.
+ */
+export async function requestPasswordResetByEmail(email: string): Promise<void> {
+  const normalized = email.trim();
+  if (!normalized) return;
+  const user = await prisma.user.findFirst({
+    where: {
+      email: { equals: normalized, mode: "insensitive" },
+      isDeleted: false,
+    },
+  });
+  if (!user) return;
+  const token = randomUUID();
+  await setPasswordResetToken(token, user.id);
+  const link = buildResetLink(token);
+  await sendEmail(user.email, link);
+}
+
 /** Public: reset password using token from email. */
 export async function resetPassword(body: ResetPasswordBody): Promise<void> {
   const userId = await getPasswordResetToken(body.token);

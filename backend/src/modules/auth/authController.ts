@@ -6,6 +6,7 @@ import {
   register as registerService,
   requestPasswordReset as requestPasswordResetService,
   sendPasswordResetEmailForUser as sendPasswordResetEmailService,
+  requestPasswordResetByEmail as forgotPasswordService,
   resetPassword as resetPasswordService,
 } from "./authService.js";
 import type {
@@ -67,6 +68,15 @@ export async function sendPasswordResetEmail(req: Request, res: Response): Promi
   const body = req.body as SendPasswordResetEmailBody;
   await sendPasswordResetEmailService(body.email);
   res.json({ message: "Password reset email sent to that address." });
+}
+
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  const body = req.body as SendPasswordResetEmailBody;
+  await forgotPasswordService(body.email);
+  res.json({
+    message:
+      "If an account exists for that email, a password reset link has been sent.",
+  });
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {

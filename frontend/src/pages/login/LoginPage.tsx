@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAppDispatch } from "../../store/hooks";
 import { setAuth } from "../../store/authSlice";
@@ -129,9 +129,14 @@ export function LoginPage() {
             )}
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-foreground">
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                Password
+              </label>
+              <Link to="/forgot-password" className="text-xs text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative mt-1">
               <input
                 id="password"

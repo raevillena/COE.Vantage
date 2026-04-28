@@ -13,6 +13,35 @@ function timeOverlaps(
   return existingStart < newEnd && existingEnd > newStart;
 }
 
+/** Compare start/end as HH:mm (handles optional :ss suffix from drivers). */
+function sameClockSpan(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  const clip = (t: string) => t.trim().slice(0, 5);
+  return clip(aStart) === clip(bStart) && clip(aEnd) === clip(bEnd);
+}
+
+type SlotFields = {
+  subjectId: string;
+  studentClassId: string;
+  roomId: string | null | undefined;
+  roomDisplayName: string | null | undefined;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+};
+
+/**
+ * Same class time for team teaching: same class, subject, day, time span.
+ * Room may differ (e.g. co-instructor in another space); those rows are not a student-class double-booking.
+ */
+function isTeamTeachingPeer(proposed: SlotFields, existing: SlotFields): boolean {
+  return (
+    existing.subjectId === proposed.subjectId &&
+    existing.studentClassId === proposed.studentClassId &&
+    existing.dayOfWeek === proposed.dayOfWeek &&
+    sameClockSpan(proposed.startTime, proposed.endTime, existing.startTime, existing.endTime)
+  );
+}
+
 export interface ConflictResult {
   facultyConflict: boolean;
   roomConflict: boolean;
@@ -70,14 +99,46 @@ export async function checkConflicts(
 
   const room = hasRoom ? await db.room.findUniqueOrThrow({ where: { id: roomId! } }) : null;
 
+  const proposedSlot: SlotFields = {
+    subjectId,
+    studentClassId,
+    roomId,
+    roomDisplayName: payload.roomDisplayName,
+    dayOfWeek,
+    startTime,
+    endTime,
+  };
+
   const facultyConflict = hasFaculty && facultyLoadsForFaculty.some((l) =>
     timeOverlaps(l.startTime, l.endTime, startTime, endTime)
   );
-  const roomConflict = hasRoom && facultyLoadsForRoom.some((l) =>
-    timeOverlaps(l.startTime, l.endTime, startTime, endTime)
-  );
-  const studentConflict = facultyLoadsForClass.some((l) =>
-    timeOverlaps(l.startTime, l.endTime, startTime, endTime)
+  const roomConflict =
+    hasRoom &&
+    facultyLoadsForRoom.some(
+      (l) =>
+        timeOverlaps(l.startTime, l.endTime, startTime, endTime) &&
+        !isTeamTeachingPeer(proposedSlot, {
+          subjectId: l.subjectId,
+          studentClassId: l.studentClassId,
+          roomId: l.roomId,
+          roomDisplayName: l.roomDisplayName,
+          dayOfWeek: l.dayOfWeek,
+          startTime: l.startTime,
+          endTime: l.endTime,
+        })
+    );
+  const studentConflict = facultyLoadsForClass.some(
+    (l) =>
+      timeOverlaps(l.startTime, l.endTime, startTime, endTime) &&
+      !isTeamTeachingPeer(proposedSlot, {
+        subjectId: l.subjectId,
+        studentClassId: l.studentClassId,
+        roomId: l.roomId,
+        roomDisplayName: l.roomDisplayName,
+        dayOfWeek: l.dayOfWeek,
+        startTime: l.startTime,
+        endTime: l.endTime,
+      })
   );
   const capacityIssue = room !== null && room.capacity < studentClass.studentCount;
   const labRoomMismatch = room !== null && subject.isLab && !room.isLab;

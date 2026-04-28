@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { ConflictPreview, FacultyLoad, Room } from "../../types/api";
+import type { ConflictPreview, FacultyLoad, Room, UserListItem } from "../../types/api";
 import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { useAppSelector } from "../../store/hooks";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
+import { SearchableSelect } from "../ui/searchableSelect";
+import { Dialog } from "../ui/dialog";
 import { ScheduleGrid } from "../scheduleGrid/ScheduleGrid";
 
 /** Parse "HH:mm" to minutes since midnight. */
@@ -82,6 +84,8 @@ interface AssignmentFormProps {
   lockStudentClass?: boolean;
   /** Room ID -> isOpen for current term; when room is closed and user is not control dept, room is disabled. */
   roomAvailabilityMap?: Record<string, boolean>;
+  /** While editing a saved load: start a new pending assignment with the same subject & class (user picks another time). */
+  onAddAnotherSession?: () => void;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -102,6 +106,7 @@ export function AssignmentForm({
   lockFaculty = false,
   lockStudentClass = false,
   roomAvailabilityMap,
+  onAddAnotherSession,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
@@ -123,9 +128,29 @@ export function AssignmentForm({
   const [rooms, setRooms] = useState<Room[]>([]);
   const [facultyLoads, setFacultyLoads] = useState<FacultyLoad[]>([]);
   const [facultyScheduleOpen, setFacultyScheduleOpen] = useState(true);
+  const [coInstructorOpen, setCoInstructorOpen] = useState(false);
+  const [coFacultyId, setCoFacultyId] = useState("");
+  const [coRoomId, setCoRoomId] = useState("");
+  const [coRoomDisplayName, setCoRoomDisplayName] = useState("");
+  const [coPreview, setCoPreview] = useState<ConflictPreview | null>(null);
+  const [coLoading, setCoLoading] = useState(false);
 
   const isOthersFaculty = facultyId === "__others__";
   const isOffSystemRoom = roomId === "__off_system__";
+  const coIsOffSystemRoom = coRoomId === "__off_system__";
+  /** Saved load in DB (not a pending placeholder id). */
+  const isEditingSavedLoad = Boolean(editingLoadId && !String(editingLoadId).startsWith("pending-"));
+  const coInstructorFacultyOptions = useMemo(() => {
+    const current =
+      facultyId && facultyId !== "__others__" && facultyId !== "__none__" && facultyId !== ""
+        ? facultyId
+        : null;
+    return faculties.filter((f) => !current || f.id !== current);
+  }, [faculties, facultyId]);
+  const coInstructorSearchableOptions = useMemo(
+    () => coInstructorFacultyOptions.map((f) => ({ value: f.id, label: f.name })),
+    [coInstructorFacultyOptions]
+  );
 
   const facultyEmpty =
     !facultyId ||
@@ -134,6 +159,9 @@ export function AssignmentForm({
   const subjectEmpty = !subjectId;
   const studentClassEmpty = !studentClassId;
   const roomEmpty = !roomId || roomId === "__none__";
+  const coRoomEmpty = !coRoomId || coRoomId === "__none__";
+  /** Co-instructor row has a valid room choice (in-system pick or off-system). */
+  const coHasRoomForSubmit = (!coIsOffSystemRoom && coRoomId && coRoomId !== "__none__") || coIsOffSystemRoom;
   const requiredFieldClass =
     "border-danger ring-2 ring-danger/30 focus:ring-danger/50";
 
@@ -169,7 +197,16 @@ export function AssignmentForm({
   }, [editingLoadId, liveTime?.dayOfWeek, liveTime?.startTime, liveTime?.endTime, dayOfWeek, startTime, endTime]);
 
   useEffect(() => {
-    apiClient.get("/users?role=FACULTY").then(({ data }) => setFaculties(data));
+    apiClient
+      .get<UserListItem[]>("/users")
+      .then(({ data }) =>
+        setFaculties(
+          (data ?? [])
+            .filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")
+            .map((u) => ({ id: u.id, name: u.name }))
+        )
+      )
+      .catch(() => setFaculties([]));
     apiClient.get("/subjects").then(({ data }) => setSubjects(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
     apiClient.get("/rooms").then(({ data }) => setRooms(data));
@@ -237,6 +274,72 @@ export function AssignmentForm({
     };
   }, [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId]);
 
+  /** Live conflict check for co-instructor (same slot, different faculty; excludeLoadId = row being edited). */
+  useEffect(() => {
+    if (!coInstructorOpen || !editingLoadId || String(editingLoadId).startsWith("pending-")) {
+      setCoPreview(null);
+      return;
+    }
+    if (!coFacultyId) {
+      setCoPreview(null);
+      return;
+    }
+    const coEffectiveRoomId = coIsOffSystemRoom ? null : coRoomId || null;
+    if (!subjectId || !studentClassId || !academicYearId) {
+      setCoPreview(null);
+      return;
+    }
+    if (!coIsOffSystemRoom && (!coRoomId || coRoomId === "__none__")) {
+      setCoPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setCoLoading(true);
+    setCoPreview(null);
+    const body = {
+      facultyId: coFacultyId,
+      facultyDisplayName: null as string | null,
+      subjectId,
+      studentClassId,
+      roomId: coEffectiveRoomId,
+      roomDisplayName: coIsOffSystemRoom ? (coRoomDisplayName?.trim() || "Off-system") : null,
+      dayOfWeek,
+      startTime,
+      endTime,
+      semester,
+      academicYearId,
+      excludeLoadId: editingLoadId,
+    };
+    apiClient
+      .post<ConflictPreview>("/faculty-loads/preview", body)
+      .then(({ data }) => {
+        if (!cancelled) setCoPreview(data);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Could not check for conflicts. Try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setCoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    coInstructorOpen,
+    coFacultyId,
+    editingLoadId,
+    subjectId,
+    studentClassId,
+    coRoomId,
+    coRoomDisplayName,
+    coIsOffSystemRoom,
+    dayOfWeek,
+    startTime,
+    endTime,
+    academicYearId,
+    semester,
+  ]);
+
   const runPreview = async () => {
     const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
     const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom;
@@ -277,6 +380,14 @@ export function AssignmentForm({
       preview.studentConflict ||
       preview.capacityIssue ||
       preview.labRoomMismatch);
+
+  const coHasConflict =
+    coPreview &&
+    (coPreview.facultyConflict ||
+      coPreview.roomConflict ||
+      coPreview.studentConflict ||
+      coPreview.capacityIssue ||
+      coPreview.labRoomMismatch);
 
   const handleSave = async () => {
     const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
@@ -338,6 +449,62 @@ export function AssignmentForm({
       toast.error(getApiErrorMessage(err, "Delete failed"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCoInstructorSave = async () => {
+    if (!editingLoadId || String(editingLoadId).startsWith("pending-")) return;
+    if (!coFacultyId) {
+      toast.error("Select a co-instructor");
+      return;
+    }
+    if (!subjectId || !studentClassId || !coHasRoomForSubmit) {
+      toast.error("Subject, class, and co-instructor room must be set");
+      return;
+    }
+    setCoLoading(true);
+    try {
+      const payload = {
+        facultyId: coFacultyId,
+        facultyDisplayName: null as string | null,
+        subjectId,
+        studentClassId,
+        roomId: coIsOffSystemRoom ? null : (coRoomId || null),
+        roomDisplayName: coIsOffSystemRoom ? (coRoomDisplayName?.trim() || "Off-system") : null,
+        dayOfWeek,
+        startTime,
+        endTime,
+        semester,
+        academicYearId,
+        excludeLoadId: editingLoadId,
+      };
+      const { data: previewData } = await apiClient.post<ConflictPreview>("/faculty-loads/preview", payload);
+      setCoPreview(previewData);
+      const bad =
+        previewData &&
+        (previewData.facultyConflict ||
+          previewData.roomConflict ||
+          previewData.studentConflict ||
+          previewData.capacityIssue ||
+          previewData.labRoomMismatch);
+      if (bad) {
+        toast.error(`${getConflictSummary(previewData)}. Fix before adding.`);
+        return;
+      }
+      const { data: created } = await apiClient.post<{ requestCreated?: boolean; id?: string }>("/faculty-loads", payload);
+      if (created?.requestCreated) {
+        toast.success("Request sent to the faculty's department chairman for approval.");
+      } else {
+        toast.success("Co-instructor added");
+      }
+      setCoInstructorOpen(false);
+      setCoFacultyId("");
+      setCoPreview(null);
+      onSaved();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Could not add co-instructor"));
+    } finally {
+      setCoLoading(false);
     }
   };
 
@@ -502,6 +669,31 @@ export function AssignmentForm({
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
       </div>
+      {isEditingSavedLoad && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+          <span className="text-xs font-medium text-foreground-muted shrink-0">Team / split</span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              setCoFacultyId("");
+              setCoPreview(null);
+              setCoRoomId(roomId);
+              setCoRoomDisplayName(roomDisplayName);
+              setCoInstructorOpen(true);
+            }}
+          >
+            Add co-instructor
+          </Button>
+          {onAddAnotherSession ? (
+            <Button type="button" variant="secondary" size="sm" className="min-w-0 shrink" onClick={() => onAddAnotherSession()}>
+              Another session (same subject &amp; class)
+            </Button>
+          ) : null}
+        </div>
+      )}
       {(loading && !preview) && (
         <div className="rounded p-3 text-sm bg-surface-muted text-foreground-muted" role="status">
           Checking room &amp; faculty conflicts…
@@ -565,6 +757,124 @@ export function AssignmentForm({
           </Button>
         )}
       </div>
+      <Dialog.Root
+        open={coInstructorOpen}
+        onOpenChange={(open) => {
+          setCoInstructorOpen(open);
+          if (!open) {
+            setCoFacultyId("");
+            setCoRoomId("");
+            setCoRoomDisplayName("");
+            setCoPreview(null);
+          }
+        }}
+      >
+        <Dialog.Content
+          title="Add co-instructor (same time)"
+          description="Adds another faculty for the same subject, class, and time. Defaults to this assignment’s room; change below if the co-instructor meets elsewhere."
+          className="max-w-md"
+        >
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Co-instructor</label>
+              <SearchableSelect
+                options={coInstructorSearchableOptions}
+                value={coFacultyId || "__none__"}
+                onValueChange={(v) => setCoFacultyId(v === "__none__" ? "" : v)}
+                noneOption={{ value: "__none__", label: "Select faculty" }}
+                placeholder="Search faculty…"
+                aria-label="Co-instructor faculty"
+                disabled={coInstructorFacultyOptions.length === 0}
+                className="w-full"
+              />
+              {coInstructorFacultyOptions.length === 0 && (
+                <p className="mt-1 text-xs text-foreground-muted">No other faculty available to select.</p>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Room (co-instructor)</label>
+              <Select.Root
+                value={coRoomId || "__none__"}
+                onValueChange={(v) => {
+                  const id = v === "__none__" ? "" : v;
+                  setCoRoomId(id);
+                }}
+              >
+                <Select.Trigger aria-label="Co-instructor room" className={`w-full ${coRoomEmpty && !coIsOffSystemRoom ? requiredFieldClass : ""}`}>
+                  <Select.Value placeholder="Select room" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="__none__">Select room</Select.Item>
+                  <Select.Item value="__off_system__">Off-system / Other</Select.Item>
+                  {roomOptions.map((r) => {
+                    const disabled = roomOptionDisabled(r);
+                    return (
+                      <Select.Item
+                        key={r.id}
+                        value={r.id}
+                        disabled={disabled}
+                        title={disabled ? "Room closed for this term; only the control department can assign until they open it." : undefined}
+                      >
+                        {r.name} {r.isLab ? "(Lab)" : ""}
+                      </Select.Item>
+                    );
+                  })}
+                </Select.Content>
+              </Select.Root>
+              {coIsOffSystemRoom && (
+                <Input
+                  className="mt-1"
+                  placeholder="Room or location (optional)"
+                  value={coRoomDisplayName}
+                  onChange={(e) => setCoRoomDisplayName(e.target.value)}
+                  aria-label="Co-instructor off-system room name"
+                />
+              )}
+            </div>
+            {coLoading && (
+              <div className="rounded p-2 text-sm bg-surface-muted text-foreground-muted" role="status">
+                Checking conflicts…
+              </div>
+            )}
+            {coPreview && (
+              <div
+                className={`rounded p-3 text-sm ${coHasConflict ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`}
+                role="alert"
+              >
+                {coHasConflict ? (
+                  <>
+                    {coPreview.facultyConflict && <div>Faculty has another class at this time.</div>}
+                    {coPreview.roomConflict && <div>Room is in use.</div>}
+                    {coPreview.studentConflict && <div>Student class has another class at this time.</div>}
+                    {coPreview.capacityIssue && <div>Room capacity is less than class size.</div>}
+                    {coPreview.labRoomMismatch && <div>Lab subject must use a lab room.</div>}
+                  </>
+                ) : (
+                  <div>No conflicts for this co-instructor. You can add.</div>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setCoInstructorOpen(false)} disabled={coLoading}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCoInstructorSave}
+                disabled={
+                  coLoading ||
+                  !coFacultyId ||
+                  Boolean(coHasConflict) ||
+                  coInstructorFacultyOptions.length === 0 ||
+                  !coHasRoomForSubmit
+                }
+              >
+                {coLoading ? "…" : "Add co-instructor"}
+              </Button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   );
 }

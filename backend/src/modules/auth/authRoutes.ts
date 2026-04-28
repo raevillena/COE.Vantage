@@ -6,6 +6,7 @@ import {
   register,
   requestPasswordReset,
   sendPasswordResetEmail,
+  forgotPassword,
   resetPassword,
 } from "./authController.js";
 import { authenticate } from "../../middleware/authenticate.js";
@@ -38,6 +39,7 @@ router.post(
   validate(sendPasswordResetEmailSchema),
   sendPasswordResetEmail
 );
+router.post("/forgot-password", validate(sendPasswordResetEmailSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 
 export const authRoutes = router;
