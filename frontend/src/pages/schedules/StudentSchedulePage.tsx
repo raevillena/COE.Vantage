@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { FacultyLoad, AcademicYear, StudentClass } from "../../types/api";
+import type { FacultyLoad, AcademicYear, StudentClass, Department } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 
 export function StudentSchedulePage() {
+  const user = useAppSelector((s) => s.auth.user);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentId, setDepartmentId] = useState("");
   const [classes, setClasses] = useState<StudentClass[]>([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const role = user?.role;
+  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
@@ -23,8 +29,33 @@ export function StudentSchedulePage() {
         setAcademicYearId(active?.id ?? data[0].id);
       }
     });
-    apiClient.get("/student-classes").then(({ data }) => setClasses(data));
+    if (needsDepartmentFilter) {
+      apiClient.get<Department[]>("/departments").then(({ data }) => setDepartments(data ?? [])).catch(() => setDepartments([]));
+    } else {
+      setDepartments([]);
+    }
   }, []);
+
+  useEffect(() => {
+    if (role === "CHAIRMAN" && user?.departmentId) {
+      setDepartmentId(user.departmentId);
+    }
+  }, [role, user?.departmentId]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (needsDepartmentFilter && !departmentId) {
+      setClasses([]);
+      setSelectedClassId("");
+      return;
+    }
+    const params = new URLSearchParams();
+    if (needsDepartmentFilter && departmentId) params.set("departmentId", departmentId);
+    apiClient
+      .get<StudentClass[]>(`/student-classes${params.toString() ? `?${params}` : ""}`)
+      .then(({ data }) => setClasses(data ?? []))
+      .catch(() => setClasses([]));
+  }, [user, role, needsDepartmentFilter, departmentId]);
 
   useEffect(() => {
     if (!academicYearId || !selectedClassId) {
@@ -40,6 +71,23 @@ export function StudentSchedulePage() {
     <div>
       <h1 className="text-2xl font-semibold text-foreground mb-4">Student Class Schedule</h1>
       <div className="mb-6 flex flex-wrap items-center gap-4">
+        {needsDepartmentFilter && (
+          <div className="min-w-[220px]">
+            <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
+            <SearchableSelect
+              options={departments.map((d) => ({ value: d.id, label: `${d.name}${d.code ? ` (${d.code})` : ""}` }))}
+              value={departmentId || "__none__"}
+              onValueChange={(v) => {
+                const next = v === "__none__" ? "" : v;
+                setDepartmentId(next);
+                setSelectedClassId("");
+              }}
+              noneOption={{ value: "__none__", label: "Select department" }}
+              placeholder="Search department…"
+              aria-label="Department"
+            />
+          </div>
+        )}
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
           <SearchableSelect

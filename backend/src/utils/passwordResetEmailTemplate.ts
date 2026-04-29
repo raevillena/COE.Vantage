@@ -12,7 +12,7 @@ function escapeHtmlAttr(s: string): string {
   return escapeHtmlText(s).replace(/'/g, "&#39;");
 }
 
-const SUBJECT = "Reset your password — COE.Vantage";
+const SUBJECT = "Reset your password - COE.Vantage";
 
 /**
  * Professional password-reset email (table layout + inline styles for common clients).

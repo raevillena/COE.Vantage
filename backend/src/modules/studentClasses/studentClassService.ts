@@ -17,10 +17,19 @@ const curriculumInclude = {
   },
 } as const;
 
-export async function listStudentClasses(caller?: StudentClassCaller) {
+export async function listStudentClasses(
+  caller?: StudentClassCaller,
+  opts?: { departmentId?: string }
+) {
   const where: { isDeleted: boolean; curriculum?: { departmentId: string } } = { isDeleted: false };
   if (caller?.role === "CHAIRMAN" && caller.departmentId) {
+    // Chairman remains scoped to own department regardless of query params.
     where.curriculum = { departmentId: caller.departmentId };
+  } else if (
+    opts?.departmentId &&
+    (caller?.role === "ADMIN" || caller?.role === "DEAN" || caller?.role === "OFFICER")
+  ) {
+    where.curriculum = { departmentId: opts.departmentId };
   }
   return prisma.studentClass.findMany({
     where,

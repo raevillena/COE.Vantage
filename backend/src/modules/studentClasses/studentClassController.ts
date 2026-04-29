@@ -7,7 +7,11 @@ function caller(req: Request) {
 }
 
 export async function list(req: Request, res: Response): Promise<void> {
-  const list = await studentClassService.listStudentClasses(caller(req));
+  const departmentId =
+    typeof req.query.departmentId === "string" && req.query.departmentId.trim()
+      ? req.query.departmentId
+      : undefined;
+  const list = await studentClassService.listStudentClasses(caller(req), { departmentId });
   res.json(list);
 }
 

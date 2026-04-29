@@ -9,14 +9,14 @@ const router = Router();
 
 router.use(authenticate);
 
-/** List users: ADMIN can list all; CHAIRMAN, DEAN, and FACULTY can list when filtering by role=FACULTY (for schedule dropdowns). */
+/** List users: ADMIN can list all; CHAIRMAN/DEAN/FACULTY/OFFICER can list when filtering by role=FACULTY (for schedule dropdowns). */
 router.get(
   "/",
   (req, res, next) => {
     const isAdmin = req.user?.role === "ADMIN";
     const isFacultyOnlyList =
       req.query.role === "FACULTY" &&
-      (req.user?.role === "CHAIRMAN" || req.user?.role === "DEAN" || req.user?.role === "FACULTY");
+      (req.user?.role === "CHAIRMAN" || req.user?.role === "DEAN" || req.user?.role === "FACULTY" || req.user?.role === "OFFICER");
     if (isAdmin || isFacultyOnlyList) return next();
     return authorize("ADMIN")(req, res, next);
   },

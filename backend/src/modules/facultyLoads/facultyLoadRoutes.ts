@@ -15,7 +15,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "DEAN", "CHAIRMAN"));
+router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "OFFICER"));
 
 router.get("/", list);
 router.post("/preview", validate(previewFacultyLoadSchema), preview);

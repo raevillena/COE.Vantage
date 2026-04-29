@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { FacultyLoad, AcademicYear, UserListItem } from "../../types/api";
+import type { FacultyLoad, AcademicYear, UserListItem, Department } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 
 export function FacultySchedulePage() {
+  const user = useAppSelector((s) => s.auth.user);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentId, setDepartmentId] = useState("");
   const [faculties, setFaculties] = useState<UserListItem[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const role = user?.role;
+  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
@@ -23,11 +29,33 @@ export function FacultySchedulePage() {
         setAcademicYearId(active?.id ?? data[0].id);
       }
     });
+    if (needsDepartmentFilter) {
+      apiClient.get<Department[]>("/departments").then(({ data }) => setDepartments(data ?? [])).catch(() => setDepartments([]));
+    } else {
+      setDepartments([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (role === "CHAIRMAN" && user?.departmentId) {
+      setDepartmentId(user.departmentId);
+    }
+  }, [role, user?.departmentId]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (needsDepartmentFilter && !departmentId) {
+      setFaculties([]);
+      setSelectedFacultyId("");
+      return;
+    }
+    const params = new URLSearchParams({ role: "FACULTY" });
+    if (needsDepartmentFilter && departmentId) params.set("departmentId", departmentId);
     apiClient
-      .get<UserListItem[]>("/users")
+      .get<UserListItem[]>(`/users?${params}`)
       .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
       .catch(() => setFaculties([]));
-  }, []);
+  }, [user, needsDepartmentFilter, departmentId]);
 
   useEffect(() => {
     if (!academicYearId || !selectedFacultyId) {
@@ -43,6 +71,23 @@ export function FacultySchedulePage() {
     <div>
       <h1 className="text-2xl font-semibold text-foreground mb-4">Faculty Schedule</h1>
       <div className="mb-6 flex flex-wrap items-center gap-4">
+        {needsDepartmentFilter && (
+          <div className="min-w-[220px]">
+            <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
+            <SearchableSelect
+              options={departments.map((d) => ({ value: d.id, label: `${d.name}${d.code ? ` (${d.code})` : ""}` }))}
+              value={departmentId || "__none__"}
+              onValueChange={(v) => {
+                const next = v === "__none__" ? "" : v;
+                setDepartmentId(next);
+                setSelectedFacultyId("");
+              }}
+              noneOption={{ value: "__none__", label: "Select department" }}
+              placeholder="Search department…"
+              aria-label="Department"
+            />
+          </div>
+        )}
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
           <SearchableSelect

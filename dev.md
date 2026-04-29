@@ -867,6 +867,41 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 
 ---
 
+### 26. Schedule read access + department-scoped filters
+
+**Issue observed**
+
+- `OFFICER` could open `FacultySchedulePage` / `StudentSchedulePage` but could not load faculty/classes because backend read routes still excluded OFFICER.
+- Admin/Dean/Officer class dropdown showed all classes; requested behavior is department-scoped selection first, while Chairman remains department-scoped automatically.
+
+**Backend changes**
+
+- `facultyLoadRoutes`: read access now includes `OFFICER` (`authorize("ADMIN", "DEAN", "CHAIRMAN", "OFFICER")` on router-level auth). Write endpoints stay Chairman-only.
+- `studentClassRoutes`: read stack now includes `OFFICER`.
+- `userRoutes` list gate: non-admin faculty-only listing (`?role=FACULTY`) now allows `OFFICER` alongside `CHAIRMAN`/`DEAN`/`FACULTY`.
+- `studentClassService.listStudentClasses` now accepts optional `{ departmentId }`:
+  - `CHAIRMAN` still forced to own department (query ignored).
+  - `ADMIN`/`DEAN`/`OFFICER` can filter classes by `departmentId`.
+- `studentClassController.list` reads optional `departmentId` query and forwards it to service.
+
+**Frontend changes**
+
+- `StudentSchedulePage`:
+  - Added Department selector for `ADMIN`/`DEAN`/`OFFICER`.
+  - Class list fetches from `/student-classes?departmentId=...` only after department is selected.
+  - Chairman flow unchanged (classes already scoped by backend to own department).
+- `FacultySchedulePage`:
+  - Added Department selector for `ADMIN`/`DEAN`/`OFFICER`.
+  - Faculty list fetches with `/users?role=FACULTY&departmentId=...` after department is selected.
+  - Chairman flow remains unchanged.
+
+**Verification**
+
+- Backend `tsc --noEmit`: pass.
+- Frontend `npm run build`: pass.
+
+---
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

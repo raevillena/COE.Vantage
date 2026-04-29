@@ -8,7 +8,7 @@ import { createStudentClassSchema, updateStudentClassSchema } from "./studentCla
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "DEAN", "CHAIRMAN"));
+router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "OFFICER"));
 
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
