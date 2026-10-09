@@ -25,6 +25,7 @@ model User {
   role         Role
   departmentId String?
   name         String
+  experimentalFeatures Json?
   status       String?    // e.g. Full-time, Part-time (from faculty list)
   maxUnits     Int?       // max load units per term (null = no cap)
   isDeleted    Boolean    @default(false)
@@ -38,6 +39,8 @@ model User {
   crossDepartmentRequestsRequested CrossDepartmentLoadRequest[] @relation("RequestedBy")
   crossDepartmentRequestsResponded CrossDepartmentLoadRequest[] @relation("RespondedBy")
   crossDepartmentRequestsAsFaculty CrossDepartmentLoadRequest[] @relation("FacultyRequested")
+  gradeSubjectsOwned GradeSubject[] @relation("GradeSubjectOwner")
+  gradeSubjectViewerLinks GradeSubjectViewer[]
 
   @@index([role, departmentId])
   @@index([isDeleted])
@@ -57,8 +60,65 @@ model Department {
   roomsControlled     Room[]  @relation("ControlDepartment")
   curricula           Curriculum[]
   subjects            Subject[]
+  gradeSubjects       GradeSubject[]
   schedulingRuleSets  SchedulingRuleSet[]
   @@index([isDeleted])
+}
+
+model GradeSubject {
+  id                    String   @id @default(uuid())
+  name                  String
+  code                  String?
+  ownerId               String
+  departmentId          String?
+  gradingSystem         Json?
+  studentComputeEnabled Boolean  @default(false)
+  isDeleted             Boolean  @default(false)
+  deletedAt             DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  owner       User               @relation("GradeSubjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  department  Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  viewers     GradeSubjectViewer[]
+  records     GradeRecord[]
+
+  @@index([ownerId, isDeleted])
+  @@index([departmentId])
+}
+
+model GradeSubjectViewer {
+  id        String   @id @default(uuid())
+  subjectId String
+  userId    String
+  canEdit   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  subject GradeSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, userId])
+  @@index([userId])
+}
+
+model GradeRecord {
+  id            String   @id @default(uuid())
+  subjectId     String
+  studentName   String
+  studentNumber String
+  email         String?
+  code          String
+  grades        Json
+  maxScores     Json?
+  computedGrade Json?
+  emailSentAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subject GradeSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+  @@index([studentNumber, code])
 }
 
 model Room {

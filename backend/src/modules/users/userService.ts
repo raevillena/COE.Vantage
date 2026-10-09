@@ -1,11 +1,16 @@
 import bcrypt from "bcrypt";
+import { Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound } from "../../utils/errors.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 export async function listUsers(query: ListUsersQuery) {
-  const where: { role?: typeof query.role; departmentId?: string; isDeleted: boolean } = { isDeleted: false };
-  if (query.role) where.role = query.role;
+  const where: { role?: Role | { in: Role[] }; departmentId?: string; isDeleted: boolean } = { isDeleted: false };
+  if (Array.isArray(query.role)) {
+    if (query.role.length > 0) where.role = { in: query.role };
+  } else if (query.role) {
+    where.role = query.role;
+  }
   if (query.departmentId) where.departmentId = query.departmentId;
   return prisma.user.findMany({
     where,

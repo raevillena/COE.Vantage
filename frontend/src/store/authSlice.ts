@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import type { User } from "../types/auth";
+import type { User, ExperimentalFeaturesPreference } from "../types/auth";
 import { setAccessToken, clearAccessToken } from "../api/apiClient";
 
 interface AuthState {
@@ -39,6 +39,11 @@ const authSlice = createSlice({
       sessionStorage.setItem("accessToken", action.payload);
       setAccessToken(action.payload);
     },
+    setUserExperimentalFeatures(state, action: { payload: ExperimentalFeaturesPreference }) {
+      if (!state.user) return;
+      state.user.experimentalFeatures = action.payload;
+      sessionStorage.setItem("user", JSON.stringify(state.user));
+    },
     logout(state) {
       state.user = null;
       state.accessToken = null;
@@ -49,5 +54,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setAuth, setAccessTokenOnly, logout } = authSlice.actions;
+export const { setAuth, setAccessTokenOnly, setUserExperimentalFeatures, logout } = authSlice.actions;
 export default authSlice.reducer;

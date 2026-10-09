@@ -15,8 +15,10 @@ router.get(
   (req, res, next) => {
     const isAdmin = req.user?.role === "ADMIN";
     const isFacultyOnlyList =
-      req.query.role === "FACULTY" &&
-      (req.user?.role === "CHAIRMAN" || req.user?.role === "DEAN" || req.user?.role === "FACULTY" || req.user?.role === "OFFICER");
+      req.user?.role === "CHAIRMAN" || 
+      req.user?.role === "DEAN" || 
+      req.user?.role === "FACULTY" || 
+      req.user?.role === "OFFICER";
     if (isAdmin || isFacultyOnlyList) return next();
     return authorize("ADMIN")(req, res, next);
   },

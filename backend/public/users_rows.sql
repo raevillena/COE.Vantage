@@ -1,0 +1,1 @@
+INSERT INTO "public"."users" ("id", "external_id", "name", "email", "role", "created_at") VALUES ('17425398-afef-4ad2-bc46-47ad49ce0f18', '13', 'Ray2 Vill', 'raymart.o.villena@gmail.com', 'teacher', '2025-11-07 03:18:28.022814+00'), ('563b880d-ab8e-4c95-b42c-1dbf6c5b1e47', '1', 'Raymart Villena', 'rovillena@mmsu.edu.ph', 'admin', '2025-11-05 06:35:43.034017+00');

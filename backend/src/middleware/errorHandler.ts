@@ -11,8 +11,9 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   if (err instanceof ZodError) {
+    const first = err.issues[0];
     res.status(400).json({
-      message: "Validation error",
+      message: first?.message ?? "Validation error",
       errors: err.flatten().fieldErrors,
     });
     return;

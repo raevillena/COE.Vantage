@@ -8,6 +8,8 @@ import {
   sendPasswordResetEmail,
   forgotPassword,
   resetPassword,
+  getMyExperimentalFeatures,
+  updateMyExperimentalFeatures,
 } from "./authController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
@@ -18,6 +20,7 @@ import {
   requestPasswordResetSchema,
   sendPasswordResetEmailSchema,
   resetPasswordSchema,
+  updateExperimentalFeaturesSchema,
 } from "./authSchemas.js";
 
 const router = Router();
@@ -41,5 +44,12 @@ router.post(
 );
 router.post("/forgot-password", validate(sendPasswordResetEmailSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+router.get("/me/experimental-features", authenticate, getMyExperimentalFeatures);
+router.patch(
+  "/me/experimental-features",
+  authenticate,
+  validate(updateExperimentalFeaturesSchema),
+  updateMyExperimentalFeatures
+);
 
 export const authRoutes = router;

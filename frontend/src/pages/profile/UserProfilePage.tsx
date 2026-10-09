@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { useAppSelector } from "../../store/hooks";
+import { useAppDispatch } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
 import { Select } from "../../components/ui/select";
 import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
+import { setUserExperimentalFeatures } from "../../store/authSlice";
+import {
+  experimentalFeatureCatalog,
+  type ExperimentalFeatureDefinition,
+} from "../../features/experimental/featureCatalog";
+import type { ExperimentalFeatureKey } from "../../types/auth";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
@@ -71,9 +78,17 @@ function ChangePasswordForm() {
 }
 
 export function UserProfilePage() {
+  const dispatch = useAppDispatch();
   const user = useAppSelector((s) => s.auth.user);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
   const { paletteId, palettes, setPaletteId } = useSchedulePalette();
+  const [expLoading, setExpLoading] = useState(false);
+  const [expSaving, setExpSaving] = useState(false);
+  const [expMessage, setExpMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [expEnabled, setExpEnabled] = useState<boolean>(user?.experimentalFeatures?.enabled ?? false);
+  const [selectedFeatures, setSelectedFeatures] = useState<ExperimentalFeatureKey[]>(
+    user?.experimentalFeatures?.features ?? []
+  );
 
   useEffect(() => {
     if (!user?.departmentId) return;
@@ -85,6 +100,69 @@ export function UserProfilePage() {
       })
       .catch(() => setDepartmentName(null));
   }, [user?.departmentId]);
+
+  useEffect(() => {
+    setExpEnabled(user?.experimentalFeatures?.enabled ?? false);
+    setSelectedFeatures(user?.experimentalFeatures?.features ?? []);
+  }, [user?.experimentalFeatures?.enabled, user?.experimentalFeatures?.features]);
+
+  useEffect(() => {
+    if (!user) return;
+    setExpLoading(true);
+    apiClient
+      .get<{ enabled: boolean; features: ExperimentalFeatureKey[] }>("/auth/me/experimental-features")
+      .then(({ data }) => {
+        setExpEnabled(data.enabled);
+        setSelectedFeatures(data.features);
+        dispatch(setUserExperimentalFeatures(data));
+      })
+      .catch(() => {
+        // Keep local defaults when request fails.
+      })
+      .finally(() => setExpLoading(false));
+  }, [dispatch, user?.id]);
+
+  const visibleFeatureCatalog = (Object.values(experimentalFeatureCatalog) as ExperimentalFeatureDefinition[]).filter(
+    (feature) => (user ? feature.allowedRoles.includes(user.role) : false)
+  );
+
+  const saveExperimentalPreferences = async (
+    next: { enabled?: boolean; features?: ExperimentalFeatureKey[] }
+  ) => {
+    const prevEnabled = expEnabled;
+    const prevFeatures = selectedFeatures;
+    const nextEnabled = next.enabled ?? prevEnabled;
+    const nextFeatures = next.features ?? prevFeatures;
+
+    setExpMessage(null);
+    setExpSaving(true);
+    setExpEnabled(nextEnabled);
+    setSelectedFeatures(nextFeatures);
+
+    try {
+      const { data } = await apiClient.patch<{ enabled: boolean; features: ExperimentalFeatureKey[] }>(
+        "/auth/me/experimental-features",
+        next
+      );
+      setExpEnabled(data.enabled);
+      setSelectedFeatures(data.features);
+      dispatch(setUserExperimentalFeatures(data));
+      setExpMessage({ type: "success", text: "Experimental feature preferences updated." });
+    } catch {
+      setExpEnabled(prevEnabled);
+      setSelectedFeatures(prevFeatures);
+      setExpMessage({ type: "error", text: "Could not update experimental preferences." });
+    } finally {
+      setExpSaving(false);
+    }
+  };
+
+  const toggleFeature = (featureKey: ExperimentalFeatureKey, checked: boolean) => {
+    const nextFeatures = checked
+      ? Array.from(new Set([...selectedFeatures, featureKey]))
+      : selectedFeatures.filter((feature) => feature !== featureKey);
+    void saveExperimentalPreferences({ features: nextFeatures });
+  };
 
   if (!user) {
     return (
@@ -153,6 +231,61 @@ export function UserProfilePage() {
           <p className="mt-1 text-xs text-foreground-muted">
             {palettes.find((p) => p.id === paletteId)?.description}
           </p>
+        </div>
+      </section>
+
+      <section className="mt-8 max-w-xl">
+        <h2 className="text-lg font-medium text-foreground mb-3">Experimental features</h2>
+        <p className="text-sm text-foreground-muted mb-4">
+          Enable early-access modules on your account. You can choose specific experimental features
+          as they become available.
+        </p>
+
+        <div className="rounded border border-border bg-surface p-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-border-strong"
+              checked={expEnabled}
+              disabled={expSaving || expLoading}
+              onChange={(e) => void saveExperimentalPreferences({ enabled: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Enable experimental features</span>
+              <span className="block text-xs text-foreground-muted">
+                When disabled, all experimental items are hidden from the sidebar and routes.
+              </span>
+            </span>
+          </label>
+
+          <div className="mt-4 space-y-3">
+            <p className="text-sm font-medium text-foreground">Select enabled experiments</p>
+            {visibleFeatureCatalog.length === 0 ? (
+              <p className="text-sm text-foreground-muted">No experimental features available for your role yet.</p>
+            ) : (
+              visibleFeatureCatalog.map((feature) => (
+                <label key={feature.key} className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-border-strong"
+                    checked={selectedFeatures.includes(feature.key)}
+                    disabled={expSaving || expLoading || !expEnabled}
+                    onChange={(e) => toggleFeature(feature.key, e.target.checked)}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">{feature.label}</span>
+                    <span className="block text-xs text-foreground-muted">{feature.description}</span>
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+
+          {expMessage && (
+            <p className={`mt-3 text-sm ${expMessage.type === "success" ? "text-success" : "text-danger"}`}>
+              {expMessage.text}
+            </p>
+          )}
         </div>
       </section>
 

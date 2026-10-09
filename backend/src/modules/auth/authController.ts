@@ -8,6 +8,8 @@ import {
   sendPasswordResetEmailForUser as sendPasswordResetEmailService,
   requestPasswordResetByEmail as forgotPasswordService,
   resetPassword as resetPasswordService,
+  getMyExperimentalFeatures as getMyExperimentalFeaturesService,
+  updateMyExperimentalFeatures as updateMyExperimentalFeaturesService,
 } from "./authService.js";
 import type {
   LoginBody,
@@ -15,6 +17,7 @@ import type {
   RequestPasswordResetBody,
   SendPasswordResetEmailBody,
   ResetPasswordBody,
+  UpdateExperimentalFeaturesBody,
 } from "./authSchemas.js";
 
 const REFRESH_COOKIE_NAME = "refreshToken";
@@ -83,4 +86,17 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   const body = req.body as ResetPasswordBody;
   await resetPasswordService(body);
   res.json({ message: "Password updated. You can log in with your new password." });
+}
+
+export async function getMyExperimentalFeatures(req: Request, res: Response): Promise<void> {
+  if (!req.user) return;
+  const preferences = await getMyExperimentalFeaturesService(req.user.id);
+  res.json(preferences);
+}
+
+export async function updateMyExperimentalFeatures(req: Request, res: Response): Promise<void> {
+  if (!req.user) return;
+  const body = req.body as UpdateExperimentalFeaturesBody;
+  const preferences = await updateMyExperimentalFeaturesService(req.user.id, body);
+  res.json(preferences);
 }

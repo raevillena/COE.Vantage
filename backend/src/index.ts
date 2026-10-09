@@ -19,8 +19,13 @@ import { facultyLoadRoutes } from "./modules/facultyLoads/facultyLoadRoutes.js";
 import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignmentRequestRoutes.js";
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
 import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
+import { gradeSubjectRoutes } from "./modules/gradeSubjects/gradeSubjectRoutes.js";
 
 const app = express();
+
+if (env.TRUST_PROXY) {
+  app.set("trust proxy", 1);
+}
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(compression());
@@ -49,6 +54,7 @@ app.use("/faculty-loads", facultyLoadRoutes);
 app.use("/assignment-requests", assignmentRequestRoutes);
 app.use("/reports", reportRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
+app.use("/grade-subjects", gradeSubjectRoutes);
 
 app.use(errorHandler);
 

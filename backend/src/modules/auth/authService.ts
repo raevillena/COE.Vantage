@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { setRefreshToken, getRefreshToken, deleteRefreshToken } from "../../config/redis.js";
 import {
@@ -11,7 +12,17 @@ import {
 import { env } from "../../config/env.js";
 import { sendPasswordResetEmail as sendEmail } from "../../utils/email.js";
 import { badRequest, unauthorized } from "../../utils/errors.js";
-import type { LoginBody, RegisterBody, RequestPasswordResetBody, ResetPasswordBody } from "./authSchemas.js";
+import type {
+  LoginBody,
+  RegisterBody,
+  RequestPasswordResetBody,
+  ResetPasswordBody,
+  UpdateExperimentalFeaturesBody,
+} from "./authSchemas.js";
+import {
+  normalizeExperimentalFeatures,
+  type ExperimentalFeaturesPreference,
+} from "./experimentalFeatures.js";
 
 /** Payload we store in the access token (sub = userId). */
 export interface AccessPayload {
@@ -60,7 +71,16 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   }
 }
 
-export async function login(body: LoginBody): Promise<{ accessToken: string; refreshToken: string; user: { id: string; email: string; role: string; name: string; departmentId: string | null } }> {
+type AuthUserPayload = {
+  id: string;
+  email: string;
+  role: string;
+  name: string;
+  departmentId: string | null;
+  experimentalFeatures: ExperimentalFeaturesPreference;
+};
+
+export async function login(body: LoginBody): Promise<{ accessToken: string; refreshToken: string; user: AuthUserPayload }> {
   const user = await prisma.user.findUnique({ where: { email: body.email } });
   if (!user || user.isDeleted) throw unauthorized("Invalid email or password");
   const valid = await bcrypt.compare(body.password, user.passwordHash);
@@ -77,6 +97,7 @@ export async function login(body: LoginBody): Promise<{ accessToken: string; ref
       role: user.role,
       name: user.name,
       departmentId: user.departmentId,
+      experimentalFeatures: normalizeExperimentalFeatures(user.experimentalFeatures),
     },
   };
 }
@@ -115,6 +136,33 @@ export async function register(body: RegisterBody): Promise<{ id: string; email:
     select: { id: true, email: true, role: true, name: true, departmentId: true },
   });
   return user;
+}
+
+export async function getMyExperimentalFeatures(userId: string): Promise<ExperimentalFeaturesPreference> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { experimentalFeatures: true, isDeleted: true },
+  });
+  if (!user || user.isDeleted) throw unauthorized("User not found");
+  return normalizeExperimentalFeatures(user.experimentalFeatures);
+}
+
+export async function updateMyExperimentalFeatures(
+  userId: string,
+  body: UpdateExperimentalFeaturesBody
+): Promise<ExperimentalFeaturesPreference> {
+  const current = await getMyExperimentalFeatures(userId);
+  const next: ExperimentalFeaturesPreference = {
+    enabled: body.enabled ?? current.enabled,
+    features: body.features ?? current.features,
+  };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { experimentalFeatures: next as unknown as Prisma.InputJsonValue },
+  });
+
+  return next;
 }
 
 /** Build the reset link for a token (used in email and dev log). */

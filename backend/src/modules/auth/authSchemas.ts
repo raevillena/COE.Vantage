@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 
 const roleEnum = z.nativeEnum(Role);
+const experimentalFeatureKeyEnum = z.enum(["gradeModule"]);
 
 export const loginSchema = z.object({
   body: z.object({
@@ -42,6 +43,18 @@ export const resetPasswordSchema = z.object({
   }),
 });
 
+export const updateExperimentalFeaturesSchema = z.object({
+  body: z
+    .object({
+      enabled: z.boolean().optional(),
+      features: z.array(experimentalFeatureKeyEnum).optional(),
+    })
+    .refine((value) => value.enabled !== undefined || value.features !== undefined, {
+      message: "At least one field is required",
+    }),
+});
+
 export type RequestPasswordResetBody = z.infer<typeof requestPasswordResetSchema>["body"];
 export type SendPasswordResetEmailBody = z.infer<typeof sendPasswordResetEmailSchema>["body"];
 export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>["body"];
+export type UpdateExperimentalFeaturesBody = z.infer<typeof updateExperimentalFeaturesSchema>["body"];

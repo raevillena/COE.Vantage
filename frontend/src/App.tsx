@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/protectedRoute/ProtectedRoute";
+import { ExperimentalRoute } from "./components/protectedRoute/ExperimentalRoute";
 import { Layout } from "./components/layout/Layout";
 import { LoginPage } from "./pages/login/LoginPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
@@ -25,6 +26,8 @@ import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
 import { ForgotPasswordPage } from "./pages/forgotPassword/ForgotPasswordPage";
 import { AboutPage } from "./pages/about/AboutPage";
 import { NotFoundPage } from "./pages/notFound/NotFoundPage";
+import { ExperimentalGradesPage } from "./pages/experimental/ExperimentalGradesPage";
+import { PublicGradesPage } from "./pages/publicGrades/PublicGradesPage";
 
 function App() {
   return (
@@ -32,6 +35,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/grades" element={<PublicGradesPage />} />
       <Route
         path="/"
         element={
@@ -62,6 +66,16 @@ function App() {
         <Route path="trash" element={<ProtectedRoute allowedRoles={["ADMIN"]}><TrashPage /></ProtectedRoute>} />
         <Route path="profile" element={<UserProfilePage />} />
         <Route path="about" element={<AboutPage />} />
+        <Route
+          path="experimental/grades"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "FACULTY", "CHAIRMAN", "DEAN"]}>
+              <ExperimentalRoute featureKey="gradeModule">
+                <ExperimentalGradesPage />
+              </ExperimentalRoute>
+            </ProtectedRoute>
+          }
+        />
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

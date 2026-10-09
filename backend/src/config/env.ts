@@ -16,6 +16,14 @@ const envSchema = z.object({
   ACCESS_TOKEN_EXPIRY: z.string().default("15m"),
   REFRESH_TOKEN_EXPIRY: z.string().default("7d"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:5173"),
+  /**
+   * When true, Express honors `X-Forwarded-For` for `req.ip` (needed for correct per-IP rate limits behind nginx).
+   * Set in production behind a reverse proxy; leave false in local dev unless you proxy through nginx locally.
+   */
+  TRUST_PROXY: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
   /** Base URL for password reset links (e.g. https://app.example.com). Defaults to FRONTEND_ORIGIN. */
   RESET_PASSWORD_BASE_URL: z.string().optional(),
   /** Optional SMTP for sending password reset emails. If not set, reset link is logged to console (dev). */

@@ -17,6 +17,7 @@ export const routeTitles: Record<string, string> = {
   "/trash": "Trash",
   "/profile": "Profile",
   "/about": "About",
+  "/experimental/grades": "Grades",
 };
 
 export function getPageTitle(pathname: string): string {

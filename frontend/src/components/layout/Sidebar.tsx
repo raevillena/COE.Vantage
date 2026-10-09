@@ -19,9 +19,11 @@ import {
   Building,
   User,
   Info,
+  FlaskConical,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
+import { getExperimentalFeaturesForUser } from "../../features/experimental/featureCatalog";
 
 interface SidebarProps {
   open: boolean;
@@ -94,6 +96,7 @@ function RequestsNavItem({ onClose }: { onClose: () => void }) {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const user = useAppSelector((s) => s.auth.user);
+  const experimentalFeatures = getExperimentalFeaturesForUser(user);
 
   const sidebar = (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-surface">
@@ -169,6 +172,22 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
           <NavItem to="/reports" icon={FileText} onClose={onClose}>Reports</NavItem>
         </div>
+
+        {experimentalFeatures.length > 0 && (
+          <>
+            <Separator.Root className="my-2 h-px bg-border" />
+            <div className="space-y-1">
+              <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+                Experimental
+              </div>
+              {experimentalFeatures.map((feature) => (
+                <NavItem key={feature.key} to={feature.routePath} icon={FlaskConical} onClose={onClose}>
+                  {feature.sidebarLabel}
+                </NavItem>
+              ))}
+            </div>
+          </>
+        )}
 
         <Separator.Root className="my-2 h-px bg-border" />
         <div className="space-y-1">

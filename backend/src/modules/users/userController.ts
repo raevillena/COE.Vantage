@@ -7,7 +7,7 @@ export async function list(req: Request, res: Response): Promise<void> {
   // Chairman sees only users in their department (used by Chairman Faculty page).
   if (req.user?.role === "CHAIRMAN" && req.user.departmentId) {
     query.departmentId = req.user.departmentId;
-    if (!query.role) query.role = "FACULTY";
+    if (!query.role) query.role = ["FACULTY", "CHAIRMAN"];
   }
   const list = await userService.listUsers(query);
   res.json(list);

@@ -27,7 +27,7 @@ const emailWithUnicode = z
 
 export const listUsersQuerySchema = z.object({
   query: z.object({
-    role: roleEnum.optional(),
+    role: z.union([roleEnum, z.array(roleEnum)]).optional(),
     departmentId: z.string().uuid().optional(),
   }),
 });

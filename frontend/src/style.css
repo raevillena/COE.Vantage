@@ -30,6 +30,9 @@
   --color-danger-muted: #fff5f5;
   --color-success: #276749;
   --color-success-muted: #f0fff4;
+  /* Amber warning — filled highlights (e.g. CND), not outline-only */
+  --color-warning: #b45309;
+  --color-warning-muted: #fffbeb;
   --color-focus-ring: #197fa1;
 }
 
@@ -61,6 +64,8 @@
   --color-danger-muted: #7f1d1d;
   --color-success: #34d399;
   --color-success-muted: #064e3b;
+  --color-warning: #fbbf24;
+  --color-warning-muted: #422006;
 
   /* Focus ring: logo cyan so it reads on dark */
   --color-focus-ring: #44c4e0;
