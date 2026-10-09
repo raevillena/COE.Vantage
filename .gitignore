@@ -7,7 +7,7 @@ node_modules/
 .env.*.local
 *.env
 .env.production
-frontend/.env.production
+**/.env.*
 
 # Build
 dist/
