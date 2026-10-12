@@ -7,7 +7,7 @@ import { apiClient } from "../../api/apiClient";
 import type {
   FacultyLoad,
   AcademicYear,
-  UserListItem,
+  AssignableFaculty,
   StudentClass,
   Room,
   CopyFacultyLoadsSummary,
@@ -212,7 +212,7 @@ export function SchedulerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("class");
   const [studentClasses, setStudentClasses] = useState<StudentClass[]>([]);
   const [studentClassId, setStudentClassId] = useState("");
-  const [faculties, setFaculties] = useState<UserListItem[]>([]);
+  const [faculties, setFaculties] = useState<AssignableFaculty[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   /** Pending cross-department assignment requests for the current class (shown as "Awaiting approval" blocks). */
@@ -465,8 +465,8 @@ export function SchedulerPage() {
       }
     });
     apiClient
-      .get<UserListItem[]>("/users")
-      .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
+      .get<AssignableFaculty[]>("/users/assignable-faculty")
+      .then(({ data }) => setFaculties(data ?? []))
       .catch(() => setFaculties([]));
     apiClient.get("/student-classes").then(({ data }) => setStudentClasses(data));
     apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(data));
@@ -1144,7 +1144,7 @@ export function SchedulerPage() {
             <div className="min-w-[180px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
               <SearchableSelect
-                options={faculties.map((f) => ({ value: f.id, label: f.name }))}
+                options={faculties.map((f) => ({ value: f.id, label: `${f.name}${f.department?.code ? ` · ${f.department.code}` : ""}` }))}
                 value={selectedFacultyId || "__none__"}
                 onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
                 noneOption={{ value: "__none__", label: "Select faculty" }}
@@ -1421,7 +1421,7 @@ export function SchedulerPage() {
                                   <Select.Item value="__none__">Select faculty</Select.Item>
                                   {faculties.map((f) => (
                                     <Select.Item key={f.id} value={f.id}>
-                                      {f.name}
+                                      {`${f.name}${f.department?.code ? ` · ${f.department.code}` : ""}`}
                                     </Select.Item>
                                   ))}
                                 </Select.Content>
@@ -1639,7 +1639,7 @@ export function SchedulerPage() {
                     <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Faculty</label>
                       <SearchableSelect
-                        options={faculties.map((f) => ({ value: f.id, label: f.name }))}
+                        options={faculties.map((f) => ({ value: f.id, label: `${f.name}${f.department?.code ? ` · ${f.department.code}` : ""}` }))}
                         value={overlayFacultyId || "__none__"}
                         onValueChange={(v) => setOverlayFacultyId(v === "__none__" ? "" : v)}
                         noneOption={{ value: "__none__", label: "Select faculty" }}

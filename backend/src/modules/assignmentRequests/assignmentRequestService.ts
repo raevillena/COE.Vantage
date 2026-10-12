@@ -16,7 +16,7 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
     prisma.studentClass.findUnique({ where: { id: body.studentClassId }, include: { curriculum: { select: { departmentId: true } } } }),
     prisma.academicYear.findUnique({ where: { id: body.academicYearId } }),
   ]);
-  if (!faculty || faculty.role !== "FACULTY") throw notFound("Faculty not found");
+  if (!faculty || !["FACULTY", "CHAIRMAN", "DEAN"].includes(faculty.role)) throw notFound("Faculty not found");
   if (!subject) throw notFound("Subject not found");
   if (!studentClass) throw notFound("Student class not found");
   if (!academicYear) throw notFound("Academic year not found");

@@ -13,6 +13,10 @@ export async function list(req: Request, res: Response): Promise<void> {
   res.json(list);
 }
 
+export async function listAssignableFaculty(req: Request, res: Response): Promise<void> {
+  res.json(await userService.listAssignableFaculty(req.user?.departmentId ?? null));
+}
+
 export async function getById(req: Request, res: Response): Promise<void> {
   const user = await userService.getUserById(req.params.id);
   res.json(user);

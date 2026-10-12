@@ -97,6 +97,14 @@ export interface UserListItem {
   deletedAt?: string | null;
 }
 
+export interface AssignableFaculty {
+  id: string;
+  name: string;
+  role: Role;
+  departmentId: string | null;
+  department?: { name: string; code: string | null } | null;
+}
+
 export interface FacultyLoad {
   id: string;
   facultyId: string | null;

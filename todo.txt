@@ -1,0 +1,17 @@
+Dashboard page
+ - make the dashboard show information regarding classes, rooms. information that are useful and information that needs action
+
+Faculty page
+ - chairman should be able to change the max or minimum units
+ - reuse the edit modal in admin view and change the status as well.
+
+Rooms page
+ - the chairman should be able to add rooms, with existence checking 
+ - instead of making the room loose control to make it open. it must have the ability to open and close instead
+ - also separate the rooms of the department vs other rooms
+
+Schedules page
+ - chairman should be able to see their own schedules
+
+Scheduler page
+ - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict

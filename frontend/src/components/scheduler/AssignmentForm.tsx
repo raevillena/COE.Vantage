@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { ConflictPreview, FacultyLoad, Room, UserListItem } from "../../types/api";
+import type { ConflictPreview, FacultyLoad, Room, AssignableFaculty } from "../../types/api";
 import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { useAppSelector } from "../../store/hooks";
@@ -10,6 +10,7 @@ import { Select } from "../ui/select";
 import { SearchableSelect } from "../ui/searchableSelect";
 import { Dialog } from "../ui/dialog";
 import { ScheduleGrid } from "../scheduleGrid/ScheduleGrid";
+import { groupFacultyByDepartment, facultyRoleSuffix } from "./facultyGroups";
 
 /** Parse "HH:mm" to minutes since midnight. */
 function timeToMinutes(time: string): number {
@@ -122,7 +123,7 @@ export function AssignmentForm({
   const [endTime, setEndTime] = useState(initialValues.endTime ?? "09:00");
   const [preview, setPreview] = useState<ConflictPreview | null>(null);
   const [loading, setLoading] = useState(false);
-  const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
+  const [faculties, setFaculties] = useState<AssignableFaculty[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; code: string; name: string; isLab: boolean }[]>([]);
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -140,6 +141,7 @@ export function AssignmentForm({
   const coIsOffSystemRoom = coRoomId === "__off_system__";
   /** Saved load in DB (not a pending placeholder id). */
   const isEditingSavedLoad = Boolean(editingLoadId && !String(editingLoadId).startsWith("pending-"));
+  const facultyGroups = useMemo(() => groupFacultyByDepartment(faculties, user?.departmentId ?? null), [faculties, user?.departmentId]);
   const coInstructorFacultyOptions = useMemo(() => {
     const current =
       facultyId && facultyId !== "__others__" && facultyId !== "__none__" && facultyId !== ""
@@ -148,7 +150,10 @@ export function AssignmentForm({
     return faculties.filter((f) => !current || f.id !== current);
   }, [faculties, facultyId]);
   const coInstructorSearchableOptions = useMemo(
-    () => coInstructorFacultyOptions.map((f) => ({ value: f.id, label: f.name })),
+    () => coInstructorFacultyOptions.map((f) => ({
+      value: f.id,
+      label: `${f.name}${facultyRoleSuffix(f.role)}${f.department?.code ? ` · ${f.department.code}` : ""}`,
+    })),
     [coInstructorFacultyOptions]
   );
 
@@ -198,14 +203,8 @@ export function AssignmentForm({
 
   useEffect(() => {
     apiClient
-      .get<UserListItem[]>("/users")
-      .then(({ data }) =>
-        setFaculties(
-          (data ?? [])
-            .filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")
-            .map((u) => ({ id: u.id, name: u.name }))
-        )
-      )
+      .get<AssignableFaculty[]>("/users/assignable-faculty")
+      .then(({ data }) => setFaculties(data ?? []))
       .catch(() => setFaculties([]));
     apiClient.get("/subjects").then(({ data }) => setSubjects(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
@@ -531,10 +530,17 @@ export function AssignmentForm({
           <Select.Content>
             <Select.Item value="__none__">Select faculty</Select.Item>
             <Select.Item value="__others__">Others (off-system)</Select.Item>
-            {faculties.map((f) => (
-              <Select.Item key={f.id} value={f.id}>
-                {f.name}
-              </Select.Item>
+            {facultyGroups.map((g) => (
+              <Select.Group key={g.key}>
+                <Select.Label className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                  {g.label}
+                </Select.Label>
+                {g.items.map((f) => (
+                  <Select.Item key={f.id} value={f.id}>
+                    {f.name}{facultyRoleSuffix(f.role)}
+                  </Select.Item>
+                ))}
+              </Select.Group>
             ))}
           </Select.Content>
         </Select.Root>

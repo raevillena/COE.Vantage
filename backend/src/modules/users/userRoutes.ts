@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getPrioritizedSubjects } from "./userController.js";
+import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getPrioritizedSubjects, listAssignableFaculty } from "./userController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -26,6 +26,8 @@ router.get(
 );
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
+
+router.get("/assignable-faculty", authorize("ADMIN", "DEAN", "CHAIRMAN"), listAssignableFaculty);
 
 router.get("/:id/prioritized-subjects", authorize("ADMIN", "DEAN", "CHAIRMAN"), getPrioritizedSubjects);
 router.get("/:id", authorize("ADMIN"), getById);

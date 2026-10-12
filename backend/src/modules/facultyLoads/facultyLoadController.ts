@@ -44,7 +44,9 @@ export async function create(req: Request, res: Response): Promise<void> {
     ]);
     const subjectDeptId = subject?.departmentId ?? studentClass?.curriculum?.departmentId ?? null;
     const facultyDeptId = faculty?.departmentId ?? null;
-    if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId && faculty?.role === "FACULTY") {
+
+    const needsApproval = faculty?.role === "FACULTY" || faculty?.role === "CHAIRMAN" || faculty?.role === "DEAN";
+    if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId && needsApproval) {
       const request = await assignmentRequestService.createAssignmentRequest(
         {
           facultyId: effectiveFacultyId,

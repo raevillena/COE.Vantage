@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { ConflictPreview, UserListItem } from "../../types/api";
+import type { ConflictPreview, AssignableFaculty } from "../../types/api";
 import { getApiErrorMessage, getConflictSummary } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../ui/dialog";
@@ -37,13 +37,9 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
 
   useEffect(() => {
     apiClient
-      .get<UserListItem[]>("/users")
+      .get<AssignableFaculty[]>("/users/assignable-faculty")
       .then(({ data }) =>
-        setFaculties(
-          (data ?? [])
-            .filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")
-            .map((u) => ({ id: u.id, name: u.name }))
-        )
+        setFaculties((data ?? []).map((u) => ({ id: u.id, name: u.department?.code ? `${u.name} · ${u.department.code}` : u.name })))
       )
       .catch(() => setFaculties([]));
     apiClient.get("/subjects").then(({ data }) => setSubjects(data));

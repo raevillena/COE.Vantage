@@ -19,6 +19,33 @@ export async function listUsers(query: ListUsersQuery) {
   });
 }
 
+export async function listAssignableFaculty(callerDepartmentId: string | null) {
+  const users = await prisma.user.findMany({
+    where: { isDeleted: false, role: { in: [Role.FACULTY, Role.CHAIRMAN, Role.DEAN] } },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      departmentId: true,
+      department: { select: { name: true, code: true } },
+    },
+  });
+
+  const bucket = (u: (typeof users)[number]) =>
+    callerDepartmentId && u.departmentId === callerDepartmentId ? 0 : u.departmentId ? 1 : 2;
+
+  return users.sort((a, b) => {
+    const ba = bucket(a);
+    const bb = bucket(b);
+    if (ba !== bb) return ba - bb;
+    if (ba === 1) {
+      const d = (a.department?.name ?? "").localeCompare(b.department?.name ?? "");
+      if (d !== 0) return d;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export async function getUserById(id: string) {
   const user = await prisma.user.findUnique({
     where: { id },
