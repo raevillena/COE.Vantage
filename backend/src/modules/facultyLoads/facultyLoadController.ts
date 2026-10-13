@@ -47,6 +47,7 @@ export async function create(req: Request, res: Response): Promise<void> {
 
     const needsApproval = faculty?.role === "FACULTY" || faculty?.role === "CHAIRMAN" || faculty?.role === "DEAN";
     if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId && needsApproval) {
+      if (body.roomId && caller) await facultyLoadService.assertRoomAssignable(body.roomId, body.academicYearId, body.semester, caller);
       const request = await assignmentRequestService.createAssignmentRequest(
         {
           facultyId: effectiveFacultyId,

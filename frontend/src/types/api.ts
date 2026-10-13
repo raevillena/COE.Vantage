@@ -125,6 +125,7 @@ export interface FacultyLoad {
   academicYear?: { id: string; name: string };
   /** True when this block is a pending cross-department request (not yet approved). */
   pendingApproval?: boolean;
+  locked?: boolean;
 }
 
 /** Cross-department assignment request (chairman-to-chairman). */

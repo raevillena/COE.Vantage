@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as roomService from "./roomService.js";
-import type { CreateRoomBody, UpdateRoomBody, ListRoomsQuery, SetRoomAvailabilityBody } from "./roomSchemas.js";
+import type { CreateRoomBody, UpdateRoomBody, ListRoomsQuery, SetRoomAvailabilityBody, TransferRoomBody } from "./roomSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = req.query as unknown as ListRoomsQuery;
@@ -15,7 +15,8 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateRoomBody;
-  const room = await roomService.createRoom(body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : { role: "", departmentId: null };
+  const room = await roomService.createRoom(body, caller);
   res.status(201).json(room);
 }
 
@@ -63,4 +64,11 @@ export async function getAvailabilityMap(req: Request, res: Response): Promise<v
   const { academicYearId, semester } = req.query as { academicYearId: string; semester: string };
   const map = await roomService.getRoomAvailabilityMap(academicYearId, Number(semester));
   res.json(map);
+}
+
+export async function transfer(req: Request, res: Response): Promise<void> {
+  const body = req.body as TransferRoomBody;
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : { role: "", departmentId: null };
+  const room = await roomService.transferRoom(req.params.id, body, caller);
+  res.json(room);
 }

@@ -181,11 +181,12 @@ function ScheduleBlock({
 }: ScheduleBlockProps) {
   const { palette } = useSchedulePalette();
   const pending = Boolean(load.pendingApproval);
+  const locked = Boolean(load.locked);
   const draggableId = draggableIdPrefix ? `${draggableIdPrefix}-load-${load.id}` : `load-${load.id}`;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: draggableId,
     data: { type: "load" as const, load },
-    disabled: !onLoadMove || pending,
+    disabled: !onLoadMove || pending || locked,
   });
 
   const [resizePreviewEndMinutes, setResizePreviewEndMinutes] = useState<number | null>(null);
@@ -250,23 +251,24 @@ function ScheduleBlock({
   return (
     <div
       ref={setNodeRef}
-      {...(onLoadMove && !pending ? { ...attributes, ...listeners } : {})}
+      {...(onLoadMove && !pending && !locked ? { ...attributes, ...listeners } : {})}
       role={onLoadClick && !pending ? "button" : undefined}
       tabIndex={onLoadClick && !pending ? 0 : undefined}
       onClick={onLoadClick && !pending ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
       onKeyDown={onLoadClick && !pending ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
       title={titleParts.join(" · ") + (pending ? " · Awaiting chairman approval" : "")}
-      className={`${positionClass} rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      className={`${positionClass} rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending && !locked ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={positionStyle ?? undefined}
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
         {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
+        {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
       </div>
       <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {pending ? "Cross-dept · " : ""}{[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
       </div>
-      {onLoadResize && !pending && height >= 24 && !embeddedInTeamSlot && (
+        {onLoadResize && !pending && !locked && height >= 24 && !embeddedInTeamSlot && (
         <div
           data-resize-handle
           className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center border-t border-foreground-muted/50 hover:border-foreground-muted hover:bg-black/10 rounded-b"

@@ -1574,10 +1574,10 @@ export function SchedulerPage() {
                     {selectedRoomId && (() => {
                       const room = rooms.find((r) => r.id === selectedRoomId);
                       const isOpen = roomAvailabilityMap[selectedRoomId] === true;
-                      const chairmanControls = user?.role === "CHAIRMAN" && room?.controlDepartmentId && user.departmentId === room.controlDepartmentId;
-                      const adminControls = user?.role === "ADMIN";
-                      const canControl = chairmanControls || adminControls;
-                      if (!canControl || !room?.controlDepartmentId) return null;
+                      const canControl =
+                        user?.role === "ADMIN" || user?.role === "DEAN" ||
+                        (user?.role === "CHAIRMAN" && room?.departmentId === user.departmentId);
+                      if (!canControl || !room) return null;
                       return (
                         <Button
                           type="button"
@@ -1603,7 +1603,7 @@ export function SchedulerPage() {
                             }
                           }}
                         >
-                          {openingRoom ? "…" : isOpen ? "Close room (only control dept can assign)" : "Open room for other departments"}
+                          {openingRoom ? "…" : isOpen ? "Close room (locks other departments' schedules)" : "Open room for other departments"}
                         </Button>
                       );
                     })()}

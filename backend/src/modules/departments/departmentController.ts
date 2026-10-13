@@ -4,7 +4,7 @@ import type { CreateDepartmentBody, UpdateDepartmentBody, DepartmentParams } fro
 
 export async function list(req: Request, res: Response): Promise<void> {
   const user = req.user;
-  if (user?.role === "CHAIRMAN") {
+  if (user?.role === "CHAIRMAN" && req.query.scope !== "all") {
     if (user.departmentId) {
       const dept = await departmentService.getDepartmentById(user.departmentId);
       res.json([dept]);

@@ -223,11 +223,9 @@ export function AssignmentForm({
   const selectedSubject = subjects.find((s) => s.id === subjectId);
   const roomOptions = selectedSubject?.isLab ? rooms.filter((r) => r.isLab) : rooms;
   const roomOptionDisabled = (r: Room) => {
-    if (!r.controlDepartmentId) return false;
-    const isOpen = roomAvailabilityMap?.[r.id] === true;
-    if (isOpen) return false;
     if (user?.role !== "CHAIRMAN") return false;
-    return user.departmentId !== r.controlDepartmentId;
+    if (r.departmentId === user.departmentId) return false;
+    return roomAvailabilityMap?.[r.id] !== true; // other departments' rooms must be open this term
   };
   const displayFacultyLoads = facultyLoadsOverride ?? facultyLoads;
   const { hourStart, hourEnd } = useMemo(() => getCompactHourRange(displayFacultyLoads), [displayFacultyLoads]);
@@ -628,7 +626,7 @@ export function AssignmentForm({
                   key={r.id}
                   value={r.id}
                   disabled={disabled}
-                  title={disabled ? "Room closed for this term; only the control department can assign until they open it." : undefined}
+                  title={disabled ? "Room closed for this term by its department." : undefined}
                 >
                   {r.name} {r.isLab ? "(Lab)" : ""}
                 </Select.Item>
@@ -819,7 +817,7 @@ export function AssignmentForm({
                         key={r.id}
                         value={r.id}
                         disabled={disabled}
-                        title={disabled ? "Room closed for this term; only the control department can assign until they open it." : undefined}
+                        title={disabled ? "Room closed for this term by its department." : undefined}
                       >
                         {r.name} {r.isLab ? "(Lab)" : ""}
                       </Select.Item>

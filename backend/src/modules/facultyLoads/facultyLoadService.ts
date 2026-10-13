@@ -7,27 +7,34 @@ export interface CallerContext {
   departmentId: string | null;
 }
 
-/** If room is closed for the term, only the control department (or ADMIN/DEAN) can assign. */
-async function assertRoomAssignable(
-  roomId: string,
-  academicYearId: string,
-  semester: number,
-  caller: CallerContext
-): Promise<void> {
-  const room = await prisma.room.findUnique({
-    where: { id: roomId },
-    select: { controlDepartmentId: true },
-  });
+
+export async function assertRoomAssignable(roomId: string, academicYearId: string, semester: number, caller: CallerContext): Promise<void> {
+  const room = await prisma.room.findUnique({ where: { id: roomId }, select: { departmentId: true } });
   if (!room) return;
-  if (!room.controlDepartmentId) return;
+  if (caller.role === "ADMIN" || caller.role === "DEAN") return;
+  if (caller.role === "CHAIRMAN" && caller.departmentId === room.departmentId) return;
   const availability = await prisma.roomTermAvailability.findUnique({
     where: { roomId_academicYearId_semester: { roomId, academicYearId, semester } },
   });
-  const isOpen = availability?.isOpen ?? false;
-  if (isOpen) return;
-  if (caller.role === "ADMIN" || caller.role === "DEAN") return;
-  if (caller.role === "CHAIRMAN" && caller.departmentId === room.controlDepartmentId) return;
-  throw forbidden("This room is closed for the selected term. Only the control department can assign until they open it.");
+  if (availability?.isOpen) return;
+  throw forbidden("This room is closed for the selected term. Only its own department can assign it until they open it.");
+}
+
+/** Locked = the load's class belongs to a different department than the room, and the room is closed for the load's term. */
+async function assertLoadNotLocked(
+  load: { roomId: string | null; academicYearId: string; semester: number; studentClassId: string },
+  caller: CallerContext
+): Promise<void> {
+  if (caller.role === "ADMIN" || caller.role === "DEAN" || !load.roomId) return;
+  const [room, sc] = await Promise.all([
+    prisma.room.findUnique({ where: { id: load.roomId }, select: { name: true, departmentId: true } }),
+    prisma.studentClass.findUnique({ where: { id: load.studentClassId }, select: { curriculum: { select: { departmentId: true } } } }),
+  ]);
+  if (!room || !sc || sc.curriculum.departmentId === room.departmentId) return;
+  const a = await prisma.roomTermAvailability.findUnique({
+    where: { roomId_academicYearId_semester: { roomId: load.roomId, academicYearId: load.academicYearId, semester: load.semester } },
+  });
+  if (!a?.isOpen) throw forbidden(`${room.name} is closed for this term by its department, so this schedule is locked.`);
 }
 
 /** CHAIRMAN can only create/update loads for student classes in their department's curricula. */
@@ -76,16 +83,34 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
   if (query.academicYearId) where.academicYearId = query.academicYearId;
   if (query.semester !== undefined) where.semester = query.semester;
 
-  return prisma.facultyLoad.findMany({
+  const loads = await prisma.facultyLoad.findMany({
     where,
     include: {
       faculty: { select: { id: true, name: true, email: true } },
       subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
-      studentClass: { select: { id: true, name: true, yearLevel: true, studentCount: true } },
-      room: { select: { id: true, name: true, capacity: true, isLab: true } },
+      studentClass: {
+        select: { id: true, name: true, yearLevel: true, studentCount: true, curriculum: { select: { departmentId: true } } },
+      },
+      room: { select: { id: true, name: true, capacity: true, isLab: true, departmentId: true } },
       academicYear: { select: { id: true, name: true } },
     },
     orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+  });
+  const roomIds = [...new Set(loads.map((l) => l.roomId).filter((x): x is string => !!x))];
+  const open = roomIds.length
+    ? await prisma.roomTermAvailability.findMany({
+        where: { roomId: { in: roomIds }, isOpen: true },
+        select: { roomId: true, academicYearId: true, semester: true },
+      })
+    : [];
+  const openKeys = new Set(open.map((o) => `${o.roomId}|${o.academicYearId}|${o.semester}`));
+  return loads.map(({ studentClass, ...l }) => {
+    const { curriculum, ...sc } = studentClass;
+    const locked =
+      !!l.room &&
+      curriculum.departmentId !== l.room.departmentId &&
+      !openKeys.has(`${l.roomId}|${l.academicYearId}|${l.semester}`);
+    return { ...l, studentClass: sc, locked };
   });
 }
 
@@ -276,6 +301,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
     const effectiveStudentClassId = body.studentClassId ?? existing.studentClassId;
     await assertStudentClassInDepartment(effectiveStudentClassId, caller);
   }
+  if (caller) await assertLoadNotLocked(existing, caller);
 
   const facultyId = body.facultyId !== undefined ? (body.facultyId?.trim() || null) : existing.facultyId;
   const facultyDisplayName = body.facultyDisplayName !== undefined ? (body.facultyDisplayName?.trim() || null) : existing.facultyDisplayName;
@@ -361,6 +387,7 @@ export async function deleteFacultyLoad(id: string, caller?: CallerContext) {
   });
   if (!load) throw notFound("Faculty load not found");
   if (caller) await assertStudentClassInDepartment(load.studentClassId, caller);
+  if (caller) await assertLoadNotLocked(load, caller);
   await prisma.facultyLoad.delete({ where: { id } });
 }
 
@@ -449,6 +476,14 @@ export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, c
       if (conflicts.studentConflict) reasons.push("Student class has another class at this time");
       if (conflicts.capacityIssue) reasons.push("Room capacity is less than class size");
       if (conflicts.labRoomMismatch) reasons.push("Lab subject must be assigned to a lab room");
+      
+      if (load.roomId && caller) {
+        try {
+          await assertRoomAssignable(load.roomId, targetAcademicYearId, targetSemester, caller);
+        } catch {
+          reasons.push("Room is closed for the target term");
+        }
+      }
 
       const summaryBase: CopiedFacultyLoadSummary = {
         subjectCode: load.subject.code,
@@ -622,9 +657,15 @@ export async function autoAssignForClass(
     const u = subjectUnitsMap.get(req.subjectId) ?? 0;
     currentUnitsByFaculty.set(req.facultyId, (currentUnitsByFaculty.get(req.facultyId) ?? 0) + u);
   }
-  const rooms = await prisma.room.findMany({
+
+  const openRoomIds = new Set(
+    (await prisma.roomTermAvailability.findMany({ where: { academicYearId, semester, isOpen: true }, select: { roomId: true } })).map((r) => r.roomId)
+  );
+  const allRooms = await prisma.room.findMany({
+    where: { isDeleted: false },
     select: { id: true, name: true, capacity: true, isLab: true, departmentId: true },
   });
+  const rooms = allRooms.filter((r) => !caller?.departmentId || r.departmentId === caller.departmentId || openRoomIds.has(r.id));
 
   // Build occupancy maps for fast conflict checks and total minutes per faculty/room.
   const facultyBusy = new Map<string, Interval[]>();
