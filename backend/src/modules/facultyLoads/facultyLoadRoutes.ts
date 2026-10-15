@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { list, getById, preview, create, update, remove, autoAssign, resetForClass, copyFromPrevious } from "./facultyLoadController.js";
+import { list, getById, preview, create, update, remove, autoAssign, resetForClass, copyFromPrevious, loadedUnits } from "./facultyLoadController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -27,6 +27,7 @@ router.post(
   authorize("CHAIRMAN"),
   copyFromPrevious
 );
+router.get("/units", loadedUnits);
 router.get("/:id", getById);
 router.post("/", validate(createFacultyLoadSchema), authorize("CHAIRMAN"), create);
 router.patch("/:id", validate(updateFacultyLoadSchema), authorize("CHAIRMAN"), update);

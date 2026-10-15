@@ -1,14 +1,17 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { UserListItem } from "../../types/api";
+import type { AcademicYear, UserListItem } from "../../types/api";
 import type { Subject } from "../../types/api";
 import toast from "react-hot-toast";
-import { ClipboardList, MoreVertical } from "lucide-react";
+import { ClipboardList, MoreVertical, Pencil } from "lucide-react";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
+import { Select } from "../../components/ui/select";
+import { useAppSelector } from "../../store/hooks";
+import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
 
 /** Subject row from GET /users/:id/prioritized-subjects (possible subjects to teach). */
 interface PrioritizedSubjectItem {
@@ -25,6 +28,13 @@ export function ChairmanFacultyPage() {
   const [list, setList] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const user = useAppSelector((s) => s.auth.user);
+  const [ownDepartment, setOwnDepartment] = useState<{ id: string; name: string } | null>(null);
+  const [facultyForm, setFacultyForm] = useState<{ id: string | null; initial: UserFormValues } | null>(null);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [academicYearId, setAcademicYearId] = useState("");
+  const [semester, setSemester] = useState(1);
+  const [unitsByFaculty, setUnitsByFaculty] = useState<Record<string, number>>({});
 
   const [possibleSubjectsUser, setPossibleSubjectsUser] = useState<UserListItem | null>(null);
   const [possibleSubjectsList, setPossibleSubjectsList] = useState<PrioritizedSubjectItem[]>([]);
@@ -50,6 +60,90 @@ export function ChairmanFacultyPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    apiClient
+      .get<{ id: string; name: string }[]>("/departments")
+      .then(({ data }) => setOwnDepartment(data.find((d) => d.id === user?.departmentId) ?? null))
+      .catch(() => setOwnDepartment(null));
+  }, [user?.departmentId]);
+
+  useEffect(() => {
+    apiClient
+      .get<AcademicYear[]>("/academic-years/for-schedules")
+      .then(({ data }) => {
+        setAcademicYears(data);
+        const active = data.find((y) => y.isActive);
+        setAcademicYearId(active?.id ?? data[0]?.id ?? "");
+      })
+      .catch(() => setAcademicYears([]));
+  }, []);
+
+  const loadUnits = useCallback(async () => {
+    if (!academicYearId) {
+      setUnitsByFaculty({});
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ academicYearId, semester: String(semester) });
+      const { data } = await apiClient.get<Record<string, number>>(`/faculty-loads/units?${params}`);
+      setUnitsByFaculty(data ?? {});
+    } catch {
+      setUnitsByFaculty({});
+    }
+  }, [academicYearId, semester]);
+
+  useEffect(() => {
+    loadUnits();
+  }, [loadUnits]);
+
+  const renderUnits = (u: UserListItem) => {
+    const loaded = unitsByFaculty[u.id] ?? 0;
+    const max = u.maxUnits ?? null;
+    const tone =
+      max !== null && loaded > max
+        ? "font-medium text-danger"
+        : max !== null && max > 0 && loaded === max
+          ? "font-medium text-warning"
+          : "text-foreground-muted";
+    return (
+      <span
+        className={`tabular-nums ${tone}`}
+        title={max === null ? `${loaded} units loaded (no cap)` : `${loaded} of ${max} max units loaded this term`}
+      >
+        {loaded}/{max ?? "—"}
+      </span>
+    );
+  };
+
+  const openAdd = () =>
+    setFacultyForm({ id: null, initial: { ...EMPTY_USER_FORM, role: "FACULTY", departmentId: user?.departmentId ?? "" } });
+
+  const openEdit = (u: UserListItem) =>
+    setFacultyForm({
+      id: u.id,
+      initial: {
+        name: u.name,
+        email: u.email,
+        password: "",
+        role: "FACULTY",
+        departmentId: u.departmentId ?? "",
+        status: u.status ?? "",
+        maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
+      },
+    });
+
+  const submitFacultyForm = async (payload: UserFormPayload) => {
+    if (facultyForm?.id) {
+      await apiClient.patch(`/users/${facultyForm.id}`, { status: payload.status, maxUnits: payload.maxUnits });
+      toast.success("Faculty updated");
+    } else {
+      await apiClient.post("/users", { ...payload, role: "FACULTY", departmentId: user?.departmentId ?? null });
+      toast.success("Faculty added");
+    }
+    load();
+    loadUnits();
+  };
 
   const openPossibleSubjects = async (u: UserListItem) => {
     setPossibleSubjectsUser(u);
@@ -140,10 +234,41 @@ export function ChairmanFacultyPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Faculty</h1>
+        <Button type="button" onClick={openAdd}>Add Faculty</Button>
       </div>
       <p className="mb-4 text-sm text-foreground-muted">
         Department faculty. Set &quot;Possible subjects to teach&quot; to guide auto-assign: only faculty listed for a subject are considered for that subject.
       </p>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[180px]">
+          <label className="mb-1 block text-sm font-medium text-foreground">Academic year</label>
+          <SearchableSelect
+            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            value={academicYearId || "__none__"}
+            onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
+            noneOption={{ value: "__none__", label: "Academic year" }}
+            placeholder="Search academic year…"
+            aria-label="Academic year"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+          <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
+            <Select.Trigger aria-label="Semester" className="w-[120px]">
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="1">1st Sem</Select.Item>
+              <Select.Item value="2">2nd Sem</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <p className="pb-2 text-xs text-foreground-muted">
+          Units = loaded in the Scheduler for this term / max allowed.
+        </p>
+      </div>
 
       {list.length > 0 && (
         <div className="mb-4">
@@ -186,8 +311,8 @@ export function ChairmanFacultyPage() {
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Email</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Max units</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Status</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
@@ -196,10 +321,19 @@ export function ChairmanFacultyPage() {
                 <tr key={u.id}>
                   <td className="px-4 py-2 text-foreground">{u.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{u.maxUnits != null ? u.maxUnits : "—"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
+                  <td className="px-4 py-2">{renderUnits(u)}</td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(u)}
+                        className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                        aria-label={`Edit ${u.name}`}
+                        title="Edit status and max units"
+                      >
+                        <Pencil size={20} className="shrink-0" aria-hidden />
+                      </button>
                       <button
                         type="button"
                         onClick={() => openPossibleSubjects(u)}
@@ -220,6 +354,9 @@ export function ChairmanFacultyPage() {
                           </button>
                         </DropdownMenu.Trigger>
                         <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item onSelect={() => openEdit(u)}>
+                            Edit
+                          </DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => openPossibleSubjects(u)}>
                             Manage possible subjects to teach
                           </DropdownMenu.Item>
@@ -320,9 +457,23 @@ export function ChairmanFacultyPage() {
                 )}
               </>
             )}
+          
           </div>
         </Dialog.Content>
       </Dialog.Root>
+      {facultyForm && (
+        <UserFormDialog
+          mode={facultyForm.id ? "edit" : "create"}
+          title={facultyForm.id ? "Edit faculty" : "Add faculty"}
+          initial={facultyForm.initial}
+          departments={ownDepartment ? [ownDepartment] : []}
+          allowedRoles={["FACULTY"]}
+          lockDepartment
+          lockIdentity={Boolean(facultyForm.id)}
+          onClose={() => setFacultyForm(null)}
+          onSubmit={submitFacultyForm}
+        />
+      )}
     </div>
   );
 }

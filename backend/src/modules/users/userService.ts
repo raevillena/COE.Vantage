@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import { Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
-import { badRequest, notFound } from "../../utils/errors.js";
+import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 export async function listUsers(query: ListUsersQuery) {
@@ -79,10 +79,23 @@ export async function createUser(body: CreateUserBody) {
   return user;
 }
 
-export async function updateUser(id: string, body: UpdateUserBody) {
+export async function updateUser(
+  id: string,
+  body: UpdateUserBody,
+  caller?: { role: string; departmentId: string | null }
+) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw notFound("User not found");
   if (user.isDeleted) throw badRequest("Cannot update a deleted user. Restore from Trash first.");
+
+  if (caller?.role === "CHAIRMAN") {
+    if (user.role !== Role.FACULTY || caller.departmentId == null || user.departmentId !== caller.departmentId) {
+      throw forbidden("You can only update faculty in your own department.");
+    }
+    // Chairman may only change status and max units.
+    body = { status: body.status, maxUnits: body.maxUnits };
+  }
+
   if (body.email && body.email !== user.email) {
     const existing = await prisma.user.findFirst({ where: { email: body.email, isDeleted: false } });
     if (existing) throw badRequest("Email already in use");

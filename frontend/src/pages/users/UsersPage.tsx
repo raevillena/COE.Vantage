@@ -9,11 +9,13 @@ import { Button } from "../../components/ui/button";
 import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
 import {
   parseFacultyPaste,
   groupByDepartment,
   formatEmailFromName,
 } from "./facultyImportUtils";
+
 
 function inferRoleFromStatus(status: string): Role {
   const s = status.toLowerCase();
@@ -62,21 +64,17 @@ interface PrioritizedSubjectItem {
 export function UsersPage() {
   const [list, setList] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ email: "", password: "", name: "", role: "FACULTY" as Role, departmentId: "", status: "", maxUnits: "18" });
+  const [userForm, setUserForm] = useState<{ id: string | null; initial: UserFormValues } | null>(null);
   const [departments, setDepartments] = useState<{ id: string; name: string; code?: string | null }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [resetEmailLoading, setResetEmailLoading] = useState<string | null>(null);
-
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPasteText, setImportPasteText] = useState("");
   const [importGroups, setImportGroups] = useState<ImportGroup[]>([]);
   const [importDefaultPassword, setImportDefaultPassword] = useState("");
   const [importLoading, setImportLoading] = useState(false);
   const [importFileName, setImportFileName] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [showImportPassword, setShowImportPassword] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [prioritizationUser, setPrioritizationUser] = useState<UserListItem | null>(null);
@@ -113,73 +111,31 @@ export function UsersPage() {
     apiClient.get("/departments").then(({ data }) => setDepartments(data));
   }, []);
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm({ email: "", password: "", name: "", role: "FACULTY", departmentId: "", status: "", maxUnits: "18" });
-    setModalOpen(true);
-  };
+  const openCreate = () => setUserForm({ id: null, initial: { ...EMPTY_USER_FORM } });
 
-  const openEdit = (u: UserListItem) => {
-    setEditingId(u.id);
-    setForm({
-      email: u.email,
-      password: "",
-      name: u.name,
-      role: u.role,
-      departmentId: u.departmentId ?? "",
-      status: u.status ?? "",
-      maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
+  const openEdit = (u: UserListItem) =>
+    setUserForm({
+      id: u.id,
+      initial: {
+        name: u.name,
+        email: u.email,
+        password: "",
+        role: u.role,
+        departmentId: u.departmentId ?? "",
+        status: u.status ?? "",
+        maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
+      },
     });
-    setModalOpen(true);
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const nameTrimmed = form.name.trim();
-    const emailTrimmed = form.email.trim();
-    if (!nameTrimmed) {
-      toast.error("Name is required");
-      return;
+  const submitUserForm = async (payload: UserFormPayload) => {
+    if (userForm?.id) {
+      await apiClient.patch(`/users/${userForm.id}`, payload);
+      toast.success("User updated");
+    } else {
+      await apiClient.post("/users", payload);
+      toast.success("User created");
     }
-    if (!emailTrimmed) {
-      toast.error("Email is required");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
-      toast.error("Enter a valid email address");
-      return;
-    }
-    if (!editingId && !form.password.trim()) {
-      toast.error("Password is required when creating a user");
-      return;
-    }
-    const maxUnitsParsed = form.maxUnits.trim() ? parseInt(form.maxUnits.trim(), 10) : null;
-    if (form.maxUnits.trim() && (Number.isNaN(maxUnitsParsed) || maxUnitsParsed! < 0)) {
-      toast.error("Max units must be 0 or a positive number if set (0 = cannot receive any load)");
-      return;
-    }
-    try {
-      const payload = {
-        email: emailTrimmed,
-        name: nameTrimmed,
-        role: form.role,
-        departmentId: form.departmentId || null,
-        status: form.status.trim() || null,
-        maxUnits: maxUnitsParsed ?? null,
-      };
-      if (editingId) {
-        await apiClient.patch(`/users/${editingId}`, payload);
-        toast.success("User updated");
-      } else {
-        await apiClient.post("/users", { ...payload, password: form.password });
-        toast.success("User created");
-      }
-      setModalOpen(false);
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
-      toast.error(msg);
-    }
+    load();
   };
 
   const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
@@ -531,99 +487,17 @@ export function UsersPage() {
           </table>
         </div>
       )}
-      <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
-        <Dialog.Content title={editingId ? "Edit User" : "Add User"}>
-          <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            {!editingId && (
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  className="w-full rounded border border-border-strong px-3 py-2 pr-10 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                  aria-label="Password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-foreground-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  tabIndex={0}
-                >
-                  {showPassword ? (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-                  ) : (
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                  )}
-                </button>
-              </div>
-            )}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Role</label>
-              <Select.Root value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
-                <Select.Trigger aria-label="Role">
-                  <Select.Value placeholder="Role" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="ADMIN">ADMIN</Select.Item>
-                  <Select.Item value="DEAN">DEAN</Select.Item>
-                  <Select.Item value="CHAIRMAN">CHAIRMAN</Select.Item>
-                  <Select.Item value="FACULTY">FACULTY</Select.Item>
-                  <Select.Item value="OFFICER">OFFICER</Select.Item>
-                </Select.Content>
-              </Select.Root>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
-              <Select.Root value={form.departmentId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}>
-                <Select.Trigger aria-label="Department">
-                  <Select.Value placeholder="No department" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">No department</Select.Item>
-                  {departments.map((d) => (
-                    <Select.Item key={d.id} value={d.id}>{d.name}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Status</label>
-              <input
-                placeholder="e.g. Full-time, Part-time"
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                aria-label="Status"
-              />
-            </div>
-            {(form.role === "FACULTY" || form.role === "CHAIRMAN") && (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">Max units per term</label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="0 = no load, or leave blank for no limit"
-                  value={form.maxUnits}
-                  onChange={(e) => setForm((f) => ({ ...f, maxUnits: e.target.value }))}
-                  className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                  aria-label="Max units per term"
-                />
-                <p className="mt-0.5 text-xs text-foreground-muted">Optional. Caps total assigned units per semester for load assignment.</p>
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Dialog.Close asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-              </Dialog.Close>
-              <Button type="submit">Save</Button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Root>
+
+      {userForm && (
+        <UserFormDialog
+          mode={userForm.id ? "edit" : "create"}
+          initial={userForm.initial}
+          departments={departments}
+          allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER"]}
+          onClose={() => setUserForm(null)}
+          onSubmit={submitUserForm}
+        />
+      )}
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <Dialog.Content title="Move user to trash" description="This user will be moved to Trash. They will not be able to sign in until restored. You can restore or permanently delete from the Trash page.">

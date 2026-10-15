@@ -31,8 +31,8 @@ router.get("/assignable-faculty", authorize("ADMIN", "DEAN", "CHAIRMAN"), listAs
 
 router.get("/:id/prioritized-subjects", authorize("ADMIN", "DEAN", "CHAIRMAN"), getPrioritizedSubjects);
 router.get("/:id", authorize("ADMIN"), getById);
-router.post("/", authorize("ADMIN"), validate(createUserSchema), create);
-router.patch("/:id", authorize("ADMIN"), validate(updateUserSchema), update);
+router.post("/", authorize("ADMIN", "CHAIRMAN"), validate(createUserSchema), create);
+router.patch("/:id", authorize("ADMIN", "CHAIRMAN"), validate(updateUserSchema), update);
 router.delete("/:id", authorize("ADMIN"), remove);
 
 router.post("/:id/restore", authorize("ADMIN"), restore);

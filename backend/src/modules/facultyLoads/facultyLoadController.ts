@@ -110,3 +110,19 @@ export async function copyFromPrevious(req: Request, res: Response): Promise<voi
   const summary = await facultyLoadService.copyClassSchedule(body, caller);
   res.json(summary);
 }
+
+export async function loadedUnits(req: Request, res: Response): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester ?? 1);
+  if (!academicYearId) {
+    res.status(400).json({ message: "academicYearId query is required" });
+    return;
+  }
+  // Chairman only sees their own department's faculty.
+  if (req.user?.role === "CHAIRMAN" && !req.user.departmentId) {
+    res.json({});
+    return;
+  }
+  const scopeDept = req.user?.role === "CHAIRMAN" ? req.user.departmentId : null;
+  res.json(await facultyLoadService.getLoadedUnitsByFaculty(academicYearId, semester, scopeDept));
+}

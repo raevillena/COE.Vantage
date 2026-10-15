@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import * as userService from "./userService.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
+import { forbidden } from "../../utils/errors.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = { ...(req.query as unknown as ListUsersQuery) };
@@ -24,6 +25,11 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateUserBody;
+  if (req.user?.role === "CHAIRMAN") {
+    if (!req.user.departmentId) throw forbidden("Chairman must belong to a department to add faculty.");
+    if (body.role !== "FACULTY") throw forbidden("Chairman can only add faculty.");
+    body.departmentId = req.user.departmentId; // always their own department
+  }
   const user = await userService.createUser(body);
   res.status(201).json(user);
 }
@@ -32,7 +38,8 @@ export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateUserBody & { password?: string };
   // Admins must not set another user's password; only email-based reset is allowed.
   if ("password" in body) delete body.password;
-  const user = await userService.updateUser(req.params.id, body);
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const user = await userService.updateUser(req.params.id, body, caller);
   res.json(user);
 }
 

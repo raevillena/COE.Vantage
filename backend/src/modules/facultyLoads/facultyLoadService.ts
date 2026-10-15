@@ -114,23 +114,51 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
   });
 }
 
+/** Units loaded per faculty for a term. A subject taught to the same class on several days counts once. */
+export async function getLoadedUnitsByFaculty(
+  academicYearId: string,
+  semester: number,
+  departmentId?: string | null
+): Promise<Record<string, number>> {
+  const loads = await prisma.facultyLoad.findMany({
+    where: {
+      academicYearId,
+      semester,
+      facultyId: { not: null },
+      ...(departmentId ? { faculty: { departmentId } } : {}),
+    },
+    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true } } },
+  });
+  const seen = new Set<string>();
+  const totals: Record<string, number> = {};
+  for (const l of loads) {
+    if (!l.facultyId) continue;
+    const key = `${l.facultyId}|${l.subjectId}|${l.studentClassId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + (l.subject?.units ?? 0);
+  }
+  return totals;
+}
+
 /** Returns total assigned units for a faculty in the given term (only in-system loads; excludeLoadId to omit one load when updating). */
-export async function getFacultyAssignedUnits(
+/** Units for a faculty in a term if `candidate` were added. Same subject+class on several days counts once. */
+async function getFacultyUnitsWith(
   facultyId: string,
   academicYearId: string,
   semester: number,
+  candidate: { subjectId: string; studentClassId: string; units: number },
   excludeLoadId?: string
-): Promise<number> {
+): Promise<{ current: number; total: number }> {
   const loads = await prisma.facultyLoad.findMany({
-    where: {
-      facultyId,
-      academicYearId,
-      semester,
-      ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}),
-    },
-    include: { subject: { select: { units: true } } },
+    where: { facultyId, academicYearId, semester, ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}) },
+    select: { subjectId: true, studentClassId: true, subject: { select: { units: true } } },
   });
-  return loads.reduce((sum, l) => sum + (l.subject?.units ?? 0), 0);
+  const pairs = new Map<string, number>();
+  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, l.subject?.units ?? 0);
+  const current = [...pairs.values()].reduce((s, u) => s + u, 0);
+  const total = pairs.has(`${candidate.subjectId}|${candidate.studentClassId}`) ? current : current + candidate.units;
+  return { current, total };
 }
 
 /** Validates excludeLoadId for team teaching: same slot as proposed row, different faculty/off-system identity. */
@@ -213,16 +241,19 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
   if (caller) await assertStudentClassInDepartment(body.studentClassId, caller);
   const effectiveFacultyId = body.facultyId?.trim() || null;
   if (effectiveFacultyId) {
-    const [subject, user, currentUnits] = await Promise.all([
+    const [subject, user] = await Promise.all([
       prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true } }),
       prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { maxUnits: true, name: true } }),
-      getFacultyAssignedUnits(effectiveFacultyId, body.academicYearId, body.semester),
     ]);
     if (subject && user?.maxUnits != null) {
-      const newTotal = currentUnits + subject.units;
-      if (newTotal > user.maxUnits) {
+      const { current, total } = await getFacultyUnitsWith(effectiveFacultyId, body.academicYearId, body.semester, {
+        subjectId: body.subjectId,
+        studentClassId: body.studentClassId,
+        units: subject.units,
+      });
+      if (total > user.maxUnits) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${currentUnits}, this subject: ${subject.units}.`
+          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${subject.units}.`
         );
       }
     }
@@ -315,16 +346,21 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
     await assertRoomAssignable(roomId, academicYearId, semester, caller);
   }
   if (facultyId) {
-    const [subject, user, currentUnits] = await Promise.all([
+    const [subject, user] = await Promise.all([
       prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true } }),
       prisma.user.findUnique({ where: { id: facultyId }, select: { maxUnits: true, name: true } }),
-      getFacultyAssignedUnits(facultyId, existing.academicYearId, existing.semester, id),
     ]);
     if (subject && user?.maxUnits != null) {
-      const newTotal = currentUnits + subject.units;
-      if (newTotal > user.maxUnits) {
+      const { current, total } = await getFacultyUnitsWith(
+        facultyId,
+        existing.academicYearId,
+        existing.semester,
+        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: subject.units },
+        id
+      );
+      if (total > user.maxUnits) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${currentUnits}, this subject: ${subject.units}.`
+          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${subject.units}.`
         );
       }
     }
@@ -647,12 +683,9 @@ export async function autoAssignForClass(
     select: { id: true, departmentId: true, maxUnits: true },
   });
   const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, s.units]));
-  const currentUnitsByFaculty = new Map<string, number>();
-  for (const l of allLoads) {
-    if (l.facultyId == null) continue;
-    const u = subjectUnitsMap.get(l.subjectId) ?? 0;
-    currentUnitsByFaculty.set(l.facultyId, (currentUnitsByFaculty.get(l.facultyId) ?? 0) + u);
-  }
+  const currentUnitsByFaculty = new Map<string, number>(
+    Object.entries(await getLoadedUnitsByFaculty(academicYearId, semester))
+  );
   for (const req of pendingRequests) {
     const u = subjectUnitsMap.get(req.subjectId) ?? 0;
     currentUnitsByFaculty.set(req.facultyId, (currentUnitsByFaculty.get(req.facultyId) ?? 0) + u);

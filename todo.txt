@@ -4,6 +4,7 @@ Dashboard page
 Faculty page
  - chairman should be able to change the max or minimum units
  - reuse the edit modal in admin view and change the status as well.
+ - chairman should be also able to add new faculty just like adding users in the admin view. but user role must only be limited to faculty.
 
 Rooms page
  - the chairman should be able to add rooms, with existence checking 
