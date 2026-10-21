@@ -16,3 +16,6 @@ Schedules page
 
 Scheduler page
  - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict
+ - in the auto-assign feature, i want faculty to be assigned only subjects based only in the possible subject to teach asigned in the faculty page.
+ - in the faculty selection selection when using faculty schedule view. i want to only show the ones in the department including the chairman itself.
+ - also in the abbreviation of deparments when selecting faculty in the view drop-down Computer, ceramics, and civil engineering all show CED, maybe because it was using first letter of the department. maybe we can concatinate the shorthand for them like Computer Engineering Department (CPE) then it can be serialized to pick-up CPE
