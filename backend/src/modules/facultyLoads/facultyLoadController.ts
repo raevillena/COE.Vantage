@@ -8,6 +8,7 @@ import type {
   PreviewFacultyLoadBody,
   AutoAssignFacultyLoadBody,
   ResetFacultyLoadBody,
+  SlotAvailabilityQuery,
 } from "./facultyLoadSchemas.js";
 import type { CopyFromPreviousFacultyLoadBody } from "./facultyLoadSchemas.js";
 
@@ -125,4 +126,10 @@ export async function loadedUnits(req: Request, res: Response): Promise<void> {
   }
   const scopeDept = req.user?.role === "CHAIRMAN" ? req.user.departmentId : null;
   res.json(await facultyLoadService.getLoadedUnitsByFaculty(academicYearId, semester, scopeDept));
+}
+
+export async function availability(req: Request, res: Response): Promise<void> {
+  const q = req.query as unknown as SlotAvailabilityQuery;
+  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  res.json(await facultyLoadService.getSlotAvailability(q, caller));
 }

@@ -2,20 +2,31 @@ Dashboard page
  - make the dashboard show information regarding classes, rooms. information that are useful and information that needs action
 
 Faculty page
- - chairman should be able to change the max or minimum units
- - reuse the edit modal in admin view and change the status as well.
- - chairman should be also able to add new faculty just like adding users in the admin view. but user role must only be limited to faculty.
+ - chairman should be able to change the max or minimum units. done
+ - reuse the edit modal in admin view and change the status as well. done
+ - chairman should be also able to add new faculty just like adding users in the admin view. but user role must only be limited to faculty. done
+
+ additonal:
+ -add the chairman, since the chairman is faculty by nature. ther also has teaching load. also with the dean. they have teaching load.
+ -when adding possible subjects to teach, i need the subjects to be per curriculum.
 
 Rooms page
- - the chairman should be able to add rooms, with existence checking 
- - instead of making the room loose control to make it open. it must have the ability to open and close instead
- - also separate the rooms of the department vs other rooms
+ - the chairman should be able to add rooms, with existence checking. done
+ - instead of making the room loose control to make it open. it must have the ability to open and close instead. done
+ - also separate the rooms of the department vs other rooms. done
 
 Schedules page
- - chairman should be able to see their own schedules
+ - chairman should be able to see their own schedules. done
 
 Scheduler page
- - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict
- - in the auto-assign feature, i want faculty to be assigned only subjects based only in the possible subject to teach asigned in the faculty page.
- - in the faculty selection selection when using faculty schedule view. i want to only show the ones in the department including the chairman itself.
- - also in the abbreviation of deparments when selecting faculty in the view drop-down Computer, ceramics, and civil engineering all show CED, maybe because it was using first letter of the department. maybe we can concatinate the shorthand for them like Computer Engineering Department (CPE) then it can be serialized to pick-up CPE
+ - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict. done
+ - in the auto-assign feature, i want faculty to be assigned only subjects based only in the possible subject to teach asigned in the faculty page. done
+ - in the faculty selection selection when using faculty schedule view. i want to only show the ones in the department including the chairman itself. done
+ - also in the abbreviation of deparments when selecting faculty in the view drop-down Computer, ceramics, and civil engineering all show CED, maybe because it was using first letter of the department. maybe we can concatinate the shorthand for them like Computer Engineering Department (CPE) then it can be serialized to pick-up CPE. done
+
+ additional:
+ -Editing a saved load’s faculty in the Assignment form skips the cross-department approval. Only creating a load goes through it, so picking another department’s faculty while editing saves directly. maybe make this requiring another approval
+ -Auto-assign only considers FACULTY, and the Faculty page only lets you set possible subjects for FACULTY, so a chairman is never auto-assigned. add the chairman and be considered as a faculty. 
+
+Subjects page
+ - currently, the subjects are listed as everything. i want to show them based on curriculum.

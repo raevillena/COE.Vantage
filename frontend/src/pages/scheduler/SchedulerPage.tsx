@@ -47,6 +47,7 @@ import {
 } from "../../components/scheduler/scheduleGridConstants";
 import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
 import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
+import { facultyRoleSuffix } from "../../components/scheduler/facultyGroups";
 
 type ViewMode = "class" | "faculty";
 
@@ -244,6 +245,7 @@ export function SchedulerPage() {
   const [pendingAssignmentDragged, setPendingAssignmentDragged] = useState(false);
   const [resizingLoadId, setResizingLoadId] = useState<string | null>(null);
   const [moveConflict, setMoveConflict] = useState<MoveConflictState | null>(null);
+  const [slotAvailability, setSlotAvailability] = useState<{ roomIds: string[]; facultyIds: string[] } | null>(null);
   const [autoScheduling, setAutoScheduling] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
@@ -271,6 +273,9 @@ export function SchedulerPage() {
 
   const currentAcademicYear = academicYears.find((y) => y.id === academicYearId);
   const previousAcademicYears = academicYears.filter((y) => y.id !== academicYearId);
+  /** Faculty-view picker: own department only (includes the chairman). */
+  const departmentFaculties = faculties.filter((f) => f.departmentId === user?.departmentId);
+
 
   /** Map a pending cross-department request to a FacultyLoad-like block for the grid (id prefixed so it doesn't collide). */
   const requestToDisplayLoad = useCallback((r: AssignmentRequest): FacultyLoad => ({
@@ -888,6 +893,37 @@ export function SchedulerPage() {
     [academicYearId, semester, editingLoadId, overlayFacultyId, overlayClassId, refreshLoads, refreshRoomLoads, refreshOverlayForLoad]
   );
 
+  // When the move-conflict dialog opens, ask the server which rooms/faculty are actually free at the target slot.
+  useEffect(() => {
+    if (!moveConflict || !academicYearId) {
+      setSlotAvailability(null);
+      return;
+    }
+    const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
+    const params = new URLSearchParams({
+      academicYearId,
+      semester: String(semester),
+      dayOfWeek: String(targetDayOfWeek),
+      startTime: targetStartTime,
+      endTime: targetEndTime,
+      subjectId: load.subjectId,
+      studentClassId: load.studentClassId,
+      excludeLoadId: load.id,
+    });
+    let cancelled = false;
+    apiClient
+      .get<{ roomIds: string[]; facultyIds: string[] }>(`/faculty-loads/availability?${params}`)
+      .then(({ data }) => {
+        if (!cancelled) setSlotAvailability(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSlotAvailability(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [moveConflict, academicYearId, semester]);
+
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
   let assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
     ? {
@@ -1069,6 +1105,12 @@ export function SchedulerPage() {
     });
   }, [pendingAssignment, pendingAssignmentDragged, overlayRoomId, overlayRoomLoads, overlayFacultyLoads, viewMode, studentClassId, loads]);
 
+  const freeRooms = slotAvailability ? rooms.filter((r) => slotAvailability.roomIds.includes(r.id)) : rooms;
+  // Own-department faculty only: changing a load's faculty here does not go through the approval flow.
+  const freeFaculties = faculties.filter(
+    (f) => f.departmentId === user?.departmentId && (!slotAvailability || slotAvailability.facultyIds.includes(f.id))
+  );
+
   const showGrid = academicYearId && (viewMode === "class" ? studentClassId : viewMode === "faculty" ? selectedFacultyId : false);
 
   const SCHEDULE_HOUR_END_DEFAULT = 18;
@@ -1144,7 +1186,7 @@ export function SchedulerPage() {
             <div className="min-w-[180px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
               <SearchableSelect
-                options={faculties.map((f) => ({ value: f.id, label: `${f.name}${f.department?.code ? ` · ${f.department.code}` : ""}` }))}
+                options={departmentFaculties.map((f) => ({ value: f.id, label: `${f.name}${facultyRoleSuffix(f.role)}` }))}
                 value={selectedFacultyId || "__none__"}
                 onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
                 noneOption={{ value: "__none__", label: "Select faculty" }}
@@ -1419,13 +1461,16 @@ export function SchedulerPage() {
                                 </Select.Trigger>
                                 <Select.Content>
                                   <Select.Item value="__none__">Select faculty</Select.Item>
-                                  {faculties.map((f) => (
+                                  {freeFaculties.map((f) => (
                                     <Select.Item key={f.id} value={f.id}>
                                       {`${f.name}${f.department?.code ? ` · ${f.department.code}` : ""}`}
                                     </Select.Item>
                                   ))}
                                 </Select.Content>
                               </Select.Root>
+                              {slotAvailability && freeFaculties.length === 0 && (
+                                <p className="mt-1 text-[11px] text-foreground-muted">No faculty are free at this time.</p>
+                              )}
                             </div>
                           )}
                           {moveConflict.roomConflict && (
@@ -1445,13 +1490,16 @@ export function SchedulerPage() {
                                 </Select.Trigger>
                                 <Select.Content>
                                   <Select.Item value="__none__">Select room</Select.Item>
-                                  {rooms.map((r) => (
+                                  {freeRooms.map((r) => (
                                     <Select.Item key={r.id} value={r.id}>
                                       {r.name}
                                     </Select.Item>
                                   ))}
                                 </Select.Content>
                               </Select.Root>
+                              {slotAvailability && freeRooms.length === 0 && (
+                                <p className="mt-1 text-[11px] text-foreground-muted">No rooms are free at this time.</p>
+                              )}
                             </div>
                           )}
                           <div className="flex flex-wrap gap-2 justify-end">

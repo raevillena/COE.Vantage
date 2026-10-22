@@ -1,6 +1,6 @@
 import { prisma } from "../../prisma/client.js";
-import { badRequest, notFound } from "../../utils/errors.js";
-import { codeFromName } from "../../utils/codeFromName.js";
+import { badRequest, notFound, conflict } from "../../utils/errors.js";
+import { codeFromName, explicitCodeFromName } from "../../utils/codeFromName.js";
 import type { CreateDepartmentBody, UpdateDepartmentBody } from "./departmentSchemas.js";
 
 export async function listDepartments() {
@@ -16,10 +16,28 @@ export async function getDepartmentById(id: string) {
   return dept;
 }
 
-export async function createDepartment(body: CreateDepartmentBody) {
-  return prisma.department.create({
-    data: { name: body.name, code: codeFromName(body.name) },
+/** 409 if another active department already uses this code (case-insensitive). */
+async function assertDepartmentCodeAvailable(code: string, excludeId?: string) {
+  if (!code) return;
+  const existing = await prisma.department.findFirst({
+    where: {
+      isDeleted: false,
+      code: { equals: code, mode: "insensitive" },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { name: true },
   });
+  if (existing) {
+    throw conflict(
+      `The code "${code}" is already used by "${existing.name}". End the department name with a unique shorthand in parentheses, e.g. "Computer Engineering Department (CPE)".`
+    );
+  }
+}
+
+export async function createDepartment(body: CreateDepartmentBody) {
+  const code = codeFromName(body.name);
+  await assertDepartmentCodeAvailable(code);
+  return prisma.department.create({ data: { name: body.name, code } });
 }
 
 export async function updateDepartment(id: string, body: UpdateDepartmentBody) {
@@ -27,9 +45,12 @@ export async function updateDepartment(id: string, body: UpdateDepartmentBody) {
   if (!dept) throw notFound("Department not found");
   if (dept.isDeleted) throw badRequest("Cannot update a deleted department. Restore it from Trash first.");
   const name = body.name ?? dept.name;
+  // An explicit "(CODE)" in the name wins; otherwise keep the existing code instead of regenerating it.
+  const code = explicitCodeFromName(name) ?? dept.code ?? codeFromName(name);
+  if (code !== dept.code) await assertDepartmentCodeAvailable(code, id);
   return prisma.department.update({
     where: { id },
-    data: { name: body.name ?? undefined, code: codeFromName(name) },
+    data: { name: body.name ?? undefined, code },
   });
 }
 

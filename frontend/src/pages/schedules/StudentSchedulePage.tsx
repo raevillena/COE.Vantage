@@ -3,6 +3,7 @@ import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, StudentClass, Department } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
+import { departmentLabel } from "../../utils/departmentLabel";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
@@ -75,7 +76,7 @@ export function StudentSchedulePage() {
           <div className="min-w-[220px]">
             <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
             <SearchableSelect
-              options={departments.map((d) => ({ value: d.id, label: `${d.name}${d.code ? ` (${d.code})` : ""}` }))}
+              options={departments.map((d) => ({ value: d.id, label: departmentLabel(d) }))}
               value={departmentId || "__none__"}
               onValueChange={(v) => {
                 const next = v === "__none__" ? "" : v;

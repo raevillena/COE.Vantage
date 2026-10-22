@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { list, getById, preview, create, update, remove, autoAssign, resetForClass, copyFromPrevious, loadedUnits } from "./facultyLoadController.js";
+import { list, getById, preview, create, update, remove, autoAssign, resetForClass, copyFromPrevious, loadedUnits, availability } from "./facultyLoadController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
-import { validate } from "../../middleware/validate.js";
+import { validate, validateQuery } from "../../middleware/validate.js";
 import {
   createFacultyLoadSchema,
   updateFacultyLoadSchema,
@@ -10,6 +10,7 @@ import {
   autoAssignFacultyLoadSchema,
   resetFacultyLoadSchema,
   copyFromPreviousFacultyLoadSchema,
+  slotAvailabilityQuerySchema,
 } from "./facultyLoadSchemas.js";
 
 const router = Router();
@@ -28,6 +29,7 @@ router.post(
   copyFromPrevious
 );
 router.get("/units", loadedUnits);
+router.get("/availability", validateQuery(slotAvailabilityQuerySchema), availability);
 router.get("/:id", getById);
 router.post("/", validate(createFacultyLoadSchema), authorize("CHAIRMAN"), create);
 router.patch("/:id", validate(updateFacultyLoadSchema), authorize("CHAIRMAN"), update);

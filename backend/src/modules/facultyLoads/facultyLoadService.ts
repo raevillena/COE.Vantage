@@ -54,6 +54,7 @@ import type {
   UpdateFacultyLoadBody,
   PreviewFacultyLoadBody,
   CopyFromPreviousFacultyLoadBody,
+  SlotAvailabilityQuery,
 } from "./facultyLoadSchemas.js";
 import {
   getConfigForAutoAssign,
@@ -139,6 +140,62 @@ export async function getLoadedUnitsByFaculty(
     totals[l.facultyId] = (totals[l.facultyId] ?? 0) + (l.subject?.units ?? 0);
   }
   return totals;
+}
+
+/** Rooms and faculty that are free for a slot (and, for rooms, fit the class, lab need and open/closed rules). */
+export async function getSlotAvailability(q: SlotAvailabilityQuery, caller?: CallerContext) {
+  const start = timeToMinutes(q.startTime);
+  const end = timeToMinutes(q.endTime);
+  const [loads, rooms, faculties, studentClass, subject, openRows] = await Promise.all([
+    prisma.facultyLoad.findMany({
+      where: {
+        academicYearId: q.academicYearId,
+        semester: q.semester,
+        dayOfWeek: q.dayOfWeek,
+        ...(q.excludeLoadId ? { id: { not: q.excludeLoadId } } : {}),
+      },
+      select: { roomId: true, facultyId: true, startTime: true, endTime: true },
+    }),
+    prisma.room.findMany({
+      where: { isDeleted: false },
+      select: { id: true, capacity: true, isLab: true, departmentId: true },
+    }),
+    prisma.user.findMany({
+      where: { isDeleted: false, role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] } },
+      select: { id: true },
+    }),
+    q.studentClassId
+      ? prisma.studentClass.findUnique({ where: { id: q.studentClassId }, select: { studentCount: true } })
+      : Promise.resolve(null),
+    q.subjectId
+      ? prisma.subject.findUnique({ where: { id: q.subjectId }, select: { isLab: true } })
+      : Promise.resolve(null),
+    prisma.roomTermAvailability.findMany({
+      where: { academicYearId: q.academicYearId, semester: q.semester, isOpen: true },
+      select: { roomId: true },
+    }),
+  ]);
+
+  const busyRooms = new Set<string>();
+  const busyFaculty = new Set<string>();
+  for (const l of loads) {
+    if (timeToMinutes(l.endTime) <= start || timeToMinutes(l.startTime) >= end) continue;
+    if (l.roomId) busyRooms.add(l.roomId);
+    if (l.facultyId) busyFaculty.add(l.facultyId);
+  }
+  const openRoomIds = new Set(openRows.map((r) => r.roomId));
+
+  const roomIds = rooms
+    .filter((r) => {
+      if (busyRooms.has(r.id)) return false;
+      if (studentClass && r.capacity < studentClass.studentCount) return false;
+      if (subject?.isLab && !r.isLab) return false;
+      if (caller?.role === "CHAIRMAN" && r.departmentId !== caller.departmentId && !openRoomIds.has(r.id)) return false;
+      return true;
+    })
+    .map((r) => r.id);
+  const facultyIds = faculties.filter((f) => !busyFaculty.has(f.id)).map((f) => f.id);
+  return { roomIds, facultyIds };
 }
 
 /** Returns total assigned units for a faculty in the given term (only in-system loads; excludeLoadId to omit one load when updating). */
@@ -864,57 +921,34 @@ export async function autoAssignForClass(
     let remaining = required - already;
     if (remaining <= 0) continue;
 
-    // Choose a faculty: use prioritized faculty for this subject if any; else department + load balance.
+    // Only faculty who have this subject in their "possible subjects to teach" are considered.
     const subjectDeptId = s.departmentId ?? studentClass.curriculum.departmentId ?? null;
-    const prioritized = prioritiesBySubject.get(s.id);
-    let facultyPool: { id: string; departmentId: string | null; maxUnits: number | null }[];
-    if (prioritized && prioritized.length > 0) {
-      const prioritizedIds = new Set(prioritized.map((p) => p.facultyId));
-      facultyPool = faculties.filter((f) => prioritizedIds.has(f.id));
-      if (subjectDeptId != null && facultyPool.length > 1) {
-        const sameDept = facultyPool.filter((f) => f.departmentId === subjectDeptId);
-        if (sameDept.length > 0) facultyPool = sameDept;
-      }
-    } else {
-      const facultyCandidates =
-        subjectDeptId != null
-          ? faculties.filter((f) => f.departmentId === subjectDeptId)
-          : faculties;
-      facultyPool = facultyCandidates.length ? facultyCandidates : faculties;
-    }
-    // Exclude faculty who would exceed max units for this term
-    const facultyPoolWithinCap = facultyPool.filter((f) => {
-      const maxUnits = f.maxUnits ?? Infinity;
-      const current = currentUnitsByFaculty.get(f.id) ?? 0;
-      return current + s.units <= maxUnits;
-    });
-    const poolToUse = facultyPoolWithinCap.length > 0 ? facultyPoolWithinCap : facultyPool;
-    if (!poolToUse.length) {
-      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No faculty available" });
+    const prioritized = prioritiesBySubject.get(s.id) ?? [];
+    if (prioritized.length === 0) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No faculty has this subject in their possible subjects to teach" });
       continue;
     }
-
-    let chosenFacultyId: string;
-    if (prioritized && prioritized.length > 0) {
-      const byPriority = new Map(prioritized.map((p, i) => [p.facultyId, i]));
-      const sorted = [...poolToUse].sort((a, b) => {
-        const minsA = facultyMinutes.get(a.id) ?? 0;
-        const minsB = facultyMinutes.get(b.id) ?? 0;
-        if (minsA !== minsB) return minsA - minsB;
-        return (byPriority.get(a.id) ?? 999) - (byPriority.get(b.id) ?? 999);
-      });
-      chosenFacultyId = sorted[0].id;
-    } else {
-      chosenFacultyId = poolToUse[0].id;
-      let minFacultyMinutes = facultyMinutes.get(chosenFacultyId) ?? 0;
-      for (const f of poolToUse) {
-        const mins = facultyMinutes.get(f.id) ?? 0;
-        if (mins < minFacultyMinutes) {
-          minFacultyMinutes = mins;
-          chosenFacultyId = f.id;
-        }
-      }
+    const prioritizedIds = new Set(prioritized.map((p) => p.facultyId));
+    // Auto-assign cannot send cross-department approval requests, so only the subject's own department is used.
+    const facultyPool = faculties.filter(
+      (f) => prioritizedIds.has(f.id) && (subjectDeptId == null || f.departmentId === subjectDeptId)
+    );
+    if (facultyPool.length === 0) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "Faculty set for this subject are outside its department (needs approval)" });
+      continue;
     }
+    const poolToUse = facultyPool.filter(
+      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + s.units <= (f.maxUnits ?? Infinity)
+    );
+    if (poolToUse.length === 0) {
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "All faculty for this subject are at their max units" });
+      continue;
+    }
+    const byPriority = new Map(prioritized.map((p, i) => [p.facultyId, i]));
+    const chosenFacultyId = [...poolToUse].sort((a, b) => {
+      const d = (facultyMinutes.get(a.id) ?? 0) - (facultyMinutes.get(b.id) ?? 0);
+      return d !== 0 ? d : (byPriority.get(a.id) ?? 999) - (byPriority.get(b.id) ?? 999);
+    })[0].id;
     currentUnitsByFaculty.set(chosenFacultyId, (currentUnitsByFaculty.get(chosenFacultyId) ?? 0) + s.units);
 
     // Choose a room: capacity >= class size, lab vs non-lab, smallest total minutes.

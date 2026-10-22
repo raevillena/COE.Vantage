@@ -226,6 +226,7 @@ export function DepartmentsPage() {
                   </th>
                 )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Code</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
@@ -244,6 +245,7 @@ export function DepartmentsPage() {
                     </td>
                   )}
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{d.code ?? "—"}</td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       {canManage && (
@@ -286,6 +288,9 @@ export function DepartmentsPage() {
         <Dialog.Content title={editingId ? "Edit Department" : "Add Department"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            <p className="text-xs text-foreground-muted">
+              Tip: end the name with the shorthand in parentheses, e.g. &quot;Computer Engineering Department (CPE)&quot;. It becomes the code shown in dropdowns.
+            </p>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">Cancel</Button>

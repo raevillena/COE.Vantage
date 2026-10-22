@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, Department } from "../../types/api";
+import { departmentLabel } from "../../utils/departmentLabel";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
@@ -49,13 +50,24 @@ export function FacultySchedulePage() {
       setSelectedFacultyId("");
       return;
     }
-    const params = new URLSearchParams({ role: "FACULTY" });
+    const params = new URLSearchParams();
+    params.append("role", "FACULTY");
+    params.append("role", "CHAIRMAN"); // chairman can view their own schedule too
     if (needsDepartmentFilter && departmentId) params.set("departmentId", departmentId);
     apiClient
       .get<UserListItem[]>(`/users?${params}`)
       .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
       .catch(() => setFaculties([]));
   }, [user, needsDepartmentFilter, departmentId]);
+
+  const didPreselect = useRef(false);
+  useEffect(() => {
+    if (didPreselect.current || role !== "CHAIRMAN" || !user) return;
+    if (faculties.some((f) => f.id === user.id)) {
+      setSelectedFacultyId(user.id);
+      didPreselect.current = true;
+    }
+  }, [faculties, role, user]);
 
   useEffect(() => {
     if (!academicYearId || !selectedFacultyId) {
@@ -75,7 +87,7 @@ export function FacultySchedulePage() {
           <div className="min-w-[220px]">
             <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
             <SearchableSelect
-              options={departments.map((d) => ({ value: d.id, label: `${d.name}${d.code ? ` (${d.code})` : ""}` }))}
+              options={departments.map((d) => ({ value: d.id, label: departmentLabel(d) }))}
               value={departmentId || "__none__"}
               onValueChange={(v) => {
                 const next = v === "__none__" ? "" : v;
@@ -114,7 +126,7 @@ export function FacultySchedulePage() {
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
           <SearchableSelect
-            options={faculties.map((f) => ({ value: f.id, label: f.name }))}
+            options={faculties.map((f) => ({ value: f.id, label: `${f.name}${f.id === user?.id ? " (you)" : ""}` }))}
             value={selectedFacultyId || "__none__"}
             onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Select faculty" }}

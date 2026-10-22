@@ -112,9 +112,25 @@ export const copyFromPreviousFacultyLoadSchema = z.object({
   }),
 });
 
+export const slotAvailabilityQuerySchema = z.object({
+  query: z.object({
+    academicYearId: z.string().uuid(),
+    semester: z.coerce.number().int().min(1).max(3),
+    dayOfWeek: z.coerce.number().int().min(1).max(7),
+    startTime: timeString,
+    endTime: timeString,
+    subjectId: z.string().uuid().optional(),
+    studentClassId: z.string().uuid().optional(),
+    /** The load being moved, so it doesn't conflict with itself. */
+    excludeLoadId: z.string().uuid().optional(),
+  }),
+});
+
+
 export type CreateFacultyLoadBody = z.infer<typeof createFacultyLoadSchema>["body"];
 export type UpdateFacultyLoadBody = z.infer<typeof updateFacultyLoadSchema>["body"];
 export type PreviewFacultyLoadBody = z.infer<typeof previewFacultyLoadSchema>["body"];
 export type AutoAssignFacultyLoadBody = z.infer<typeof autoAssignFacultyLoadSchema>["body"];
 export type ResetFacultyLoadBody = z.infer<typeof resetFacultyLoadSchema>["body"];
 export type CopyFromPreviousFacultyLoadBody = z.infer<typeof copyFromPreviousFacultyLoadSchema>["body"];
+export type SlotAvailabilityQuery = z.infer<typeof slotAvailabilityQuerySchema>["query"];
