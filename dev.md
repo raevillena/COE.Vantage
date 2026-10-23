@@ -1046,6 +1046,56 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 
 ---
 
+### 27. Workload credit: lab units count 3x (faculty load and max units)
+
+- Single source of truth: `backend/src/utils/workload.ts` → `creditedLoadUnits(units, isLab)` (lab = units × 3, lecture = units).
+- Used by `getLoadedUnitsByFaculty`, `getFacultyUnitsWith` (max-units check on create/update), auto-assign (cap check and running totals) and `dashboardService`.
+- A subject taught to the same class on several days still counts once per faculty. **Student-facing units are never multiplied** (class schedule export shows the real units).
+- `requiredMinutesForSubject` (lab 3 h/unit/week) is unchanged; it is the curriculum-hours rule, separate from workload credit.
+
+### 28. Chairman / dean as faculty
+
+- Faculty page (`ChairmanFacultyPage`) lists `FACULTY` + `CHAIRMAN` of the chairman's department (`role` array query; backend defaults to the same for chairmen). Chairman row is tagged; its edit dialog locks the role and changes only status / max units.
+- `updateUser`: a chairman may edit department FACULTY or **themselves** (still limited to `status` and `maxUnits`). Controller passes the caller `id`.
+- `autoAssignForClass` candidate pool is `FACULTY | CHAIRMAN | DEAN` (not deleted); the existing same-department rule still applies, so only a chairman/dean in the subject's department is picked.
+- `setPrioritizedFaculty` accepts the same three roles.
+- Possible-subjects picker has a **Curriculum** filter (curricula derived from the subject pool). Subjects page has a curriculum filter (all / a curriculum / no curriculum). No schema change.
+- `status` is free text (no fixed list).
+
+### 29. Cross-department approval when editing a load's faculty
+
+- `PATCH /faculty-loads/:id` (`facultyLoadController.update`): when a CHAIRMAN changes `facultyId` to a faculty in a different department than the subject/curriculum, it creates a `CrossDepartmentLoadRequest` (HTTP 202, `{ requestCreated: true }`) instead of saving. The existing load is untouched until approval.
+- New nullable column `CrossDepartmentLoadRequest.replacesLoadId` (migration `20260601000000_request_replaces_load`; run `npx prisma migrate deploy`). `approveRequest` deletes the replaced load and creates the new one in one transaction. Reject leaves the original load.
+- Frontend: `AssignmentForm` and the scheduler's conflict-resolve action read `requestCreated` and toast accordingly.
+
+### 30. Official Excel exports (class schedules, faculty workload)
+
+- Code: `backend/src/modules/reports/reportExcel.ts`; handlers in `reportController.ts`; routes `GET /reports/export/class-schedules` and `GET /reports/export/faculty-workloads` (query `academicYearId`, `semester` 1–3, optional `id` = class / faculty). ADMIN, DEAN, CHAIRMAN only; a chairman is scoped to their own department's classes / faculty. The older `college-workload` export is unchanged.
+- Layout follows the registrar sample (form URO-FRM-012B header, College / Semester block). One sheet each: classes stacked with a yellow "Total Units" row; faculty grouped under a department band.
+- Meetings of one subject are folded into one row via `buildMeetingSegments`: meetings sharing time + room are one segment with its own day letters (M T W Th F Sa), segments joined by " / ". Units total counts each course once.
+- Faculty columns: `# of Units` = real units; `Actual Load` = credited units (lab ×3); `Regular Load` = the faculty's `maxUnits`; `Over load` = max(0, actual − regular). `OA load eqv.` and `Other assignments` are blank (no data). Status text sits beside the first course row.
+- Class title is `<class> (<curriculum name>)`; a bare 4-digit curriculum name becomes "<year> CURRICULUM".
+- Frontend: Reports page "Official forms (Excel)" with busy state, server filename, and API error text for blob responses.
+
+### 31. Dashboard overview (phase 1)
+
+- `GET /dashboard/summary?academicYearId&semester` (`modules/dashboard`), ADMIN / DEAN / CHAIRMAN. Chairman is scoped to their department's classes, faculty and rooms; no caching by design.
+- KPIs: curriculum scheduled % (required hours via `requiredMinutesForSubject`, co-instructor duplicates counted once, capped at required), faculty load used % (credited units vs `maxUnits`, over / near-90% counts), room use % (Mon–Sat 07:00–19:00 window, each booking once), scheduling gaps (unscheduled + partial class subjects).
+- Projection is an estimate: remaining hours for subjects that have at least one prioritized faculty vs. those that do not. Room and conflict limits are not simulated. Top 3 alerts are ranked by severity; links go to the relevant page.
+- Frontend: `DashboardOverview.tsx` above the navigation cards. KPI cards and alerts link to the detail views below (they carry the selected term in the URL). The pending-requests alert links to `/requests`.
+- **Phase 2 (detail views):** `GET /dashboard/analytics?metric=faculty-workload|room-utilization|curriculum-completion|scheduling-gaps` with `academicYearId`, `semester`, `page`, `pageSize` (max 100), `q`, and per-metric filters (`state`, `status`, `reason`); validated with zod, same role scope as the summary. Page: `/dashboard/details/:metric` (`DashboardDetailPage.tsx`), filters and page live in the URL.
+- Shared rules (do not duplicate): `dashboardProgress.ts` → `loadCurriculumProgress` (required vs scheduled minutes per class subject, co-instructor slots counted once, capped at required) and `loadRoomUtilization` (per-room booked minutes inside the Mon–Sat 7:00–19:00 window); `creditedUnitsByFaculty` in `dashboardService.ts`. The summary and the detail views both use them, so a number and its breakdown always agree.
+- **Phase 3 (constraint-aware projection, estimate):** `dashboardProjection.ts` → `simulateProjection`, computed inside the same summary request (no extra API call; about 70 ms on the local dataset). Per unscheduled class subject, in class/subject order with greedy reservations: faculty must be listed for the subject, in the subject's department (auto-assign cannot cross departments) and have unit cap left (credited units, lab 3x; partly scheduled subjects already carry their units); rooms must belong to the class's department or be open for the term, fit the class size, be a lab for lab subjects, and have enough free hours in the Mon-Sat 7-19 window. Outcomes: `schedulable | no-faculty | faculty-cap | no-room | no-room-hours`. It does **not** search real time slots, so real auto-assign can place less; the UI says so. Nothing is persisted.
+- Surfaces: projection panel breakdown on the dashboard, a "may not fit current limits" alert, and detail view `metric=projection` (filter `outcome`, including `blocked`).
+- Not built: phase 4 (trends; needs retained historical data). Optional later: short-lived cache keyed by department + term if the simulation ever becomes slow on a larger dataset.
+
+### 32. Changelog on the login page
+
+- Release notes live in `frontend/src/data/changelog.ts` (newest first; kinds `new | improved | fixed`) and are mirrored in `CHANGELOG.md` at the repo root. Frontend cannot import the root file (the Docker build context is `frontend/`), so update both when releasing.
+- `AuthLayout` shows a **What's new** link beside the version when `showChangelog` is set (enabled on the login page only); it opens `ChangelogDialog`, which marks the entry matching `VITE_APP_VERSION` as current.
+- Release checklist: add the entry, bump `VITE_APP_VERSION` in `frontend/.env.production`, tag the images.
+- Entries before v0.3.0 were reconstructed from git history; v0.2.0 and v0.2.2 are best-effort labels (the commits only tagged v0.2.1 and v0.2.3).
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

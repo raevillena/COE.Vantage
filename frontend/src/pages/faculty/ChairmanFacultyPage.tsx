@@ -23,7 +23,7 @@ interface PrioritizedSubjectItem {
   isLab: boolean;
 }
 
-/** Faculty list is filtered to chairman's department by the backend when role=FACULTY. */
+/** Department faculty, including the chairman (who also carries a teaching load). Scoped to the chairman's department by the backend. */
 export function ChairmanFacultyPage() {
   const [list, setList] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,13 +41,14 @@ export function ChairmanFacultyPage() {
   const [possibleSubjectsLoading, setPossibleSubjectsLoading] = useState(false);
   const [subjectsPool, setSubjectsPool] = useState<Subject[]>([]);
   const [addSubjectId, setAddSubjectId] = useState<string>("");
+  const [addCurriculumId, setAddCurriculumId] = useState<string>("");
   const [savingSubject, setSavingSubject] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get<UserListItem[]>("/users", {
-        params: { role: "FACULTY" },
+        params: { role: ["FACULTY", "CHAIRMAN"] },
       });
       setList(data);
     } catch {
@@ -126,7 +127,7 @@ export function ChairmanFacultyPage() {
         name: u.name,
         email: u.email,
         password: "",
-        role: "FACULTY",
+        role: u.role,
         departmentId: u.departmentId ?? "",
         status: u.status ?? "",
         maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
@@ -149,6 +150,7 @@ export function ChairmanFacultyPage() {
     setPossibleSubjectsUser(u);
     setPossibleSubjectsList([]);
     setAddSubjectId("");
+    setAddCurriculumId("");
     setPossibleSubjectsLoading(true);
     try {
       const [subjectsRes, prioritizedRes] = await Promise.all([
@@ -221,6 +223,17 @@ export function ChairmanFacultyPage() {
       setSavingSubject(false);
     }
   };
+
+  const curriculumOptions = (() => {
+    const seen = new Map<string, string>();
+    for (const sub of subjectsPool) {
+      if (sub.curriculumId && !seen.has(sub.curriculumId)) seen.set(sub.curriculumId, sub.curriculum?.name ?? "Curriculum");
+    }
+    return [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  })();
+  const subjectOptions = subjectsPool
+    .filter((s) => !possibleSubjectsList.some((p) => p.subjectId === s.id))
+    .filter((s) => !addCurriculumId || s.curriculumId === addCurriculumId);
 
   const filteredList = searchQuery.trim()
     ? list.filter(
@@ -319,7 +332,14 @@ export function ChairmanFacultyPage() {
             <tbody className="divide-y divide-border">
               {filteredList.map((u) => (
                 <tr key={u.id}>
-                  <td className="px-4 py-2 text-foreground">{u.name}</td>
+                  <td className="px-4 py-2 text-foreground">
+                    {u.name}
+                    {u.role === "CHAIRMAN" && (
+                      <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-xs text-foreground-muted">
+                        Chairman{u.id === user?.id ? " (you)" : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
                   <td className="px-4 py-2">{renderUnits(u)}</td>
@@ -388,12 +408,28 @@ export function ChairmanFacultyPage() {
             ) : (
               <>
                 <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-0 basis-48">
+                    <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
+                    <SearchableSelect
+                      options={curriculumOptions}
+                      value={addCurriculumId || "__none__"}
+                      onValueChange={(v) => {
+                        setAddCurriculumId(v === "__none__" ? "" : v);
+                        setAddSubjectId("");
+                      }}
+                      placeholder="Search curriculum…"
+                      noneOption={{ value: "__none__", label: "All curricula" }}
+                      disabled={savingSubject}
+                      aria-label="Filter subjects by curriculum"
+                    />
+                  </div>
                   <div className="min-w-0 flex-1 basis-48">
                     <label className="mb-1 block text-sm font-medium text-foreground">Add subject</label>
                     <SearchableSelect
-                      options={subjectsPool
-                        .filter((s) => !possibleSubjectsList.some((p) => p.subjectId === s.id))
-                        .map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))}
+                      options={subjectOptions.map((s) => ({
+                        value: s.id,
+                        label: `${s.code} — ${s.name}${!addCurriculumId && s.curriculum?.name ? ` (${s.curriculum.name})` : ""}`,
+                      }))}
                       value={addSubjectId || "__none__"}
                       onValueChange={(v) => setAddSubjectId(v === "__none__" ? "" : v)}
                       placeholder="Search subject…"
@@ -464,10 +500,10 @@ export function ChairmanFacultyPage() {
       {facultyForm && (
         <UserFormDialog
           mode={facultyForm.id ? "edit" : "create"}
-          title={facultyForm.id ? "Edit faculty" : "Add faculty"}
+          title={facultyForm.id ? (facultyForm.initial.role === "CHAIRMAN" ? "Edit chairman load limits" : "Edit faculty") : "Add faculty"}
           initial={facultyForm.initial}
           departments={ownDepartment ? [ownDepartment] : []}
-          allowedRoles={["FACULTY"]}
+          allowedRoles={[facultyForm.initial.role]}
           lockDepartment
           lockIdentity={Boolean(facultyForm.id)}
           onClose={() => setFacultyForm(null)}

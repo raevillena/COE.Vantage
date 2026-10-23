@@ -207,7 +207,7 @@ export async function setPrioritizedFaculty(
     }
   }
   const faculty = await prisma.user.findMany({
-    where: { id: { in: facultyIds }, role: "FACULTY", isDeleted: false },
+    where: { id: { in: facultyIds }, role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] }, isDeleted: false },
     select: { id: true },
   });
   const validIds = new Set(faculty.map((f) => f.id));

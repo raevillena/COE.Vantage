@@ -82,15 +82,17 @@ export async function createUser(body: CreateUserBody) {
 export async function updateUser(
   id: string,
   body: UpdateUserBody,
-  caller?: { role: string; departmentId: string | null }
+  caller?: { id?: string; role: string; departmentId: string | null }
 ) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw notFound("User not found");
   if (user.isDeleted) throw badRequest("Cannot update a deleted user. Restore from Trash first.");
 
   if (caller?.role === "CHAIRMAN") {
-    if (user.role !== Role.FACULTY || caller.departmentId == null || user.departmentId !== caller.departmentId) {
-      throw forbidden("You can only update faculty in your own department.");
+    const isSelf = caller.id != null && caller.id === user.id;
+    const isDeptFaculty = user.role === Role.FACULTY && user.departmentId === caller.departmentId;
+    if (caller.departmentId == null || !(isDeptFaculty || isSelf)) {
+      throw forbidden("You can only update faculty in your own department, or your own load limits.");
     }
     // Chairman may only change status and max units.
     body = { status: body.status, maxUnits: body.maxUnits };

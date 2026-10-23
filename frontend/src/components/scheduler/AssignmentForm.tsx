@@ -417,8 +417,12 @@ export function AssignmentForm({
     };
     try {
       if (editingLoadId) {
-        await apiClient.patch(`/faculty-loads/${editingLoadId}`, payload);
-        toast.success("Load updated");
+        const { data } = await apiClient.patch<{ requestCreated?: boolean }>(`/faculty-loads/${editingLoadId}`, payload);
+        if (data?.requestCreated) {
+          toast.success("Request sent to the faculty's department chairman. The current load stays until it is approved.");
+        } else {
+          toast.success("Load updated");
+        }
       } else {
         const { data } = await apiClient.post<{ requestCreated?: boolean; id?: string }>("/faculty-loads", payload);
         if (data?.requestCreated) {

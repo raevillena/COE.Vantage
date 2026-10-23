@@ -37,6 +37,7 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
       endTime: body.endTime,
       semester: body.semester,
       academicYearId: body.academicYearId,
+      replacesLoadId: body.replacesLoadId ?? undefined,
       status: "PENDING",
     },
     include: {
@@ -148,7 +149,11 @@ export async function approveRequest(id: string, caller: CallerContext, body?: R
   if (caller.role !== "ADMIN" && caller.role !== "DEAN" && caller.role !== "CHAIRMAN") {
     throw forbidden("Not allowed to approve");
   }
-  const load = await prisma.facultyLoad.create({
+  const load = await prisma.$transaction(async (tx) => {
+    if (request.replacesLoadId) {
+      await tx.facultyLoad.deleteMany({ where: { id: request.replacesLoadId } });
+    }
+    return tx.facultyLoad.create({
     data: {
       facultyId: request.facultyId,
       subjectId: request.subjectId,
@@ -168,6 +173,7 @@ export async function approveRequest(id: string, caller: CallerContext, body?: R
       room: { select: { id: true, name: true, capacity: true, isLab: true } },
       academicYear: { select: { id: true, name: true } },
     },
+    });
   });
   await prisma.crossDepartmentLoadRequest.update({
     where: { id },

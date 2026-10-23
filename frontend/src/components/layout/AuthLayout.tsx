@@ -1,4 +1,5 @@
 import { useTheme } from "../../context/ThemeContext";
+import { ChangelogDialog } from "./ChangelogDialog";
 
 /**
  * Shared layout for unauthenticated pages (login, reset password).
@@ -10,11 +11,13 @@ interface AuthLayoutProps {
   title?: string;
   /** Optional short subtitle (e.g. "Faculty Load Scheduling") */
   subtitle?: string;
+  /** Show the "What's new" release notes link next to the version. */
+  showChangelog?: boolean;
 }
 
 const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "v0.0.0";
 
-export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
+export function AuthLayout({ children, title, subtitle, showChangelog = false }: AuthLayoutProps) {
   const { preference, resolvedTheme, setPreference } = useTheme();
 
   const handleCycleTheme = () => {
@@ -115,8 +118,14 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
             </div>
             {children}
           </div>
-          <p className="text-xs text-foreground-muted">
-            COE.Vantage • {APP_VERSION}
+          <p className="flex items-center gap-2 text-xs text-foreground-muted">
+            <span>COE.Vantage • {APP_VERSION}</span>
+            {showChangelog && (
+              <>
+                <span aria-hidden>•</span>
+                <ChangelogDialog currentVersion={APP_VERSION} />
+              </>
+            )}
           </p>
         </div>
       </div>

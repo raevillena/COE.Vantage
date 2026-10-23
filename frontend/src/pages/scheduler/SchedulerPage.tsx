@@ -753,7 +753,7 @@ export function SchedulerPage() {
       if (!moveConflict || !academicYearId) return;
       const { load, targetDayOfWeek, targetStartTime, targetEndTime } = moveConflict;
       try {
-        await apiClient.patch(`/faculty-loads/${load.id}`, {
+        const { data: patched } = await apiClient.patch<{ requestCreated?: boolean }>(`/faculty-loads/${load.id}`, {
           facultyId: newFacultyId ?? undefined,
           facultyDisplayName: newFacultyId ? undefined : (load.facultyDisplayName ?? undefined),
           subjectId: load.subjectId,
@@ -766,7 +766,7 @@ export function SchedulerPage() {
           semester,
           academicYearId,
         });
-        toast.success("Faculty updated");
+        toast.success(patched?.requestCreated ? "Request sent for approval. The current load stays until approved." : "Faculty updated");
         setMoveConflict(null);
         refreshLoads();
         refreshRoomLoads();

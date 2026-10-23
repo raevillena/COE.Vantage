@@ -38,7 +38,7 @@ export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateUserBody & { password?: string };
   // Admins must not set another user's password; only email-based reset is allowed.
   if ("password" in body) delete body.password;
-  const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const caller = req.user ? { id: req.user.id, role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
   const user = await userService.updateUser(req.params.id, body, caller);
   res.json(user);
 }

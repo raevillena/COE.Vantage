@@ -1,5 +1,5 @@
 Dashboard page
- - make the dashboard show information regarding classes, rooms. information that are useful and information that needs action
+ - make the dashboard show information regarding classes, rooms. information that are useful and information that needs action. done (phase 1: GET /dashboard/summary + term overview)
 
 Faculty page
  - chairman should be able to change the max or minimum units. done
@@ -7,8 +7,8 @@ Faculty page
  - chairman should be also able to add new faculty just like adding users in the admin view. but user role must only be limited to faculty. done
 
  additonal:
- -add the chairman, since the chairman is faculty by nature. ther also has teaching load. also with the dean. they have teaching load.
- -when adding possible subjects to teach, i need the subjects to be per curriculum.
+ - add the chairman in the list, since the chairman is faculty by nature. there also has teaching load for them so they should also be able to assign load on themselves also with the dean. they have teaching load so chairman should be able to assign schedules as well. done (chairman listed on Faculty page; dean not listed there, still assignable in the scheduler)
+ - when adding possible subjects to teach, i need the subjects to be per curriculum. done
 
 Rooms page
  - the chairman should be able to add rooms, with existence checking. done
@@ -25,8 +25,12 @@ Scheduler page
  - also in the abbreviation of deparments when selecting faculty in the view drop-down Computer, ceramics, and civil engineering all show CED, maybe because it was using first letter of the department. maybe we can concatinate the shorthand for them like Computer Engineering Department (CPE) then it can be serialized to pick-up CPE. done
 
  additional:
- -Editing a saved load’s faculty in the Assignment form skips the cross-department approval. Only creating a load goes through it, so picking another department’s faculty while editing saves directly. maybe make this requiring another approval
- -Auto-assign only considers FACULTY, and the Faculty page only lets you set possible subjects for FACULTY, so a chairman is never auto-assigned. add the chairman and be considered as a faculty. 
+ - Editing a saved load’s faculty in the Assignment form skips the cross-department approval. Only creating a load goes through it, so picking another department’s faculty while editing saves directly. maybe make this requiring another approval. done (needs migration 20260601000000_request_replaces_load)
+ - Auto-assign only considers FACULTY, and the Faculty page only lets you set possible subjects for FACULTY, so a chairman is never auto-assigned. add the chairman and be considered as a faculty. done
 
 Subjects page
- - currently, the subjects are listed as everything. i want to show them based on curriculum.
+ - currently, the subjects are listed as everything. i want to show them based on curriculum. done (curriculum filter)
+
+Reports
+ - Excel export of class schedules and faculty workload (registrar layout, lab units count 3x toward actual load and the max-units cap). done
+ - 

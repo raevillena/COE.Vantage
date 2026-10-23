@@ -4,6 +4,7 @@ import { ExperimentalRoute } from "./components/protectedRoute/ExperimentalRoute
 import { Layout } from "./components/layout/Layout";
 import { LoginPage } from "./pages/login/LoginPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
+import { DashboardDetailPage } from "./pages/dashboard/DashboardDetailPage";
 import { UsersPage } from "./pages/users/UsersPage";
 import { RoomsPage } from "./pages/rooms/RoomsPage";
 import { CurriculumPage } from "./pages/curriculum/CurriculumPage";
@@ -46,6 +47,7 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="dashboard/details/:metric" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN"]}><DashboardDetailPage /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><UsersPage /></ProtectedRoute>} />
         <Route path="rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER"]}><RoomsPage /></ProtectedRoute>} />
         <Route path="curriculum" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN"]}><CurriculumPage /></ProtectedRoute>} />

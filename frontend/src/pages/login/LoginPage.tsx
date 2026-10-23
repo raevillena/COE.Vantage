@@ -103,7 +103,7 @@ export function LoginPage() {
   };
 
   return (
-    <AuthLayout title="COE.Vantage" subtitle="Class Load Scheduling">
+    <AuthLayout title="COE.Vantage" subtitle="Class Load Scheduling" showChangelog>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-foreground">

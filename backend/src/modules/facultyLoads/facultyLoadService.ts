@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
+import { creditedLoadUnits } from "../../utils/workload.js";
 
 export interface CallerContext {
   role: string;
@@ -115,7 +116,7 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
   });
 }
 
-/** Units loaded per faculty for a term. A subject taught to the same class on several days counts once. */
+/** Credited units loaded per faculty for a term (lab units count 3x). A subject taught to the same class on several days counts once. */
 export async function getLoadedUnitsByFaculty(
   academicYearId: string,
   semester: number,
@@ -128,7 +129,7 @@ export async function getLoadedUnitsByFaculty(
       facultyId: { not: null },
       ...(departmentId ? { faculty: { departmentId } } : {}),
     },
-    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true } } },
+    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true } } },
   });
   const seen = new Set<string>();
   const totals: Record<string, number> = {};
@@ -137,7 +138,7 @@ export async function getLoadedUnitsByFaculty(
     const key = `${l.facultyId}|${l.subjectId}|${l.studentClassId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + (l.subject?.units ?? 0);
+    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + creditedLoadUnits(l.subject?.units ?? 0, l.subject?.isLab ?? false);
   }
   return totals;
 }
@@ -209,10 +210,10 @@ async function getFacultyUnitsWith(
 ): Promise<{ current: number; total: number }> {
   const loads = await prisma.facultyLoad.findMany({
     where: { facultyId, academicYearId, semester, ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}) },
-    select: { subjectId: true, studentClassId: true, subject: { select: { units: true } } },
+    select: { subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true } } },
   });
   const pairs = new Map<string, number>();
-  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, l.subject?.units ?? 0);
+  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, creditedLoadUnits(l.subject?.units ?? 0, l.subject?.isLab ?? false));
   const current = [...pairs.values()].reduce((s, u) => s + u, 0);
   const total = pairs.has(`${candidate.subjectId}|${candidate.studentClassId}`) ? current : current + candidate.units;
   return { current, total };
@@ -299,18 +300,18 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
   const effectiveFacultyId = body.facultyId?.trim() || null;
   if (effectiveFacultyId) {
     const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true } }),
+      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true, isLab: true } }),
       prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
       const { current, total } = await getFacultyUnitsWith(effectiveFacultyId, body.academicYearId, body.semester, {
         subjectId: body.subjectId,
         studentClassId: body.studentClassId,
-        units: subject.units,
+        units: creditedLoadUnits(subject.units, subject.isLab),
       });
       if (total > user.maxUnits) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${subject.units}.`
+          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
         );
       }
     }
@@ -404,7 +405,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
   }
   if (facultyId) {
     const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true } }),
+      prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true, isLab: true } }),
       prisma.user.findUnique({ where: { id: facultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
@@ -412,12 +413,12 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
         facultyId,
         existing.academicYearId,
         existing.semester,
-        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: subject.units },
+        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: creditedLoadUnits(subject.units, subject.isLab) },
         id
       );
       if (total > user.maxUnits) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${subject.units}.`
+          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
         );
       }
     }
@@ -626,7 +627,7 @@ export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, c
   return result;
 }
 
-function timeToMinutes(time: string): number {
+export function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map((v) => parseInt(v, 10));
   if (Number.isNaN(h) || Number.isNaN(m)) return 0;
   return h * 60 + m;
@@ -653,7 +654,7 @@ function addInterval(map: Map<string, Interval[]>, key: string, interval: Interv
   map.get(key)!.push(interval);
 }
 
-function requiredMinutesForSubject(units: number, isLab: boolean): number {
+export function requiredMinutesForSubject(units: number, isLab: boolean): number {
   // Lectures: 1 unit = 1 hour/week. Labs: 1 unit = 3 hours/week.
   return isLab ? units * 3 * 60 : units * 60;
 }
@@ -736,10 +737,10 @@ export async function autoAssignForClass(
 
   // Preload faculty (with maxUnits for cap check) and rooms.
   const faculties = await prisma.user.findMany({
-    where: { role: "FACULTY" },
+    where: { role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] }, isDeleted: false },
     select: { id: true, departmentId: true, maxUnits: true },
   });
-  const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, s.units]));
+  const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, creditedLoadUnits(s.units, s.isLab)]));
   const currentUnitsByFaculty = new Map<string, number>(
     Object.entries(await getLoadedUnitsByFaculty(academicYearId, semester))
   );
@@ -938,7 +939,7 @@ export async function autoAssignForClass(
       continue;
     }
     const poolToUse = facultyPool.filter(
-      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + s.units <= (f.maxUnits ?? Infinity)
+      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + creditedLoadUnits(s.units, s.isLab) <= (f.maxUnits ?? Infinity)
     );
     if (poolToUse.length === 0) {
       skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "All faculty for this subject are at their max units" });
@@ -949,7 +950,7 @@ export async function autoAssignForClass(
       const d = (facultyMinutes.get(a.id) ?? 0) - (facultyMinutes.get(b.id) ?? 0);
       return d !== 0 ? d : (byPriority.get(a.id) ?? 999) - (byPriority.get(b.id) ?? 999);
     })[0].id;
-    currentUnitsByFaculty.set(chosenFacultyId, (currentUnitsByFaculty.get(chosenFacultyId) ?? 0) + s.units);
+    currentUnitsByFaculty.set(chosenFacultyId, (currentUnitsByFaculty.get(chosenFacultyId) ?? 0) + creditedLoadUnits(s.units, s.isLab));
 
     // Choose a room: capacity >= class size, lab vs non-lab, smallest total minutes.
     const classSize = studentClass.studentCount;

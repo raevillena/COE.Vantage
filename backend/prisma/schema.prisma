@@ -265,6 +265,7 @@ model CrossDepartmentLoadRequest {
   respondedById   String?
   respondedAt     DateTime?
   notes           String?
+  replacesLoadId  String?  // when set, approval replaces this existing load (faculty change on edit)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

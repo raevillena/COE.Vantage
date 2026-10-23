@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import * as reportService from "./reportService.js";
-import { forbidden } from "../../utils/errors.js";
+import { forbidden, badRequest } from "../../utils/errors.js";
+import * as reportExcel from "./reportExcel.js";
 
 function assertFacultyReportAccess(user: { role: string; id: string }, facultyId: string): void {
   if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.id !== facultyId) {
@@ -156,4 +157,51 @@ export async function collegeWorkloadReport(req: Request, res: Response): Promis
     `attachment; filename="college-workload-${safeName}-S${semester}.xlsx"`,
   );
   res.send(Buffer.from(buffer));
+}
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function parseExcelQuery(req: Request): { academicYearId: string; semester: number; id?: string } {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester ?? 1);
+  if (!academicYearId) throw badRequest("academicYearId query is required");
+  if (![1, 2, 3].includes(semester)) throw badRequest("semester must be 1, 2 or 3");
+  const id = req.query.id ? String(req.query.id) : undefined;
+  return { academicYearId, semester, id };
+}
+
+function assertExcelExportAccess(user: { role: string; departmentId?: string | null }): void {
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN") {
+    throw forbidden("Not allowed to export this report");
+  }
+  if (user.role === "CHAIRMAN" && !user.departmentId) throw forbidden("Chairman must belong to a department");
+}
+
+export async function classSchedulesExcel(req: Request, res: Response): Promise<void> {
+  const user = req.user!;
+  assertExcelExportAccess(user);
+  const { academicYearId, semester, id } = parseExcelQuery(req);
+  const caller = { role: user.role, departmentId: user.departmentId ?? null };
+  const data = await reportExcel.loadClassSchedulesForExcel(academicYearId, semester, caller, id);
+  const buffer = await reportExcel.buildClassSchedulesWorkbook(data, semester);
+  res.setHeader("Content-Type", XLSX_MIME);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="class-schedules-${data.academicYearName || academicYearId}-S${semester}.xlsx"`
+  );
+  res.send(buffer);
+}
+
+export async function facultyWorkloadsExcel(req: Request, res: Response): Promise<void> {
+  const user = req.user!;
+  assertExcelExportAccess(user);
+  const { academicYearId, semester, id } = parseExcelQuery(req);
+  const caller = { role: user.role, departmentId: user.departmentId ?? null };
+  const data = await reportExcel.loadFacultyWorkloadsForExcel(academicYearId, semester, caller, id);
+  const buffer = await reportExcel.buildFacultyWorkloadWorkbook(data, semester);
+  res.setHeader("Content-Type", XLSX_MIME);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="faculty-workloads-${data.academicYearName || academicYearId}-S${semester}.xlsx"`
+  );
+  res.send(buffer);
 }

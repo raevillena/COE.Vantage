@@ -18,6 +18,7 @@ import { academicYearRoutes } from "./modules/academicYears/academicYearRoutes.j
 import { facultyLoadRoutes } from "./modules/facultyLoads/facultyLoadRoutes.js";
 import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignmentRequestRoutes.js";
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
+import { dashboardRoutes } from "./modules/dashboard/dashboardRoutes.js";
 import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
 import { gradeSubjectRoutes } from "./modules/gradeSubjects/gradeSubjectRoutes.js";
 
@@ -53,6 +54,7 @@ app.use("/academic-years", academicYearRoutes);
 app.use("/faculty-loads", facultyLoadRoutes);
 app.use("/assignment-requests", assignmentRequestRoutes);
 app.use("/reports", reportRoutes);
+app.use("/dashboard", dashboardRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 app.use("/grade-subjects", gradeSubjectRoutes);
 

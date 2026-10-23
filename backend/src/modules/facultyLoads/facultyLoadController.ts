@@ -75,6 +75,42 @@ export async function create(req: Request, res: Response): Promise<void> {
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateFacultyLoadBody;
   const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const newFacultyId = body.facultyId?.trim() || null;
+  if (req.user?.role === "CHAIRMAN" && newFacultyId) {
+    const existing = await prisma.facultyLoad.findUnique({
+      where: { id: req.params.id },
+      include: { subject: { select: { departmentId: true } }, studentClass: { include: { curriculum: { select: { departmentId: true } } } } },
+    });
+    if (existing && existing.facultyId !== newFacultyId) {
+      const faculty = await prisma.user.findUnique({ where: { id: newFacultyId }, select: { departmentId: true, role: true } });
+      const subjectDeptId = existing.subject?.departmentId ?? existing.studentClass?.curriculum?.departmentId ?? null;
+      const facultyDeptId = faculty?.departmentId ?? null;
+      if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId) {
+        const roomId = body.roomId !== undefined ? body.roomId?.trim() || null : existing.roomId;
+        if (roomId && caller) {
+          await facultyLoadService.assertRoomAssignable(roomId, existing.academicYearId, existing.semester, caller);
+        }
+        const request = await assignmentRequestService.createAssignmentRequest(
+          {
+            facultyId: newFacultyId,
+            subjectId: existing.subjectId,
+            studentClassId: existing.studentClassId,
+            roomId,
+            roomDisplayName: body.roomDisplayName !== undefined ? body.roomDisplayName ?? null : existing.roomDisplayName,
+            dayOfWeek: body.dayOfWeek ?? existing.dayOfWeek,
+            startTime: body.startTime ?? existing.startTime,
+            endTime: body.endTime ?? existing.endTime,
+            semester: existing.semester,
+            academicYearId: existing.academicYearId,
+            replacesLoadId: existing.id,
+          },
+          req.user.id
+        );
+        res.status(202).json({ requestCreated: true, request });
+        return;
+      }
+    }
+  }
   const load = await facultyLoadService.updateFacultyLoad(req.params.id, body, caller);
   res.json(load);
 }

@@ -11,6 +11,7 @@ import { Button } from "../../components/ui/button";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
 
 const HOUR_END = 21;
@@ -133,6 +134,45 @@ export function ReportsPage() {
   useEffect(() => {
     fetchRoomData();
   }, [fetchRoomData]);
+
+  const role = useAppSelector((s) => s.auth.user?.role);
+  const canExportOfficial = role === "ADMIN" || role === "DEAN" || role === "CHAIRMAN";
+  const [exporting, setExporting] = useState<string | null>(null);
+
+  /** Downloads an official .xlsx form; uses the server's filename when it is exposed. */
+  const exportExcel = async (key: string, url: string, fallbackName: string) => {
+    if (!academicYearId) {
+      toast.error("Select academic year");
+      return;
+    }
+    if (exporting) return;
+    setExporting(key);
+    try {
+      const params = new URLSearchParams({ academicYearId, semester: String(semester) });
+      const res = await apiClient.get<Blob>(`${url}?${params}`, { responseType: "blob" });
+      const disposition = String(res.headers?.["content-disposition"] ?? "");
+      const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(res.data);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success("Download started");
+    } catch (err: unknown) {
+      const blob = (err as { response?: { data?: unknown } })?.response?.data;
+      let message = "Export failed";
+      if (blob instanceof Blob) {
+        try {
+          message = (JSON.parse(await blob.text()) as { message?: string }).message ?? message;
+        } catch {
+          /* keep default */
+        }
+      }
+      toast.error(message);
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const downloadReport = async (url: string, filename: string) => {
     if (!academicYearId) {
@@ -408,6 +448,32 @@ export function ReportsPage() {
             Download Excel
           </Button>
         </section>
+
+        {canExportOfficial && (
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+            <h2 className="mb-3 font-medium text-foreground">Official forms (Excel)</h2>
+            <p className="mb-4 text-sm text-foreground-muted">
+              Class schedules and the summary of faculty workload for the selected term, in the registrar&apos;s layout.
+              Laboratory units count 3x toward a faculty&apos;s actual load. Chairmen get their own department.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={!academicYearId || exporting !== null}
+                onClick={() => exportExcel("class", "/reports/export/class-schedules", "class-schedules.xlsx")}
+              >
+                {exporting === "class" ? "Preparing…" : "Export Class Schedules"}
+              </Button>
+              <Button
+                type="button"
+                disabled={!academicYearId || exporting !== null}
+                onClick={() => exportExcel("faculty", "/reports/export/faculty-workloads", "faculty-workloads.xlsx")}
+              >
+                {exporting === "faculty" ? "Preparing…" : "Export Faculty Workloads"}
+              </Button>
+            </div>
+          </section>
+        )}
       </div>
 
       <p className="mt-6 text-sm text-foreground-muted">

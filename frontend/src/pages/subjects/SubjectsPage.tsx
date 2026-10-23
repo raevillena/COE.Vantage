@@ -16,6 +16,8 @@ import {
 
 export function SubjectsPage() {
   const [list, setList] = useState<Subject[]>([]);
+  /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
+  const [curriculumFilter, setCurriculumFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -177,8 +179,18 @@ export function SubjectsPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
+  const curriculumOptions = (() => {
+    const seen = new Map<string, string>();
+    for (const s of list) if (s.curriculumId && !seen.has(s.curriculumId)) seen.set(s.curriculumId, s.curriculum?.name ?? "Curriculum");
+    const opts = [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+    if (list.some((s) => !s.curriculumId)) opts.push({ value: "__none__", label: "No curriculum" });
+    return opts;
+  })();
+  const byCurriculum = curriculumFilter
+    ? list.filter((s) => (curriculumFilter === "__none__" ? !s.curriculumId : s.curriculumId === curriculumFilter))
+    : list;
   const filteredList = searchLower
-    ? list.filter(
+    ? byCurriculum.filter(
         (s) =>
           s.code.toLowerCase().includes(searchLower) ||
           s.name.toLowerCase().includes(searchLower) ||
@@ -186,7 +198,7 @@ export function SubjectsPage() {
           (s.department?.name ?? "").toLowerCase().includes(searchLower) ||
           (s.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
       )
-    : list;
+    : byCurriculum;
 
   const filteredIds = filteredList.map((s) => s.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
@@ -238,7 +250,19 @@ export function SubjectsPage() {
         <Button type="button" onClick={openCreate}>Add Subject</Button>
       </div>
       {list.length > 0 && (
-        <div className="mb-4 relative max-w-md">
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[220px]">
+          <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
+          <SearchableSelect
+            options={curriculumOptions}
+            value={curriculumFilter || "__all__"}
+            onValueChange={(v) => setCurriculumFilter(v === "__all__" ? "" : v)}
+            noneOption={{ value: "__all__", label: "All curricula" }}
+            placeholder="Search curriculum…"
+            aria-label="Filter subjects by curriculum"
+          />
+        </div>
+        <div className="relative max-w-md flex-1 basis-64">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -250,6 +274,7 @@ export function SubjectsPage() {
             className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
             aria-label="Search subjects"
           />
+        </div>
         </div>
       )}
       {loading ? (

@@ -14,6 +14,7 @@ export const createAssignmentRequestSchema = z.object({
     endTime: timeString,
     semester: z.number().int().min(1).max(2),
     academicYearId: z.string().uuid(),
+    replacesLoadId: z.string().uuid().optional().nullable(),
   }),
 });
 
