@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { prisma } from "../../prisma/client.js";
 import * as facultyLoadService from "./facultyLoadService.js";
+import { isTeachingRole } from "../../utils/teachingRoles.js";
 import * as assignmentRequestService from "../assignmentRequests/assignmentRequestService.js";
 import type {
   CreateFacultyLoadBody,
@@ -46,7 +47,7 @@ export async function create(req: Request, res: Response): Promise<void> {
     const subjectDeptId = subject?.departmentId ?? studentClass?.curriculum?.departmentId ?? null;
     const facultyDeptId = faculty?.departmentId ?? null;
 
-    const needsApproval = faculty?.role === "FACULTY" || faculty?.role === "CHAIRMAN" || faculty?.role === "DEAN";
+    const needsApproval = isTeachingRole(faculty?.role ?? "");
     if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId && needsApproval) {
       if (body.roomId && caller) await facultyLoadService.assertRoomAssignable(body.roomId, body.academicYearId, body.semester, caller);
       const request = await assignmentRequestService.createAssignmentRequest(

@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden, conflict } from "../../utils/errors.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import type { CreateSubjectBody, UpdateSubjectBody } from "./subjectSchemas.js";
 
 /** Caller context: CHAIRMAN sees only subjects in their department's curricula (or unassigned with their department). */
@@ -217,7 +218,7 @@ export async function setPrioritizedFaculty(
     }
   }
   const faculty = await prisma.user.findMany({
-    where: { id: { in: facultyIds }, role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] }, isDeleted: false },
+    where: { id: { in: facultyIds }, role: { in: TEACHING_ROLES }, isDeleted: false },
     select: { id: true },
   });
   const validIds = new Set(faculty.map((f) => f.id));

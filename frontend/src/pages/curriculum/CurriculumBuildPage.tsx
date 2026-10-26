@@ -16,6 +16,7 @@ import type { SubjectDragItem } from "../../components/scheduler/schedulerTypes"
 import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
 import toast from "react-hot-toast";
+import { HelpTip } from "../../components/ui/helpTip";
 
 /** Subject list item from GET /curriculum/:id/subjects */
 interface CurriculumSubject {
@@ -354,14 +355,13 @@ export function CurriculumBuildPage() {
           <Link to="/curriculum">
             <Button variant="secondary" className="text-sm">← Curriculum</Button>
           </Link>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Build curriculum — {curriculum.name}
-          </h1>
+          <div className="flex items-center gap-2">
+<h1 className="text-2xl font-semibold text-foreground">
+            Build curriculum — {curriculum.name}</h1>
+<HelpTip>Drag subjects from the pool into a year and semester to add them. Drag a subject between semesters to move it, or back to the pool to remove it from the curriculum.</HelpTip>
+</div>
         </div>
       </div>
-      <p className="text-sm text-foreground-muted mb-4">
-        Drag subjects from the pool into a year and semester to add them. Drag between semesters to move, or to the pool to remove.
-      </p>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragOver={handleDragOver} onDragCancel={handleDragCancel}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -420,10 +420,11 @@ function PoolDropZone({ subjects, isOver }: PoolDropZoneProps) {
       ref={setNodeRef}
       className={`rounded border-2 border-dashed p-4 min-h-[200px] transition-colors ${isOver ? "border-primary bg-primary/10" : "border-border bg-surface-muted/20"}`}
     >
-      <h2 className="text-sm font-semibold text-foreground mb-2">Subject pool</h2>
-      <p className="text-xs text-foreground-muted mb-3">
-        Subjects not in this curriculum. Drop here to remove from curriculum.
-      </p>
+      <div className="mb-3 flex items-center gap-1.5">
+<h2 className="text-sm font-semibold text-foreground">
+        Subject pool</h2>
+<HelpTip>Subjects that are not part of this curriculum. Dropping a subject here removes it from the curriculum.</HelpTip>
+</div>
       <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
         {subjects.length === 0 ? (
           <p className="text-xs text-foreground-muted">No subjects in pool.</p>

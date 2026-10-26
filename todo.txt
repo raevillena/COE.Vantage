@@ -17,6 +17,7 @@ Rooms page
 
 Schedules page
  - chairman should be able to see their own schedules. done
+ - in schedules page, the college sec and dean must also be able to see the faculty, rooms and class schedules. all of them. while chairman remain to see in the their scope. done (v0.3.5)
 
 Scheduler page
  - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict. done

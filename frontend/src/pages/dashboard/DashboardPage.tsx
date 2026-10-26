@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAppSelector } from "../../store/hooks";
 import { DashboardOverview } from "./DashboardOverview";
+import { FacultyDashboard } from "./FacultyDashboard";
 
 interface DashboardCardProps {
   to: string;
@@ -32,6 +33,8 @@ export function DashboardPage() {
       <p className="mb-6 text-foreground-muted">
         Welcome, {user?.name}. You are signed in as {user?.role}.
       </p>
+
+      {user?.role === "FACULTY" && <FacultyDashboard />}
 
       {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && <DashboardOverview />}
 

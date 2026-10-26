@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import { Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 export async function listUsers(query: ListUsersQuery) {
@@ -21,7 +22,7 @@ export async function listUsers(query: ListUsersQuery) {
 
 export async function listAssignableFaculty(callerDepartmentId: string | null) {
   const users = await prisma.user.findMany({
-    where: { isDeleted: false, role: { in: [Role.FACULTY, Role.CHAIRMAN, Role.DEAN] } },
+    where: { isDeleted: false, role: { in: TEACHING_ROLES } },
     select: {
       id: true,
       name: true,

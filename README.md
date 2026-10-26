@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.3.4-197fa1)
+![Version](https://img.shields.io/badge/version-v0.3.5-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -37,11 +37,15 @@ Build conflict-free teaching loads, see what's left to schedule, and print the r
 **Faculty & rules**
 - 👥 Per-department faculty with status and **maximum units**. Chairmen and deans carry teaching loads too.
 - ⚖️ **Laboratory units count 3×** toward a faculty's load and maximum units.
+- ➖ **Deloading** per term (designations, research, other assignments) is deducted from the maximum units. Anyone above the result is in **overload** (red), below it **underload** (amber), exactly at it fully loaded (green).
 - 🗓️ **Possible subjects are kept per academic year and semester**, so planning a new term never rewrites an old one. Copy them from another term in one click.
 - 🚪 Rooms can be **opened or closed** to other departments per term, and transferred between departments.
 
 **Dashboard & reports**
 - 📊 **Term overview** for chairmen, deans and the college secretary: curriculum scheduled, faculty load used, room use and scheduling gaps, with a projected-completion estimate and the top things that need action.
+- 🙋 **Faculty dashboard**: a faculty member sees only their own workload, deloading and weekly schedule.
+- 🚨 **Schedule conflict scan** that counts faculty, room and class double bookings in the saved schedule.
+- 📤 **Dashboard export**: all metrics in one Excel workbook, or any detail view as Excel or CSV with its filters applied.
 - 🔎 **Drill-down pages** behind every number, with search, filters and paging.
 - 📑 **Excel forms in the registrar's layout**: class schedules and the *Summary of Faculty Workload* (actual load, regular load, overload).
 - 🖨️ PDF schedules per faculty, class and room, plus the Notice of Teaching Assignment (NOTA).
@@ -129,7 +133,8 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
-| **v0.3.4** | Repeat a schedule block on other days (add or remove days when editing), limit a subject to specific rooms for auto-assign, Subjects page opens on the newest curriculum |
+| **v0.3.5** | Deloading with overload and underload, faculty dashboard, schedule conflict scan, dashboard exports, (?) help tips, reload buttons |
+| **v0.3.4** | Repeat a schedule block on other days (add or remove days when editing), limit a subject to specific rooms, Subjects page opens on the newest curriculum |
 | **v0.3.3** | College Secretary role (college-wide, read-only, all reports) |
 | **v0.3.1** | Possible subjects per academic year and semester, with copy from another term |
 | **v0.3.0** | Dashboard overview and drill-downs, Excel registrar forms, lab load credit (3×), chairman as faculty, cross-department approval on edit |

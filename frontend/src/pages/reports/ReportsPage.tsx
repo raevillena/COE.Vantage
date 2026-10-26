@@ -8,6 +8,7 @@ import type { FacultyLoad } from "../../types/api";
 import toast from "react-hot-toast";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
+import { HelpTip } from "../../components/ui/helpTip";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { Spinner } from "../../components/ui/spinner";
@@ -198,10 +199,10 @@ export function ReportsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold text-foreground">Reports</h1>
-      <p className="mb-6 text-sm text-foreground-muted">
-        View schedule grids (same as in the Scheduler) and download PDF or Excel reports for the selected term.
-      </p>
+      <div className="mb-4 flex items-center gap-2">
+        <h1 className="text-2xl font-semibold text-foreground">Reports</h1>
+        <HelpTip>Schedule grids and downloads follow the academic year and semester selected below. Exports are limited to the data your role is permitted to see.</HelpTip>
+      </div>
 
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div className="min-w-[200px]">
@@ -237,12 +238,40 @@ export function ReportsPage() {
       </div>
 
       <div className="space-y-8">
+        {/* College workload: registrar forms (class schedules + faculty workload) */}
+        {canExportOfficial && (
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-1.5">
+<h2 className="font-medium text-foreground">
+              College Workload</h2>
+<HelpTip>Registrar-format Excel forms for the selected academic year and semester: class schedules and the Summary of Faculty Workload. Actual load credits laboratory units at three times their value; regular load is the faculty member's maximum units, and overload is the excess. Chairmen receive their own department only.</HelpTip>
+</div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={!academicYearId || exporting !== null}
+                onClick={() => exportExcel("class", "/reports/export/class-schedules", "class-schedules.xlsx")}
+              >
+                {exporting === "class" ? "Preparing…" : "Export Class Schedules"}
+              </Button>
+              <Button
+                type="button"
+                disabled={!academicYearId || exporting !== null}
+                onClick={() => exportExcel("faculty", "/reports/export/faculty-workloads", "faculty-workloads.xlsx")}
+              >
+                {exporting === "faculty" ? "Preparing…" : "Export Faculty Workloads"}
+              </Button>
+            </div>
+          </section>
+        )}
+
         {/* Faculty report */}
         <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <h2 className="mb-3 font-medium text-foreground">Faculty report</h2>
-          <p className="mb-3 text-sm text-foreground-muted">
-            Weekly schedule grid and total units. Same view as in the Scheduler.
-          </p>
+          <div className="mb-3 flex items-center gap-1.5">
+<h2 className="font-medium text-foreground">
+            Faculty report</h2>
+<HelpTip>Weekly teaching schedule of the selected faculty member, with total units for the term.</HelpTip>
+</div>
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <div className="min-w-0 flex-1 basis-48 max-w-xs">
               <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
@@ -309,10 +338,11 @@ export function ReportsPage() {
 
         {/* Student class report */}
         <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <h2 className="mb-3 font-medium text-foreground">Student class report</h2>
-          <p className="mb-3 text-sm text-foreground-muted">
-            Class schedule grid and total units. Same view as in the Scheduler.
-          </p>
+          <div className="mb-3 flex items-center gap-1.5">
+<h2 className="font-medium text-foreground">
+            Student class report</h2>
+<HelpTip>Weekly schedule of the selected class, with total units for the term.</HelpTip>
+</div>
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <div className="min-w-0 flex-1 basis-48 max-w-xs">
               <label className="mb-1 block text-sm font-medium text-foreground">Student class</label>
@@ -371,10 +401,11 @@ export function ReportsPage() {
 
         {/* Room report */}
         <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <h2 className="mb-3 font-medium text-foreground">Room report</h2>
-          <p className="mb-3 text-sm text-foreground-muted">
-            Room occupancy grid. Same view as in the Scheduler.
-          </p>
+          <div className="mb-3 flex items-center gap-1.5">
+<h2 className="font-medium text-foreground">
+            Room report</h2>
+<HelpTip>Weekly occupancy of the selected room for the term.</HelpTip>
+</div>
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <div className="min-w-0 flex-1 basis-48 max-w-xs">
               <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
@@ -434,51 +465,8 @@ export function ReportsPage() {
           ) : null}
         </section>
 
-        {/* College workload Excel */}
-        <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-          <h2 className="mb-3 font-medium text-foreground">College workload (Excel)</h2>
-          <p className="mb-4 text-sm text-foreground-muted">
-            Complete faculty workload for the college for the selected academic year and semester.
-          </p>
-          <Button
-            type="button"
-            disabled={!academicYearId}
-            onClick={() => downloadReport("/reports/college-workload", "college-workload.xlsx")}
-          >
-            Download Excel
-          </Button>
-        </section>
-
-        {canExportOfficial && (
-          <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-            <h2 className="mb-3 font-medium text-foreground">Official forms (Excel)</h2>
-            <p className="mb-4 text-sm text-foreground-muted">
-              Class schedules and the summary of faculty workload for the selected term, in the registrar&apos;s layout.
-              Laboratory units count 3x toward a faculty&apos;s actual load. Chairmen get their own department.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                disabled={!academicYearId || exporting !== null}
-                onClick={() => exportExcel("class", "/reports/export/class-schedules", "class-schedules.xlsx")}
-              >
-                {exporting === "class" ? "Preparing…" : "Export Class Schedules"}
-              </Button>
-              <Button
-                type="button"
-                disabled={!academicYearId || exporting !== null}
-                onClick={() => exportExcel("faculty", "/reports/export/faculty-workloads", "faculty-workloads.xlsx")}
-              >
-                {exporting === "faculty" ? "Preparing…" : "Export Faculty Workloads"}
-              </Button>
-            </div>
-          </section>
-        )}
       </div>
 
-      <p className="mt-6 text-sm text-foreground-muted">
-        Reports require authentication. Download uses your session; schedule grids load data for the selected term.
-      </p>
     </div>
   );
 }

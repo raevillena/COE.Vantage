@@ -20,6 +20,7 @@ import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
 import type { Subject } from "../../types/api";
+import { HelpTip } from "../../components/ui/helpTip";
 
 /** Faculty item from GET /users?role=FACULTY (includes department for grouping). */
 export interface FacultyWithDepartment {
@@ -307,12 +308,11 @@ export function PrioritizedFacultyModal({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 min-h-0 overflow-hidden">
               {/* Left: faculty pool by department */}
               <div className="min-h-[280px] flex flex-col">
-                <h3 className="text-sm font-semibold text-foreground mb-2">
-                  Faculty by department
-                </h3>
-                <p className="text-xs text-foreground-muted mb-2">
-                  Drag into the priority panel to add. Faculty already in the list are hidden here.
-                </p>
+                <div className="mb-2 flex items-center gap-1.5">
+<h3 className="text-sm font-semibold text-foreground">
+                  Faculty by department</h3>
+<HelpTip>Drag a faculty member into the priority sequence to add them. Faculty already in the sequence are hidden here.</HelpTip>
+</div>
                 <PoolDropZone
                   byDepartment={byDepartment}
                   allFaculty={allFaculty}
@@ -323,12 +323,11 @@ export function PrioritizedFacultyModal({
 
               {/* Right: priority sequence */}
               <div className="min-h-[280px] flex flex-col">
-                <h3 className="text-sm font-semibold text-foreground mb-2">
-                  Priority sequence
-                </h3>
-                <p className="text-xs text-foreground-muted mb-2">
-                  First = most preferred. Drag to reorder or back to the left to remove.
-                </p>
+                <div className="mb-2 flex items-center gap-1.5">
+<h3 className="text-sm font-semibold text-foreground">
+                  Priority sequence</h3>
+<HelpTip>Order matters: the first faculty member is the most preferred. Drag to reorder, or drag back to the left to remove.</HelpTip>
+</div>
                 <PrioritySequenceDropZone
                   priorityList={priorityList}
                   onRemove={removeFromPriority}

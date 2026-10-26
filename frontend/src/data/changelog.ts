@@ -15,6 +15,25 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.5",
+    date: "2026-10-26",
+    title: "Deloading, workload dashboard and exports",
+    changes: [
+      { kind: "improved", text: "Faculty and class schedules now open on all departments for the dean, college secretary and admin, with an optional department filter. Chairmen still see only their own department." },
+      { kind: "improved", text: "The old \"College workload (Excel)\" report is gone. The Reports page now starts with a \"College Workload\" section holding the registrar-layout class schedules and faculty workload forms." },
+      { kind: "improved", text: "Explanatory notes across the app are now concise (?) tips beside the section or field they describe, instead of text blocks on the page." },
+      { kind: "new", text: "Deloading: record items (designations, research and other assignments) with the units they deduct from a person's maximum for a term. The allowed units become the maximum less deloading." },
+      { kind: "new", text: "Overload and underload: anyone above their allowed units is overloaded, below is underloaded, shown in red, amber and green on the dashboard, the workload view and the Faculty page." },
+      { kind: "new", text: "Faculty dashboard: a faculty member sees only their own workload, deloading and weekly schedule. Chairmen, deans and the college secretary get a My workload card too." },
+      { kind: "new", text: "Schedule conflicts: the dashboard now counts faculty, room and class double bookings found by scanning the saved schedule, with a detail view." },
+      { kind: "improved", text: "The maximum-units check, auto-assign, the projection and the Excel workload form all use the maximum less deloading; the form fills Regular Load, OA load equivalent and Other assignments from it." },
+      { kind: "improved", text: "The college secretary and the dean can now carry a teaching load, with a maximum and deloading like faculty." },
+      { kind: "new", text: "Export the dashboard metrics as tables: one Excel workbook with a summary and every metric, or any single detail view as Excel or CSV with its current search and filters." },
+      { kind: "fixed", text: "Downloads now keep the file name chosen by the server instead of a generic one." },
+      { kind: "new", text: "Reload buttons on the scheduler's room availability and faculty schedule panels, to pick up changes made by others without refreshing the page." },
+    ],
+  },
+  {
     version: "v0.3.4",
     date: "2026-10-26",
     title: "Repeat blocks on other days, rooms per subject",

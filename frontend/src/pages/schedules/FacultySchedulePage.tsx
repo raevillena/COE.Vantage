@@ -45,18 +45,18 @@ export function FacultySchedulePage() {
 
   useEffect(() => {
     if (!user) return;
-    if (needsDepartmentFilter && !departmentId) {
-      setFaculties([]);
-      setSelectedFacultyId("");
-      return;
-    }
+    // Dean, college secretary, admin and officer see every department unless they pick one;
+    // a chairman is always limited to their own department by the server.
     const params = new URLSearchParams();
     params.append("role", "FACULTY");
-    params.append("role", "CHAIRMAN"); // chairman can view their own schedule too
+    params.append("role", "CHAIRMAN"); // chairmen and deans carry teaching loads too
+    params.append("role", "DEAN");
     if (needsDepartmentFilter && departmentId) params.set("departmentId", departmentId);
     apiClient
       .get<UserListItem[]>(`/users?${params}`)
-      .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN")))
+      .then(({ data }) =>
+        setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN" || u.role === "DEAN"))
+      )
       .catch(() => setFaculties([]));
   }, [user, needsDepartmentFilter, departmentId]);
 
@@ -94,7 +94,7 @@ export function FacultySchedulePage() {
                 setDepartmentId(next);
                 setSelectedFacultyId("");
               }}
-              noneOption={{ value: "__none__", label: "Select department" }}
+              noneOption={{ value: "__none__", label: "All departments" }}
               placeholder="Search department…"
               aria-label="Department"
             />
@@ -126,7 +126,10 @@ export function FacultySchedulePage() {
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
           <SearchableSelect
-            options={faculties.map((f) => ({ value: f.id, label: `${f.name}${f.id === user?.id ? " (you)" : ""}` }))}
+            options={faculties.map((f) => ({
+              value: f.id,
+              label: `${f.name}${f.id === user?.id ? " (you)" : ""}${needsDepartmentFilter && !departmentId && f.department?.code ? ` · ${f.department.code}` : ""}`,
+            }))}
             value={selectedFacultyId || "__none__"}
             onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Select faculty" }}

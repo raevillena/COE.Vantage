@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { ClipboardList, Mail, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { ClipboardList, Mail, MoreVertical, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
 import type { UserListItem } from "../../types/api";
 import type { Role } from "../../types/auth";
@@ -10,6 +10,9 @@ import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
+import { DeloadingDialog } from "../../components/faculty/DeloadingDialog";
+import { isTeachingRole } from "../../utils/loadState";
+import type { AcademicYear } from "../../types/api";
 import {
   parseFacultyPaste,
   groupByDepartment,
@@ -80,6 +83,8 @@ export function UsersPage() {
   const [prioritizationUser, setPrioritizationUser] = useState<UserListItem | null>(null);
   const [prioritizationList, setPrioritizationList] = useState<PrioritizedSubjectItem[]>([]);
   const [prioritizationLoading, setPrioritizationLoading] = useState(false);
+  const [deloadTarget, setDeloadTarget] = useState<UserListItem | null>(null);
+  const [deloadYears, setDeloadYears] = useState<AcademicYear[]>([]);
   const [prioritizationYears, setPrioritizationYears] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
   const [prioritizationTerm, setPrioritizationTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
 
@@ -154,6 +159,16 @@ export function UsersPage() {
       setPrioritizationUser(null);
     } finally {
       setPrioritizationLoading(false);
+    }
+  };
+
+  const openDeloading = async (u: UserListItem) => {
+    try {
+      const { data } = await apiClient.get<AcademicYear[]>("/academic-years");
+      setDeloadYears(data ?? []);
+      setDeloadTarget(u);
+    } catch {
+      toast.error("Could not load academic years");
     }
   };
 
@@ -442,7 +457,7 @@ export function UsersPage() {
                   <td className="px-4 py-2 text-foreground-muted">{u.role}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{(u.role === "FACULTY" || u.role === "CHAIRMAN") && u.maxUnits != null ? u.maxUnits : "—"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
@@ -454,6 +469,17 @@ export function UsersPage() {
                       >
                         <Pencil size={20} className="shrink-0" aria-hidden />
                       </button>
+                      {isTeachingRole(u.role) && (
+                        <button
+                          type="button"
+                          onClick={() => openDeloading(u)}
+                          className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                          aria-label={`Deloading for ${u.name}`}
+                          title="Deloading: units deducted from the maximum"
+                        >
+                          <SlidersHorizontal size={20} className="shrink-0" aria-hidden />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openViewPrioritization(u)}
@@ -494,6 +520,7 @@ export function UsersPage() {
                         </DropdownMenu.Trigger>
                         <DropdownMenu.Content align="end">
                           <DropdownMenu.Item onSelect={() => openEdit(u)}>Edit</DropdownMenu.Item>
+                          {isTeachingRole(u.role) && <DropdownMenu.Item onSelect={() => openDeloading(u)}>Deloading</DropdownMenu.Item>}
                           <DropdownMenu.Item onSelect={() => openViewPrioritization(u)}>View prioritization</DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => handleSendResetEmail(u.email)}
@@ -518,6 +545,16 @@ export function UsersPage() {
         </div>
       )}
 
+      {deloadTarget && deloadYears.length > 0 && (
+        <DeloadingDialog
+          person={{ id: deloadTarget.id, name: deloadTarget.name, maxUnits: deloadTarget.maxUnits }}
+          years={deloadYears}
+          academicYearId={(deloadYears.find((y) => y.isActive) ?? deloadYears[0]).id}
+          semester={1}
+          canEdit
+          onClose={() => setDeloadTarget(null)}
+        />
+      )}
       {userForm && (
         <UserFormDialog
           mode={userForm.id ? "edit" : "create"}

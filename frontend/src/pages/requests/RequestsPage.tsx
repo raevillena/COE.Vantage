@@ -9,6 +9,7 @@ import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { useAppSelector } from "../../store/hooks";
+import { HelpTip } from "../../components/ui/helpTip";
 
 /** Map a request to a FacultyLoad for the schedule grid (shows as "Awaiting approval" when pending). */
 function requestToDisplayLoad(r: AssignmentRequest): FacultyLoad {
@@ -156,7 +157,17 @@ export function RequestsPage() {
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-foreground">Assignment requests</h1>
+        <div className="flex items-center gap-2">
+<h1 className="text-xl font-semibold text-foreground">
+          Assignment requests</h1>
+<HelpTip>
+            {scopeFilter === "mine"
+              ? "Requests you created, with their current status."
+              : scopeFilter === "other"
+                ? "Incoming requests from other departments that await your approval or rejection."
+                : "All assignment requests, yours and those from other departments. Use the view selector to filter them."}
+          </HelpTip>
+</div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-sm text-foreground-muted">View</span>
@@ -188,15 +199,6 @@ export function RequestsPage() {
         </div>
       </div>
 
-      <p className="text-sm text-foreground-muted">
-        {scopeFilter === "mine" ? (
-          <>Requests you created. Track their status here.</>
-        ) : scopeFilter === "other" ? (
-          <>Incoming requests for your department to approve or reject.</>
-        ) : (
-          <>All assignment requests, including yours and others. Use the view dropdown to filter.</>
-        )}
-      </p>
 
       {list.length > 0 && (
         <div className="relative max-w-md">

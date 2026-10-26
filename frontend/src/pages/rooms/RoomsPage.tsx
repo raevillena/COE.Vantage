@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, Department, Room } from "../../types/api";
+import { HelpTip } from "../../components/ui/helpTip";
 import { getApiErrorMessage } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
@@ -294,10 +295,11 @@ export function RoomsPage() {
       <section className="mb-6">
         {heading && (
           <div className="mb-2">
-            <h2 className="text-lg font-medium text-foreground">
-              {heading} <span className="text-sm font-normal text-foreground-muted">({rows.length})</span>
-            </h2>
-            {hint && <p className="text-xs text-foreground-muted">{hint}</p>}
+            <div className="flex items-center gap-2">
+<h2 className="text-lg font-medium text-foreground">
+              {heading} <span className="text-sm font-normal text-foreground-muted">({rows.length})</span></h2>
+{hint && <HelpTip>{hint}</HelpTip>}
+</div>
           </div>
         )}
         {rows.length === 0 ? (
@@ -417,7 +419,6 @@ export function RoomsPage() {
     );
   };
 
-  const editingRoom = editingId ? list.find((r) => r.id === editingId) ?? null : null;
   const departmentOptions = departments.map((d) => ({ value: d.id, label: d.name }));
   const transferOptions = departments
     .filter((d) => !transferTarget || d.id !== transferTarget.departmentId)
@@ -455,9 +456,9 @@ export function RoomsPage() {
             </Select.Content>
           </Select.Root>
         </div>
-        <p className="pb-2 text-xs text-foreground-muted">
-          Open/closed status below is for this term. Closed rooms can only be assigned by their controlling department.
-        </p>
+        <div className="pb-2">
+          <HelpTip>Open or closed status applies to the selected term. A closed room can be assigned only by its controlling department.</HelpTip>
+        </div>
       </div>
 
       {list.length > 0 && (
@@ -503,8 +504,8 @@ export function RoomsPage() {
           )}
           {splitByDept ? (
             <>
-              {renderTable(myRooms, "My department's rooms", "Open or close each room per term. While closed, schedules other departments already placed here are locked.")}
-              {renderTable(otherRooms, "Other rooms", "Open rooms can be assigned in your schedules. Closed ones can’t.")}
+              {renderTable(myRooms, "My department's rooms", "Open or close each room for the selected term. While a room is closed, loads that other departments already placed in it are locked.")}
+              {renderTable(otherRooms, "Other rooms", "Only rooms that are open for the term can be assigned in your schedules.")}
             </>
           ) : (
             renderTable(filteredList)
@@ -516,14 +517,17 @@ export function RoomsPage() {
         <Dialog.Content title={editingId ? "Edit Room" : "Add Room"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Name</label>
+              <div className="mb-1 flex items-center gap-1.5">
+<label className="text-sm font-medium text-foreground">
+                Name</label>
+<HelpTip>Room names must be unique, ignoring letter case.</HelpTip>
+</div>
               <input
                 placeholder="e.g. CE-201"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
               />
-              <p className="mt-0.5 text-xs text-foreground-muted">Room names must be unique (not case-sensitive).</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Capacity</label>
@@ -536,7 +540,11 @@ export function RoomsPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
+              <div className="mb-1 flex items-center gap-1.5">
+<label className="text-sm font-medium text-foreground">
+                Department</label>
+<HelpTip>Only an administrator can change a room's department here. Other roles use “Transfer to another department…” from the room's menu.</HelpTip>
+</div>
               <SearchableSelect
                 options={departmentOptions}
                 value={form.departmentId || "__none__"}
@@ -546,9 +554,6 @@ export function RoomsPage() {
                 disabled={role !== "ADMIN"}
                 aria-label="Department"
               />
-              {editingRoom && role !== "ADMIN" && (
-                <p className="mt-0.5 text-xs text-foreground-muted">Use &quot;Transfer to another department…&quot; to reassign this room.</p>
-              )}
             </div>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={form.isLab} onChange={(e) => setForm((f) => ({ ...f, isLab: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />

@@ -45,11 +45,8 @@ export function StudentSchedulePage() {
 
   useEffect(() => {
     if (!user) return;
-    if (needsDepartmentFilter && !departmentId) {
-      setClasses([]);
-      setSelectedClassId("");
-      return;
-    }
+    // Dean, college secretary, admin and officer see every department unless they pick one;
+    // a chairman is always limited to their own department by the server.
     const params = new URLSearchParams();
     if (needsDepartmentFilter && departmentId) params.set("departmentId", departmentId);
     apiClient
@@ -83,7 +80,7 @@ export function StudentSchedulePage() {
                 setDepartmentId(next);
                 setSelectedClassId("");
               }}
-              noneOption={{ value: "__none__", label: "Select department" }}
+              noneOption={{ value: "__none__", label: "All departments" }}
               placeholder="Search department…"
               aria-label="Department"
             />
@@ -115,7 +112,10 @@ export function StudentSchedulePage() {
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Class</label>
           <SearchableSelect
-            options={classes.map((c) => ({ value: c.id, label: c.name }))}
+            options={classes.map((c) => ({
+              value: c.id,
+              label: `${c.name}${needsDepartmentFilter && !departmentId && c.curriculum?.department?.code ? ` · ${c.curriculum.department.code}` : ""}`,
+            }))}
             value={selectedClassId || "__none__"}
             onValueChange={(v) => setSelectedClassId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Select class" }}

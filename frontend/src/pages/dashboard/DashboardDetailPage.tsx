@@ -3,8 +3,11 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { apiClient } from "../../api/apiClient";
 import { Button } from "../../components/ui/button";
 import { Spinner } from "../../components/ui/spinner";
+import { downloadFromApi } from "../../utils/downloadFile";
+import { HelpTip } from "../../components/ui/helpTip";
+import { LOAD_STATE_BADGE, LOAD_STATE_LABEL, ROLE_LABEL, type LoadState } from "../../utils/loadState";
 
-type Metric = "faculty-workload" | "room-utilization" | "curriculum-completion" | "scheduling-gaps" | "projection";
+type Metric = "faculty-workload" | "room-utilization" | "curriculum-completion" | "scheduling-gaps" | "projection" | "conflicts";
 
 interface Column {
   key: string;
@@ -30,13 +33,8 @@ interface MetricDef {
 const text = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
 const percentCell = (v: unknown) => (v === null || v === undefined ? "—" : `${v}%`);
 
-const STATE_LABEL: Record<string, string> = { over: "Over cap", near: "Near cap", ok: "Within cap", none: "No load" };
-const STATE_TONE: Record<string, string> = {
-  over: "font-medium text-danger",
-  near: "font-medium text-warning",
-  ok: "text-foreground-muted",
-  none: "text-foreground-muted",
-};
+const DAY = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const signed = (v: unknown) => (typeof v === "number" ? (v > 0 ? `+${v}` : String(v)) : "—");
 
 const OUTCOME_LABEL: Record<string, string> = {
   schedulable: "Could be placed",
@@ -84,7 +82,7 @@ const METRICS: Record<Metric, MetricDef> = {
   },
   "faculty-workload": {
     title: "Faculty workload",
-    blurb: "Credited units against each faculty's maximum. Laboratory units count 3x.",
+    blurb: "Units assigned against each person's maximum less deloading. Laboratory units count 3x. Red is overload, amber underload, green fully loaded.",
     searchPlaceholder: "Search faculty or department…",
     filters: [
       {
@@ -92,25 +90,68 @@ const METRICS: Record<Metric, MetricDef> = {
         label: "Status",
         options: [
           { value: "", label: "All" },
-          { value: "over", label: "Over cap" },
-          { value: "near", label: "Near cap" },
-          { value: "ok", label: "Within cap" },
-          { value: "none", label: "No load" },
+          { value: "over", label: "Overload" },
+          { value: "under", label: "Underload" },
+          { value: "full", label: "Fully loaded" },
+          { value: "unset", label: "No maximum set" },
         ],
       },
     ],
     columns: [
-      { key: "name", label: "Faculty" },
+      { key: "name", label: "Name", render: (r) => <span>{text(r.name)} <span className="text-xs text-foreground-muted">{ROLE_LABEL[String(r.role)] ?? ""}</span></span> },
       { key: "department", label: "Department" },
       { key: "status", label: "Employment", render: (r) => text(r.status) },
-      { key: "assignedUnits", label: "Units", align: "right" },
       { key: "maxUnits", label: "Max", align: "right", render: (r) => text(r.maxUnits) },
-      { key: "percent", label: "Used", align: "right", render: (r) => percentCell(r.percent) },
+      {
+        key: "deloadUnits",
+        label: "Deloading",
+        align: "right",
+        render: (r) => (
+          <span title={String(r.deloading ?? "")}>{Number(r.deloadUnits) > 0 ? `−${r.deloadUnits}` : "—"}</span>
+        ),
+      },
+      { key: "effectiveMax", label: "Allowed", align: "right", render: (r) => text(r.effectiveMax) },
+      { key: "assignedUnits", label: "Assigned", align: "right" },
+      {
+        key: "difference",
+        label: "Difference",
+        align: "right",
+        render: (r) => <span className={LOAD_STATE_BADGE[r.state as LoadState] + " rounded px-1.5 py-0.5"}>{signed(r.difference)}</span>,
+      },
       {
         key: "state",
         label: "Status",
-        render: (r) => <span className={STATE_TONE[String(r.state)]}>{STATE_LABEL[String(r.state)]}</span>,
+        render: (r) => (
+          <span className={`rounded px-2 py-0.5 text-xs font-medium ${LOAD_STATE_BADGE[r.state as LoadState]}`}>
+            {LOAD_STATE_LABEL[r.state as LoadState]}
+          </span>
+        ),
       },
+    ],
+  },
+  conflicts: {
+    title: "Schedule conflicts",
+    blurb: "Double bookings found by scanning the saved schedule: a faculty member, room or class in two places at once.",
+    searchPlaceholder: "Search faculty, room, class or subject…",
+    filters: [
+      {
+        param: "type",
+        label: "Type",
+        options: [
+          { value: "", label: "All" },
+          { value: "faculty", label: "Faculty" },
+          { value: "room", label: "Room" },
+          { value: "class", label: "Class" },
+        ],
+      },
+    ],
+    columns: [
+      { key: "type", label: "Type", render: (r) => <span className="rounded bg-danger-muted px-2 py-0.5 text-xs font-medium text-danger capitalize">{text(r.type)}</span> },
+      { key: "entity", label: "Double-booked" },
+      { key: "dayOfWeek", label: "Day", render: (r) => DAY[Number(r.dayOfWeek)] ?? "—" },
+      { key: "first", label: "One booking" },
+      { key: "second", label: "Other booking" },
+      { key: "detail", label: "Involved" },
     ],
   },
   "room-utilization": {
@@ -208,6 +249,7 @@ export function DashboardDetailPage() {
   const [data, setData] = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [exporting, setExporting] = useState<null | "xlsx" | "csv">(null);
 
   const page = Number(params.get("page") ?? 1) || 1;
   const queryKey = params.toString();
@@ -261,6 +303,17 @@ export function DashboardDetailPage() {
     );
   }
 
+  /** Exports every row for the current filters and search, not just the page on screen. */
+  const exportRows = async (format: "xlsx" | "csv") => {
+    setExporting(format);
+    const filters: Record<string, string> = { metric: metric ?? "", format };
+    params.forEach((v, k) => {
+      if (v && k !== "page") filters[k] = v;
+    });
+    await downloadFromApi("/dashboard/export", filters, `dashboard-${metric}.${format}`);
+    setExporting(null);
+  };
+
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
@@ -278,14 +331,28 @@ export function DashboardDetailPage() {
       >
         ← Dashboard
       </button>
-      <h1 className="text-2xl font-semibold text-foreground">{def.title}</h1>
-      <p className="mb-1 text-sm text-foreground-muted">
-        {def.blurb}
-        {data ? ` ${data.context.academicYear.name}, ${["", "1st sem", "2nd sem", "Mid year"][data.context.semester]}.` : ""}
+      <div className="flex items-center gap-2">
+<h1 className="text-2xl font-semibold text-foreground">
+        {def.title}</h1>
+<HelpTip>
+          {def.blurb}
+          {data ? ` ${data.note}` : ""}
+        </HelpTip>
+</div>
+      <p className="mb-4 text-sm text-foreground-muted">
+        {data ? `${data.context.academicYear.name}, ${["", "1st sem", "2nd sem", "Mid year"][data.context.semester]}` : ""}
       </p>
-      {data && <p className="mb-4 text-xs text-foreground-muted">{data.note}</p>}
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="order-last ml-auto flex items-center gap-2">
+          <Button type="button" variant="secondary" size="sm" disabled={exporting !== null || loading} onClick={() => void exportRows("xlsx")}>
+            {exporting === "xlsx" ? "Preparing…" : "Export Excel"}
+          </Button>
+          <Button type="button" variant="secondary" size="sm" disabled={exporting !== null || loading} onClick={() => void exportRows("csv")}>
+            {exporting === "csv" ? "Preparing…" : "Export CSV"}
+          </Button>
+          <HelpTip>Exports every row that matches the search and filters above, not only the current page.</HelpTip>
+        </div>
         <div>
           <label htmlFor="detail-search" className="sr-only">
             Search

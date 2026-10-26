@@ -1,4 +1,6 @@
 import { prisma } from "../../prisma/client.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
 import { creditedUnitsByFaculty, loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
 
@@ -44,7 +46,7 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
       select: { subjectId: true, facultyId: true },
     }),
     prisma.user.findMany({
-      where: { isDeleted: false, role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] } },
+      where: { isDeleted: false, role: { in: TEACHING_ROLES } },
       select: { id: true, departmentId: true, maxUnits: true },
     }),
     creditedUnitsByFaculty(academicYearId, semester, null),
@@ -67,9 +69,11 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
     facultyBySubject.get(p.subjectId)!.push(p.facultyId);
   }
   const openRoomIds = new Set(openRows.map((r) => r.roomId));
+  const deloadings = await loadDeloadings(academicYearId, semester, faculty.map((f) => f.id));
   const unitsLeft = new Map<string, number>(); // remaining cap per faculty with a cap
   for (const f of faculty) {
-    if (f.maxUnits && f.maxUnits > 0) unitsLeft.set(f.id, f.maxUnits - (usedUnits.get(f.id) ?? 0));
+    const cap = effectiveMaxUnits(f.maxUnits, deloadings.get(f.id)?.total ?? 0);
+    if (cap != null) unitsLeft.set(f.id, cap - (usedUnits.get(f.id) ?? 0));
   }
   const freeMinutes = new Map(rooms.map((r) => [r.id, ROOM_AVAILABLE_MINUTES - r.occupiedMinutes]));
 

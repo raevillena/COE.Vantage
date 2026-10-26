@@ -2,6 +2,23 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.5 - 2026-10-26
+
+Deloading, workload dashboard and exports
+
+- **Improved:** Faculty and class schedules now open on all departments for the dean, college secretary and admin, with an optional department filter. Chairmen still see only their own department.
+- **Improved:** The old "College workload (Excel)" report is gone. The Reports page now starts with a "College Workload" section holding the registrar-layout class schedules and faculty workload forms.
+- **Improved:** Explanatory notes across the app are now concise (?) tips beside the section or field they describe, instead of text blocks on the page.
+- **New:** Deloading: record items (designations, research and other assignments) with the units they deduct from a person's maximum for a term. The allowed units become the maximum less deloading.
+- **New:** Overload and underload: anyone above their allowed units is overloaded, below is underloaded, shown in red, amber and green on the dashboard, the workload view and the Faculty page.
+- **New:** Faculty dashboard: a faculty member sees only their own workload, deloading and weekly schedule. Chairmen, deans and the college secretary get a My workload card too.
+- **New:** Schedule conflicts: the dashboard now counts faculty, room and class double bookings found by scanning the saved schedule, with a detail view.
+- **Improved:** The maximum-units check, auto-assign, the projection and the Excel workload form all use the maximum less deloading; the form fills Regular Load, OA load equivalent and Other assignments from it.
+- **Improved:** The college secretary and the dean can now carry a teaching load, with a maximum and deloading like faculty.
+- **New:** Export the dashboard metrics as tables: one Excel workbook with a summary and every metric, or any single detail view as Excel or CSV with its current search and filters.
+- **Fixed:** Downloads now keep the file name chosen by the server instead of a generic one.
+- **New:** Reload buttons on the scheduler's room availability and faculty schedule panels, to pick up changes made by others without refreshing the page.
+
 ## v0.3.4 - 2026-10-26
 
 Repeat blocks on other days, rooms per subject

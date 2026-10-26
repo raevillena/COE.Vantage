@@ -1,6 +1,11 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest } from "../../utils/errors.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { simulateProjection } from "./dashboardProjection.js";
+import { isTeachingRole } from "../../utils/teachingRoles.js";
+import { timeToMinutes } from "../facultyLoads/facultyLoadService.js";
+import { loadWorkloadRows } from "./dashboardWorkload.js";
+import { countConflicts, findScheduleConflicts } from "./dashboardConflicts.js";
 import { getPendingCount } from "../assignmentRequests/assignmentRequestService.js";
 import { creditedUnitsByFaculty, loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
 
@@ -10,7 +15,6 @@ export interface DashboardCaller {
   departmentId: string | null;
 }
 
-const NEAR_LIMIT_RATIO = 0.9;
 
 export type DashboardAlert = {
   id: string;
@@ -44,16 +48,10 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
   if (!academicYear) return { empty: true as const, context: { academicYear: null, semester, scope: scopeLabel(caller) } };
   const ayId = academicYear.id;
 
-  const [progress, faculty, roomRows, simulation, pendingRequests] = await Promise.all([
+  const [progress, workload, conflictList, roomRows, simulation, pendingRequests] = await Promise.all([
     loadCurriculumProgress(scopeDeptId, ayId, semester),
-    prisma.user.findMany({
-      where: {
-        isDeleted: false,
-        role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] },
-        ...(scopeDeptId ? { departmentId: scopeDeptId } : {}),
-      },
-      select: { id: true, maxUnits: true },
-    }),
+    loadWorkloadRows(scopeDeptId, ayId, semester),
+    findScheduleConflicts(scopeDeptId, ayId, semester),
     loadRoomUtilization(scopeDeptId, ayId, semester),
     simulateProjection(scopeDeptId, ayId, semester),
     getPendingCount({ id: caller.id, role: caller.role, departmentId: caller.departmentId }),
@@ -83,24 +81,29 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
   const classes = progress.classes;
   const classesWithNoSchedule = classes.filter((c) => !c.hasAnyLoad).length;
 
-  // ---- Faculty utilization (credited units; lab units count 3x) ----
-  const unitsByFaculty = await creditedUnitsByFaculty(ayId, semester, scopeDeptId);
+  // ---- Faculty load: assigned units against the maximum less deloading (lab units count 3x) ----
   let capped = 0;
   let cappedUnits = 0;
   let cappedMax = 0;
   let over = 0;
-  let near = 0;
+  let under = 0;
+  let full = 0;
+  let unset = 0;
   let withoutLoad = 0;
-  for (const f of faculty) {
-    const units = unitsByFaculty.get(f.id) ?? 0;
-    if (units === 0) withoutLoad++;
-    if (f.maxUnits == null || f.maxUnits <= 0) continue;
+  for (const f of workload) {
+    if (f.assignedUnits === 0) withoutLoad++;
+    if (f.effectiveMax == null) {
+      unset++;
+      continue;
+    }
     capped++;
-    cappedUnits += units;
-    cappedMax += f.maxUnits;
-    if (units > f.maxUnits) over++;
-    else if (units >= f.maxUnits * NEAR_LIMIT_RATIO) near++;
+    cappedUnits += f.assignedUnits;
+    cappedMax += f.effectiveMax;
+    if (f.state === "over") over++;
+    else if (f.state === "under") under++;
+    else full++;
   }
+  const conflictCounts = countConflicts(conflictList);
 
   // ---- Room utilization ----
   const occupiedMinutes = roomRows.reduce((sum, r) => sum + r.occupiedMinutes, 0);
@@ -120,12 +123,21 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
   const gaps = unscheduledSubjects + partialSubjects;
 
   const alerts: DashboardAlert[] = [];
+  if (conflictCounts.total > 0)
+    alerts.push({
+      id: "conflicts",
+      severity: "high",
+      title: "Double-booked schedules found",
+      detail: `${conflictCounts.faculty} faculty, ${conflictCounts.room} room and ${conflictCounts.class} class conflicts in the saved schedule.`,
+      count: conflictCounts.total,
+      to: "/dashboard/details/conflicts",
+    });
   if (over > 0)
     alerts.push({
       id: "faculty-over",
       severity: "high",
-      title: "Faculty over their maximum units",
-      detail: `${over} faculty exceed their cap this term.`,
+      title: "Faculty with overload",
+      detail: `${over} ${over === 1 ? "person has" : "people have"} more units than their maximum less deloading.`,
       count: over,
       to: "/dashboard/details/faculty-workload?state=over",
     });
@@ -165,14 +177,14 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
       count: blockedByLimits,
       to: "/dashboard/details/projection?outcome=blocked",
     });
-  if (near > 0)
+  if (under > 0)
     alerts.push({
-      id: "faculty-near",
-      severity: "info",
-      title: "Faculty near their maximum units",
-      detail: `${near} faculty are at 90% or more of their cap.`,
-      count: near,
-      to: "/dashboard/details/faculty-workload?state=near",
+      id: "faculty-under",
+      severity: "medium",
+      title: "Faculty with underload",
+      detail: `${under} ${under === 1 ? "person has" : "people have"} fewer units than their maximum less deloading.`,
+      count: under,
+      to: "/dashboard/details/faculty-workload?state=under",
     });
   const rank = { high: 0, medium: 1, info: 2 } as const;
   alerts.sort((a, b) => rank[a.severity] - rank[b.severity]);
@@ -199,14 +211,17 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
       },
       faculty: {
         percent: pct(cappedUnits, cappedMax),
-        assignedUnits: cappedUnits,
-        maxUnits: cappedMax,
+        assignedUnits: round1(cappedUnits),
+        maxUnits: round1(cappedMax),
         facultyWithCap: capped,
         over,
-        near,
+        under,
+        full,
+        unset,
         withoutLoad,
-        total: faculty.length,
+        total: workload.length,
       },
+      conflicts: conflictCounts,
       rooms: {
         percent: pct(occupiedMinutes, availableMinutes),
         occupiedHours: round1(occupiedMinutes / 60),
@@ -232,5 +247,54 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
     },
     alerts: alerts.slice(0, 3),
     moreAlerts: Math.max(0, alerts.length - 3),
+  };
+}
+
+/**
+ * A person's own workload for one term: assigned units against their maximum less deloading, the deloading
+ * items, and how many blocks and contact hours they teach. Never accepts a user id, so it cannot show anyone else.
+ */
+export async function getMyWorkload(caller: DashboardCaller, academicYearId: string | undefined, semester: number) {
+  if (![1, 2, 3].includes(semester)) throw badRequest("semester must be 1, 2 or 3");
+  if (!isTeachingRole(caller.role)) throw badRequest("This view is for people who carry a teaching load.");
+  const academicYear = academicYearId
+    ? await prisma.academicYear.findFirst({ where: { id: academicYearId, isDeleted: false } })
+    : await prisma.academicYear.findFirst({ where: { isActive: true, isDeleted: false } });
+  if (!academicYear) return { empty: true as const, context: { academicYear: null, semester } };
+
+  const [rows, loads] = await Promise.all([
+    loadWorkloadRows(null, academicYear.id, semester, caller.id),
+    prisma.facultyLoad.findMany({
+      where: { facultyId: caller.id, academicYearId: academicYear.id, semester },
+      select: { subjectId: true, studentClassId: true, dayOfWeek: true, startTime: true, endTime: true },
+    }),
+  ]);
+  const me = rows[0];
+  const seen = new Set<string>();
+  let minutes = 0;
+  for (const l of loads) {
+    const key = `${l.subjectId}|${l.studentClassId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    minutes += timeToMinutes(l.endTime) - timeToMinutes(l.startTime);
+  }
+  const courses = new Set(loads.map((l) => `${l.subjectId}|${l.studentClassId}`)).size;
+  return {
+    empty: false as const,
+    context: { academicYear: { id: academicYear.id, name: academicYear.name }, semester },
+    person: me ? { id: me.id, name: me.name, role: me.role, status: me.status, department: me.department } : null,
+    workload: me
+      ? {
+          assignedUnits: round1(me.assignedUnits),
+          maxUnits: me.maxUnits,
+          deloadTotal: me.deloadTotal,
+          deloading: me.deloadItems,
+          effectiveMax: me.effectiveMax,
+          difference: me.difference,
+          state: me.state,
+          percent: me.effectiveMax ? pct(me.assignedUnits, me.effectiveMax) : null,
+        }
+      : null,
+    teaching: { courses, blocks: seen.size, contactHours: round1(minutes / 60) },
   };
 }

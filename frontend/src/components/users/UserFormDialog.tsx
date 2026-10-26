@@ -6,6 +6,8 @@ import { Button } from "../ui/button";
 import { Select } from "../ui/select";
 import { getApiErrorMessage } from "../../types/api";
 import type { Role } from "../../types/auth";
+import { HelpTip } from "../ui/helpTip";
+import { isTeachingRole } from "../../utils/loadState";
 
 export interface UserFormValues {
   name: string;
@@ -82,7 +84,7 @@ export function UserFormDialog({
   const [saving, setSaving] = useState(false);
   const isCreate = mode === "create";
   const roleLocked = allowedRoles.length === 1;
-  const showUnits = form.role === "FACULTY" || form.role === "CHAIRMAN";
+  const showUnits = isTeachingRole(form.role);
   const set = <K extends keyof UserFormValues>(key: K, value: UserFormValues[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -141,15 +143,18 @@ export function UserFormDialog({
             <input id="uf-name" value={form.name} disabled={lockIdentity} onChange={(e) => set("name", e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label htmlFor="uf-email" className={labelClass}>Email</label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="uf-email" className={labelClass}>Email</label>
+              {lockIdentity && <span className="mb-1"><HelpTip>Name and email can be changed only by an administrator.</HelpTip></span>}
+            </div>
             <input id="uf-email" type="email" value={form.email} disabled={lockIdentity} onChange={(e) => set("email", e.target.value)} className={inputClass} />
-            {lockIdentity && (
-              <p className="mt-0.5 text-xs text-foreground-muted">Name and email can only be changed by an administrator.</p>
-            )}
           </div>
           {isCreate && (
             <div>
-              <label htmlFor="uf-password" className={labelClass}>Initial password</label>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="uf-password" className={labelClass}>Initial password</label>
+                <span className="mb-1"><HelpTip>Minimum 8 characters. The user can change it later through Forgot password.</HelpTip></span>
+              </div>
               <div className="relative">
                 <input
                   id="uf-password"
@@ -168,7 +173,6 @@ export function UserFormDialog({
                   {showPassword ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
                 </button>
               </div>
-              <p className="mt-0.5 text-xs text-foreground-muted">At least 8 characters. The user can change it with Forgot password.</p>
             </div>
           )}
           <div>
@@ -214,7 +218,10 @@ export function UserFormDialog({
           </div>
           {showUnits && (
             <div>
-              <label htmlFor="uf-max" className={labelClass}>Max units per term</label>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="uf-max" className={labelClass}>Max units per term</label>
+                <span className="mb-1"><HelpTip>Maximum credited units this person can be assigned per semester. Leave blank for no limit; 0 means no load can be assigned.</HelpTip></span>
+              </div>
               <input
                 id="uf-max"
                 type="number"
@@ -224,9 +231,6 @@ export function UserFormDialog({
                 onChange={(e) => set("maxUnits", e.target.value)}
                 className={inputClass}
               />
-              <p className="mt-0.5 text-xs text-foreground-muted">
-                Caps how many units can be assigned per semester (0 = cannot receive any load, blank = no cap).
-              </p>
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">

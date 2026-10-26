@@ -1,19 +1,24 @@
 import { z } from "zod";
 import { prisma } from "../../prisma/client.js";
 import { badRequest } from "../../utils/errors.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { simulateProjection } from "./dashboardProjection.js";
+import { loadWorkloadRows } from "./dashboardWorkload.js";
+import { findScheduleConflicts } from "./dashboardConflicts.js";
 import type { DashboardCaller } from "./dashboardService.js";
-import { creditedUnitsByFaculty, loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
+import { loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
 
 export const analyticsQuerySchema = z.object({
-  metric: z.enum(["faculty-workload", "room-utilization", "curriculum-completion", "scheduling-gaps", "projection"]),
+  metric: z.enum(["faculty-workload", "room-utilization", "curriculum-completion", "scheduling-gaps", "projection", "conflicts"]),
   academicYearId: z.string().uuid().optional(),
   semester: z.coerce.number().int().min(1).max(3).default(1),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   q: z.string().trim().max(100).optional(),
-  /** faculty-workload: over | near | ok | none */
-  state: z.enum(["over", "near", "ok", "none"]).optional(),
+  /** faculty-workload: over | under | full | unset */
+  state: z.enum(["over", "under", "full", "unset"]).optional(),
+  /** conflicts: faculty | room | class */
+  type: z.enum(["faculty", "room", "class"]).optional(),
   /** scheduling-gaps: no-faculty | unscheduled | partial */
   reason: z.enum(["no-faculty", "unscheduled", "partial"]).optional(),
   /** curriculum-completion: incomplete | complete */
@@ -52,37 +57,56 @@ export async function getDashboardAnalytics(caller: DashboardCaller, query: Anal
 
   switch (query.metric) {
     case "faculty-workload": {
-      const [faculty, units] = await Promise.all([
-        prisma.user.findMany({
-          where: {
-            isDeleted: false,
-            role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] },
-            ...(scopeDeptId ? { departmentId: scopeDeptId } : {}),
-          },
-          select: { id: true, name: true, role: true, status: true, maxUnits: true, department: { select: { name: true } } },
-        }),
-        creditedUnitsByFaculty(ayId, semester, scopeDeptId),
-      ]);
-      let rows = faculty.map((f) => {
-        const assigned = units.get(f.id) ?? 0;
-        const max = f.maxUnits && f.maxUnits > 0 ? f.maxUnits : null;
-        const state: "over" | "near" | "ok" | "none" =
-          assigned === 0 ? "none" : max == null ? "ok" : assigned > max ? "over" : assigned >= max * 0.9 ? "near" : "ok";
-        return {
-          id: f.id,
-          name: f.name,
-          role: f.role,
-          department: f.department?.name ?? "—",
-          status: f.status,
-          assignedUnits: assigned,
-          maxUnits: max,
-          percent: max ? pct(assigned, max) : null,
-          state,
-        };
-      });
+      const all = await loadWorkloadRows(scopeDeptId, ayId, semester);
+      let rows = all.map((f) => ({
+        id: f.id,
+        name: f.name,
+        role: f.role,
+        department: f.department,
+        status: f.status,
+        maxUnits: f.maxUnits,
+        deloadUnits: f.deloadTotal,
+        deloading: f.deloadItems.map((i) => `${i.description} (${i.units})`).join("; "),
+        effectiveMax: f.effectiveMax,
+        assignedUnits: round1(f.assignedUnits),
+        difference: f.difference,
+        percent: f.effectiveMax ? pct(f.assignedUnits, f.effectiveMax) : null,
+        state: f.state,
+      }));
       rows = rows.filter((r) => has(`${r.name} ${r.department}`, q) && (!query.state || r.state === query.state));
-      rows.sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1) || a.name.localeCompare(b.name));
-      return { context, note: "Units are credited units: laboratory units count 3x.", ...paginate(rows, page, pageSize) };
+      const rank = { over: 0, under: 1, full: 2, unset: 3 } as const;
+      rows.sort((a, b) => rank[a.state] - rank[b.state] || Math.abs(b.difference ?? 0) - Math.abs(a.difference ?? 0) || a.name.localeCompare(b.name));
+      return {
+        context,
+        note: "Effective maximum = maximum units less the term's deloading. Overload is above it, underload below it. Laboratory units count 3x.",
+        ...paginate(rows, page, pageSize),
+      };
+    }
+
+    case "conflicts": {
+      const all = await findScheduleConflicts(scopeDeptId, ayId, semester);
+      const rows = all
+        .map((c) => ({
+          id: c.id,
+          type: c.type,
+          entity: c.entity,
+          dayOfWeek: c.dayOfWeek,
+          first: `${c.first.subject} · ${c.first.className} · ${c.first.startTime}-${c.first.endTime}`,
+          second: `${c.second.subject} · ${c.second.className} · ${c.second.startTime}-${c.second.endTime}`,
+          detail:
+            c.type === "faculty"
+              ? `${c.first.room} / ${c.second.room}`
+              : c.type === "room"
+                ? `${c.first.faculty} / ${c.second.faculty}`
+                : `${c.first.faculty} / ${c.second.faculty}`,
+        }))
+        .filter((r) => has(`${r.entity} ${r.first} ${r.second}`, q) && (!query.type || r.type === query.type))
+        .sort((a, b) => a.type.localeCompare(b.type) || a.entity.localeCompare(b.entity) || a.dayOfWeek - b.dayOfWeek);
+      return {
+        context,
+        note: "Found by scanning the saved schedule, independent of the checks made when a block is saved. Co-instructor rows of the same subject, class and time are not counted against the room or class.",
+        ...paginate(rows, page, pageSize),
+      };
     }
 
     case "room-utilization": {

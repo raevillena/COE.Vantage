@@ -18,6 +18,7 @@ import { Dialog } from "../../components/ui/dialog";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { useAppSelector } from "../../store/hooks";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { HelpTip } from "../../components/ui/helpTip";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -264,13 +265,16 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
         <Link to={backTo} className="text-sm text-primary hover:underline">
           ← Back to {backTo === "/dashboard" ? "Dashboard" : "Scheduler"}
         </Link>
-        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+        <div className="flex items-center gap-2">
+<h1 className="text-xl font-semibold text-foreground">
+          {title}</h1>
+<HelpTip>
+            {isAdminPage
+              ? "Rule sets define how auto-schedule runs: working hours, lunch break, excluded days and similar. Assign a set per academic year and class here, or let chairmen do so from the Scheduler."
+              : "Rule sets define how auto-schedule runs: working hours, lunch break, MWF preference and similar. Assign a set per academic year and/or class; when you run auto-schedule, the assigned set is used unless you choose another in the dropdown."}
+          </HelpTip>
+</div>
       </div>
-      <p className="text-sm text-foreground-muted mb-6">
-        {isAdminPage
-          ? "Add and edit rule sets for everyone. Rule sets define how auto-schedule runs (work hours, lunch, excluded days, etc.). Assignments (which set applies per year/class) can be set here or by chairmen from the Scheduler."
-          : "Rule sets define how auto-schedule runs (work hours, lunch, MWF preference, etc.). Assign a set per academic year and/or per student class; when you run Auto-schedule, the assigned set is used unless you pick another in the dropdown."}
-      </p>
 
       <section className="mb-8">
         <h2 className="text-lg font-medium text-foreground mb-3">Rule sets</h2>
@@ -336,10 +340,11 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
       </section>
 
       <section>
-        <h2 className="text-lg font-medium text-foreground mb-3">Assignments</h2>
-        <p className="text-xs text-foreground-muted mb-3">
-          Resolution order: exact (year + class) → year only → class only → system default.
-        </p>
+        <div className="mb-3 flex items-center gap-2">
+<h2 className="text-lg font-medium text-foreground">
+          Assignments</h2>
+<HelpTip>The rule set that applies is resolved in this order: academic year and class, then academic year only, then class only, then the system default.</HelpTip>
+</div>
         <form onSubmit={handleSetAssignment} className="flex flex-wrap items-end gap-3 mb-4">
           <div className="min-w-[160px]">
             <label className="block text-xs font-medium text-foreground mb-1">Academic year</label>

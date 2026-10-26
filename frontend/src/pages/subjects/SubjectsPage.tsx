@@ -8,6 +8,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
 import {
   PrioritizedFacultyModal,
@@ -547,7 +548,7 @@ export function SubjectsPage() {
         <Dialog.Content
           className="!max-w-lg max-h-[90vh] overflow-y-auto"
           title={`Rooms for auto-assign — ${roomsSubject?.code ?? ""}`}
-          description="Auto-assign will place this subject only in the rooms ticked here. Leave all unticked to let it use any available room (your department's, or other open rooms)."
+          description="Restrict auto-assign to specific rooms for this subject."
         >
           {roomsLoading ? (
             <div className="flex justify-center py-8" aria-busy="true">
@@ -596,10 +597,12 @@ export function SubjectsPage() {
                     </li>
                   ))}
               </ul>
-              <p className="mt-2 text-xs text-foreground-muted">
-                {roomIds.size === 0 ? "No rooms ticked: any available room." : `${roomIds.size} room${roomIds.size === 1 ? "" : "s"} ticked.`} A room
-                from another department is used only while it is open for the term.
-              </p>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground-muted">
+                {roomIds.size === 0 ? "No rooms selected: any available room" : `${roomIds.size} room${roomIds.size === 1 ? "" : "s"} selected`}
+                <HelpTip>
+                  Auto-assign places this subject only in the selected rooms. With none selected it may use any available room: your department's rooms, or rooms of other departments that are open for the term.
+                </HelpTip>
+              </div>
             </>
           )}
           <div className="mt-4 flex justify-end gap-2">

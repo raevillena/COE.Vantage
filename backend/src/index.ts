@@ -19,6 +19,7 @@ import { facultyLoadRoutes } from "./modules/facultyLoads/facultyLoadRoutes.js";
 import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignmentRequestRoutes.js";
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboardRoutes.js";
+import { deloadingRoutes } from "./modules/deloadings/deloadingRoutes.js";
 import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
 import { gradeSubjectRoutes } from "./modules/gradeSubjects/gradeSubjectRoutes.js";
 
@@ -34,6 +35,8 @@ app.use(
   cors({
     origin: env.FRONTEND_ORIGIN,
     credentials: true,
+    // Lets the browser read the server-chosen file name of downloads (cross-origin by default).
+    exposedHeaders: ["Content-Disposition"],
   })
 );
 app.use(cookieParser());
@@ -55,6 +58,7 @@ app.use("/faculty-loads", facultyLoadRoutes);
 app.use("/assignment-requests", assignmentRequestRoutes);
 app.use("/reports", reportRoutes);
 app.use("/dashboard", dashboardRoutes);
+app.use("/deloadings", deloadingRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 app.use("/grade-subjects", gradeSubjectRoutes);
 

@@ -7,6 +7,8 @@ import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { HelpTip } from "../../components/ui/helpTip";
+import { isTeachingRole } from "../../utils/loadState";
 import { useAppSelector } from "../../store/hooks";
 
 export function DepartmentsPage() {
@@ -288,9 +290,10 @@ export function DepartmentsPage() {
         <Dialog.Content title={editingId ? "Edit Department" : "Add Department"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <p className="text-xs text-foreground-muted">
-              Tip: end the name with the shorthand in parentheses, e.g. &quot;Computer Engineering Department (CPE)&quot;. It becomes the code shown in dropdowns.
-            </p>
+            <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
+              Department code
+              <HelpTip>End the name with the shorthand in parentheses, for example “Computer Engineering Department (CPE)”. The shorthand is used as the department code in dropdowns.</HelpTip>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">Cancel</Button>
@@ -357,7 +360,7 @@ export function DepartmentsPage() {
                         <td className="px-3 py-2 text-foreground-muted">{u.email}</td>
                         <td className="px-3 py-2 text-foreground-muted">{u.role}</td>
                         <td className="px-3 py-2 text-foreground-muted">{u.status ?? "—"}</td>
-                        <td className="px-3 py-2 text-foreground-muted">{(u.role === "FACULTY" || u.role === "CHAIRMAN") && u.maxUnits != null ? u.maxUnits : "—"}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -5,6 +5,13 @@ import type { AcademicYear } from "../../types/api";
 import { Select } from "../../components/ui/select";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Spinner } from "../../components/ui/spinner";
+import { HelpTip } from "../../components/ui/helpTip";
+import { LOAD_STATE_BADGE } from "../../utils/loadState";
+import { Button } from "../../components/ui/button";
+import { downloadFromApi } from "../../utils/downloadFile";
+import { MyWorkloadPanel } from "../../components/dashboard/MyWorkloadPanel";
+import { useAppSelector } from "../../store/hooks";
+import { isTeachingRole } from "../../utils/loadState";
 
 interface Alert {
   id: string;
@@ -36,10 +43,13 @@ interface Summary {
       maxUnits: number;
       facultyWithCap: number;
       over: number;
-      near: number;
+      under: number;
+      full: number;
+      unset: number;
       withoutLoad: number;
       total: number;
     };
+    conflicts: { total: number; faculty: number; room: number; class: number };
     rooms: { percent: number; occupiedHours: number; availableHours: number; rooms: number };
     gaps: { count: number; noEligibleFaculty: number; pendingRequests: number };
   };
@@ -95,12 +105,14 @@ function Bar({ label, percent, tone }: { label: string; percent: number; tone: s
 
 /** Term overview for chairmen, deans and admins. One small request; details stay on their own pages. */
 export function DashboardOverview() {
+  const role = useAppSelector((s) => s.auth.user?.role);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     apiClient
@@ -176,6 +188,27 @@ export function DashboardOverview() {
         </div>
       </div>
 
+      {academicYearId && !failed && (
+        <div className="mb-3 flex items-center justify-end gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={exporting || loading}
+            onClick={async () => {
+              setExporting(true);
+              await downloadFromApi("/dashboard/export", { academicYearId, semester: String(semester), metric: "all" }, "dashboard.xlsx");
+              setExporting(false);
+            }}
+          >
+            {exporting ? "Preparing…" : "Export all metrics (Excel)"}
+          </Button>
+          <HelpTip>
+            One workbook for the selected term: a summary sheet plus a table for faculty workload, room utilization, curriculum completion, scheduling gaps, the projection and schedule conflicts. It follows your role's scope.
+          </HelpTip>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center rounded border border-border bg-surface py-10" aria-busy="true">
           <Spinner />
@@ -190,23 +223,32 @@ export function DashboardOverview() {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Kpi
               label="Curriculum scheduled"
               value={`${k.curriculum.percent}%`}
               sub={`${k.curriculum.scheduledHours} of ${k.curriculum.requiredHours} required hrs/week`}
               to={withTerm("/dashboard/details/curriculum-completion")}
             />
-            <Kpi
-              label="Faculty load used"
-              value={k.faculty.facultyWithCap > 0 ? `${k.faculty.percent}%` : "—"}
-              sub={
-                k.faculty.facultyWithCap > 0
-                  ? `${k.faculty.assignedUnits} of ${k.faculty.maxUnits} max units · ${k.faculty.over} over`
-                  : "No maximum units set"
-              }
+            <Link
               to={withTerm("/dashboard/details/faculty-workload")}
-            />
+              className="block rounded-lg border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2"
+            >
+              <p className="text-sm text-foreground-muted">Faculty load</p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">
+                {k.faculty.facultyWithCap > 0 ? `${k.faculty.percent}%` : "—"}
+              </p>
+              <p className="mt-1 text-xs text-foreground-muted">
+                {k.faculty.facultyWithCap > 0
+                  ? `${k.faculty.assignedUnits} of ${k.faculty.maxUnits} allowed units (maximum less deloading)`
+                  : "No maximum units set"}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
+                <span className={`rounded px-1.5 py-0.5 ${LOAD_STATE_BADGE.over}`}>{k.faculty.over} overload</span>
+                <span className={`rounded px-1.5 py-0.5 ${LOAD_STATE_BADGE.under}`}>{k.faculty.under} underload</span>
+                <span className={`rounded px-1.5 py-0.5 ${LOAD_STATE_BADGE.full}`}>{k.faculty.full} full</span>
+              </div>
+            </Link>
             <Kpi
               label="Room use"
               value={`${k.rooms.percent}%`}
@@ -219,11 +261,35 @@ export function DashboardOverview() {
               sub={`${k.curriculum.unscheduledSubjects} not scheduled · ${k.curriculum.partialSubjects} partial`}
               to={withTerm("/dashboard/details/scheduling-gaps")}
             />
+            <Link
+              to={withTerm("/dashboard/details/conflicts")}
+              className="block rounded-lg border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2"
+            >
+              <p className="text-sm text-foreground-muted">Schedule conflicts</p>
+              <p className={`mt-1 text-3xl font-semibold tabular-nums ${k.conflicts.total > 0 ? "text-danger" : "text-success"}`}>
+                {k.conflicts.total}
+              </p>
+              <p className="mt-1 text-xs text-foreground-muted">
+                {k.conflicts.total === 0
+                  ? "No double bookings in the saved schedule"
+                  : `${k.conflicts.faculty} faculty · ${k.conflicts.room} room · ${k.conflicts.class} class`}
+              </p>
+            </Link>
           </div>
+
+          {isTeachingRole(role) && academicYearId && (
+            <div className="mt-4">
+              <MyWorkloadPanel academicYearId={academicYearId} semester={semester} variant="compact" />
+            </div>
+          )}
 
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-              <h3 className="mb-3 font-medium text-foreground">Projected completion</h3>
+              <div className="mb-3 flex items-center gap-1.5">
+<h3 className="font-medium text-foreground">
+                Projected completion</h3>
+<HelpTip>{p.note}</HelpTip>
+</div>
               <div className="space-y-3">
                 <Bar label="Scheduled now" percent={p.currentPercent} tone="bg-primary" />
                 <Bar label="Estimated if remaining hours are scheduled" percent={p.projectedPercent} tone="bg-primary/40" />
@@ -255,7 +321,6 @@ export function DashboardOverview() {
               >
                 See subject-by-subject estimate
               </Link>
-              <p className="mt-1 text-xs text-foreground-muted">{p.note}</p>
             </div>
 
             <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">

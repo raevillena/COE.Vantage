@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import type { Prisma } from "@prisma/client";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
+import { isTeachingRole } from "../../utils/teachingRoles.js";
 import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
 export interface CallerContext {
@@ -16,7 +17,7 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
     prisma.studentClass.findUnique({ where: { id: body.studentClassId }, include: { curriculum: { select: { departmentId: true } } } }),
     prisma.academicYear.findUnique({ where: { id: body.academicYearId } }),
   ]);
-  if (!faculty || !["FACULTY", "CHAIRMAN", "DEAN"].includes(faculty.role)) throw notFound("Faculty not found");
+  if (!faculty || !isTeachingRole(faculty.role)) throw notFound("Faculty not found");
   if (!subject) throw notFound("Subject not found");
   if (!studentClass) throw notFound("Student class not found");
   if (!academicYear) throw notFound("Academic year not found");

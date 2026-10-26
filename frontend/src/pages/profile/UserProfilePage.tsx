@@ -10,6 +10,7 @@ import {
   type ExperimentalFeatureDefinition,
 } from "../../features/experimental/featureCatalog";
 import type { ExperimentalFeatureKey } from "../../types/auth";
+import { HelpTip } from "../../components/ui/helpTip";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
@@ -175,7 +176,11 @@ export function UserProfilePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-foreground mb-6">Profile</h1>
+      <div className="mb-6 flex items-center gap-2">
+<h1 className="text-2xl font-semibold text-foreground">
+        Profile</h1>
+<HelpTip>Your name and email can be changed only by an administrator.</HelpTip>
+</div>
       <div className="rounded border border-border bg-surface overflow-hidden max-w-xl">
         <dl className="divide-y divide-border">
           <div className="px-4 py-3">
@@ -198,18 +203,20 @@ export function UserProfilePage() {
       </div>
 
       <section className="mt-8 max-w-xl">
-        <h2 className="text-lg font-medium text-foreground mb-3">Change password</h2>
-        <p className="text-sm text-foreground-muted mb-4">
-          Request a password reset link to your email. You will set the new password yourself; administrators cannot see or set your password.
-        </p>
+        <div className="mb-3 flex items-center gap-2">
+<h2 className="text-lg font-medium text-foreground">
+          Change password</h2>
+<HelpTip>A reset link is sent to your email address and you choose the new password yourself. Administrators cannot view or set your password.</HelpTip>
+</div>
         <ChangePasswordForm />
       </section>
 
       <section className="mt-8 max-w-xl">
-        <h2 className="text-lg font-medium text-foreground mb-3">Schedule color palette</h2>
-        <p className="text-sm text-foreground-muted mb-4">
-          Choose how subjects are colored in the scheduler. This only affects your view on this device.
-        </p>
+        <div className="mb-3 flex items-center gap-2">
+<h2 className="text-lg font-medium text-foreground">
+          Schedule color palette</h2>
+<HelpTip>Controls how subjects are coloured in the scheduler. It applies to your account on this device only.</HelpTip>
+</div>
         <div className="max-w-xs">
           <label className="mb-1 block text-sm font-medium text-foreground">
             Palette
@@ -236,11 +243,11 @@ export function UserProfilePage() {
       </section>
 
       <section className="mt-8 max-w-xl">
-        <h2 className="text-lg font-medium text-foreground mb-3">Experimental features</h2>
-        <p className="text-sm text-foreground-muted mb-4">
-          Enable early-access modules on your account. You can choose specific experimental features
-          as they become available.
-        </p>
+        <div className="mb-3 flex items-center gap-2">
+<h2 className="text-lg font-medium text-foreground">
+          Experimental features</h2>
+<HelpTip>Opt in to early-access modules on your account. Individual features can be enabled as they become available.</HelpTip>
+</div>
 
         <div className="rounded border border-border bg-surface p-4">
           <label className="flex items-start gap-3">
@@ -290,9 +297,6 @@ export function UserProfilePage() {
         </div>
       </section>
 
-      <p className="mt-6 text-sm text-foreground-muted">
-        To change your name or email, contact an administrator.
-      </p>
     </div>
   );
 }

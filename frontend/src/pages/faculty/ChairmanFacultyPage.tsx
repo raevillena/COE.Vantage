@@ -3,9 +3,12 @@ import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, UserListItem } from "../../types/api";
 import type { Subject } from "../../types/api";
 import toast from "react-hot-toast";
-import { ClipboardList, MoreVertical, Pencil } from "lucide-react";
+import { ClipboardList, MoreVertical, Pencil, SlidersHorizontal } from "lucide-react";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
+import { HelpTip } from "../../components/ui/helpTip";
+import { DeloadingDialog } from "../../components/faculty/DeloadingDialog";
+import { LOAD_STATE_BADGE, LOAD_STATE_LABEL, effectiveMax, loadStateOf, ROLE_LABEL } from "../../utils/loadState";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
@@ -35,6 +38,10 @@ export function ChairmanFacultyPage() {
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
   const [unitsByFaculty, setUnitsByFaculty] = useState<Record<string, number>>({});
+  /** Deloading per person for the selected term (units deducted from the maximum). */
+  const [deloadByUser, setDeloadByUser] = useState<Record<string, { total: number; items: { description: string; units: number }[] }>>({});
+  const [deloadTarget, setDeloadTarget] = useState<UserListItem | null>(null);
+  const [copyDeloading, setCopyDeloading] = useState(true);
 
   const [possibleSubjectsUser, setPossibleSubjectsUser] = useState<UserListItem | null>(null);
   const [possibleSubjectsList, setPossibleSubjectsList] = useState<PrioritizedSubjectItem[]>([]);
@@ -56,7 +63,7 @@ export function ChairmanFacultyPage() {
     setLoading(true);
     try {
       const { data } = await apiClient.get<UserListItem[]>("/users", {
-        params: { role: ["FACULTY", "CHAIRMAN"] },
+        params: { role: ["FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"] },
       });
       setList(data);
     } catch {
@@ -91,14 +98,20 @@ export function ChairmanFacultyPage() {
   const loadUnits = useCallback(async () => {
     if (!academicYearId) {
       setUnitsByFaculty({});
+      setDeloadByUser({});
       return;
     }
     try {
       const params = new URLSearchParams({ academicYearId, semester: String(semester) });
-      const { data } = await apiClient.get<Record<string, number>>(`/faculty-loads/units?${params}`);
-      setUnitsByFaculty(data ?? {});
+      const [units, deload] = await Promise.all([
+        apiClient.get<Record<string, number>>(`/faculty-loads/units?${params}`),
+        apiClient.get<{ userId: string; total: number; items: { description: string; units: number }[] }[]>(`/deloadings?${params}`),
+      ]);
+      setUnitsByFaculty(units.data ?? {});
+      setDeloadByUser(Object.fromEntries((deload.data ?? []).map((d) => [d.userId, { total: d.total, items: d.items }])));
     } catch {
       setUnitsByFaculty({});
+      setDeloadByUser({});
     }
   }, [academicYearId, semester]);
 
@@ -107,20 +120,19 @@ export function ChairmanFacultyPage() {
   }, [loadUnits]);
 
   const renderUnits = (u: UserListItem) => {
-    const loaded = unitsByFaculty[u.id] ?? 0;
-    const max = u.maxUnits ?? null;
-    const tone =
-      max !== null && loaded > max
-        ? "font-medium text-danger"
-        : max !== null && max > 0 && loaded === max
-          ? "font-medium text-warning"
-          : "text-foreground-muted";
+    const loaded = Math.round((unitsByFaculty[u.id] ?? 0) * 100) / 100;
+    const deload = deloadByUser[u.id]?.total ?? 0;
+    const effective = effectiveMax(u.maxUnits, deload);
+    const state = loadStateOf(loaded, effective);
+    const detail =
+      effective === null
+        ? `${loaded} units assigned. No maximum set, so overload and underload cannot be judged.`
+        : `${loaded} units assigned of ${effective} allowed (maximum ${u.maxUnits}${deload > 0 ? ` less ${deload} deloading` : ""}). ${LOAD_STATE_LABEL[state]}.`;
     return (
-      <span
-        className={`tabular-nums ${tone}`}
-        title={max === null ? `${loaded} units loaded (no cap)` : `${loaded} of ${max} max units loaded this term`}
-      >
-        {loaded}/{max ?? "—"}
+      <span className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-sm tabular-nums ${LOAD_STATE_BADGE[state]}`} title={detail}>
+        {loaded}/{effective ?? "—"}
+        {state !== "unset" && <span className="text-xs font-medium">{LOAD_STATE_LABEL[state]}</span>}
+        {deload > 0 && <span className="text-xs opacity-80">(−{deload})</span>}
       </span>
     );
   };
@@ -268,6 +280,20 @@ export function ChairmanFacultyPage() {
           facultyIds: list.map((u) => u.id),
         }
       );
+      if (copyDeloading) {
+        try {
+          await apiClient.post("/deloadings/copy", {
+            fromAcademicYearId: copyFromYearId,
+            fromSemester: copyFromSemester,
+            toAcademicYearId: academicYearId,
+            toSemester: semester,
+            userIds: list.map((u) => u.id),
+          });
+          loadUnits();
+        } catch {
+          toast.error("Possible subjects were copied, but the deloading could not be.");
+        }
+      }
       toast.success(
         data.found === 0
           ? "Nothing to copy from that term."
@@ -309,7 +335,11 @@ export function ChairmanFacultyPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">Faculty</h1>
+        <div className="flex items-center gap-2">
+<h1 className="text-2xl font-semibold text-foreground">
+          Faculty</h1>
+<HelpTip>Faculty of your department, including the chairman. Possible subjects define which subjects auto-assign may give each person in the selected term; a subject is only assigned to faculty listed for it.</HelpTip>
+</div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={openCopy} disabled={!academicYearId || academicYears.length < 1}>
             Copy possible subjects from another term
@@ -317,9 +347,6 @@ export function ChairmanFacultyPage() {
           <Button type="button" onClick={openAdd}>Add Faculty</Button>
         </div>
       </div>
-      <p className="mb-4 text-sm text-foreground-muted">
-        Department faculty. Set &quot;Possible subjects to teach&quot; to guide auto-assign: only faculty listed for a subject are considered for that subject.
-      </p>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[180px]">
@@ -346,9 +373,9 @@ export function ChairmanFacultyPage() {
             </Select.Content>
           </Select.Root>
         </div>
-        <p className="pb-2 text-xs text-foreground-muted">
-          Units = loaded in the Scheduler for this term / max allowed.
-        </p>
+        <div className="pb-2">
+          <HelpTip>Assigned units against the maximum for the selected term. Laboratory units count three times.</HelpTip>
+        </div>
       </div>
 
       {list.length > 0 && (
@@ -402,6 +429,9 @@ export function ChairmanFacultyPage() {
                 <tr key={u.id}>
                   <td className="px-4 py-2 text-foreground">
                     {u.name}
+                    {(u.role === "DEAN" || u.role === "COLLEGE_SECRETARY") && (
+                      <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-xs text-foreground-muted">{ROLE_LABEL[u.role]}</span>
+                    )}
                     {u.role === "CHAIRMAN" && (
                       <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-xs text-foreground-muted">
                         Chairman{u.id === user?.id ? " (you)" : ""}
@@ -421,6 +451,15 @@ export function ChairmanFacultyPage() {
                         title="Edit status and max units"
                       >
                         <Pencil size={20} className="shrink-0" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeloadTarget(u)}
+                        className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                        aria-label={`Deloading for ${u.name}`}
+                        title="Deloading: units deducted from the maximum"
+                      >
+                        <SlidersHorizontal size={20} className="shrink-0" aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -444,6 +483,9 @@ export function ChairmanFacultyPage() {
                         <DropdownMenu.Content align="end">
                           <DropdownMenu.Item onSelect={() => openEdit(u)}>
                             Edit
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => setDeloadTarget(u)}>
+                            Deloading
                           </DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => openPossibleSubjects(u)}>
                             Manage possible subjects to teach
@@ -619,6 +661,15 @@ export function ChairmanFacultyPage() {
               </select>
             </div>
           </div>
+          <label className="mt-4 flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={copyDeloading}
+              onChange={(e) => setCopyDeloading(e.target.checked)}
+              className="rounded border-border-strong focus:ring-focus-ring"
+            />
+            Also copy deloading (only for people who have none in this term)
+          </label>
           <div className="mt-6 flex justify-end gap-2">
             <Dialog.Close asChild>
               <Button type="button" variant="secondary">Cancel</Button>
@@ -629,6 +680,17 @@ export function ChairmanFacultyPage() {
           </div>
         </Dialog.Content>
       </Dialog.Root>
+      {deloadTarget && (
+        <DeloadingDialog
+          person={{ id: deloadTarget.id, name: deloadTarget.name, maxUnits: deloadTarget.maxUnits }}
+          years={academicYears}
+          academicYearId={academicYearId}
+          semester={semester}
+          canEdit
+          onClose={() => setDeloadTarget(null)}
+          onSaved={loadUnits}
+        />
+      )}
       {facultyForm && (
         <UserFormDialog
           mode={facultyForm.id ? "edit" : "create"}

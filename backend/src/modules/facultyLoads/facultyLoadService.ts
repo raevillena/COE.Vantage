@@ -2,6 +2,8 @@ import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
+import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 
 export interface CallerContext {
   role: string;
@@ -162,7 +164,7 @@ export async function getSlotAvailability(q: SlotAvailabilityQuery, caller?: Cal
       select: { id: true, capacity: true, isLab: true, departmentId: true },
     }),
     prisma.user.findMany({
-      where: { isDeleted: false, role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] } },
+      where: { isDeleted: false, role: { in: TEACHING_ROLES } },
       select: { id: true },
     }),
     q.studentClassId
@@ -304,14 +306,16 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
       prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
+      const deload = (await loadDeloadings(body.academicYearId, body.semester, [effectiveFacultyId])).get(effectiveFacultyId)?.total ?? 0;
+      const cap = effectiveMaxUnits(user.maxUnits, deload) ?? user.maxUnits;
       const { current, total } = await getFacultyUnitsWith(effectiveFacultyId, body.academicYearId, body.semester, {
         subjectId: body.subjectId,
         studentClassId: body.studentClassId,
         units: creditedLoadUnits(subject.units, subject.isLab),
       });
-      if (total > user.maxUnits) {
+      if (total > cap) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
+          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
         );
       }
     }
@@ -409,6 +413,8 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
       prisma.user.findUnique({ where: { id: facultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
+      const deload = (await loadDeloadings(existing.academicYearId, existing.semester, [facultyId])).get(facultyId)?.total ?? 0;
+      const cap = effectiveMaxUnits(user.maxUnits, deload) ?? user.maxUnits;
       const { current, total } = await getFacultyUnitsWith(
         facultyId,
         existing.academicYearId,
@@ -416,9 +422,9 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
         { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: creditedLoadUnits(subject.units, subject.isLab) },
         id
       );
-      if (total > user.maxUnits) {
+      if (total > cap) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached maximum units (${user.maxUnits}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
+          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
         );
       }
     }
@@ -747,9 +753,16 @@ export async function autoAssignForClass(
 
   // Preload faculty (with maxUnits for cap check) and rooms.
   const faculties = await prisma.user.findMany({
-    where: { role: { in: ["FACULTY", "CHAIRMAN", "DEAN"] }, isDeleted: false },
+    where: { role: { in: TEACHING_ROLES }, isDeleted: false },
     select: { id: true, departmentId: true, maxUnits: true },
   });
+  // The cap used here is the maximum minus this term's deloading.
+  const deloadByUser = await loadDeloadings(academicYearId, semester, faculties.map((f) => f.id));
+  const capByFaculty = new Map<string, number>();
+  for (const f of faculties) {
+    const cap = effectiveMaxUnits(f.maxUnits, deloadByUser.get(f.id)?.total ?? 0);
+    if (cap != null) capByFaculty.set(f.id, cap);
+  }
   const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, creditedLoadUnits(s.units, s.isLab)]));
   const currentUnitsByFaculty = new Map<string, number>(
     Object.entries(await getLoadedUnitsByFaculty(academicYearId, semester))
@@ -949,7 +962,7 @@ export async function autoAssignForClass(
       continue;
     }
     const poolToUse = facultyPool.filter(
-      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + creditedLoadUnits(s.units, s.isLab) <= (f.maxUnits ?? Infinity)
+      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + creditedLoadUnits(s.units, s.isLab) <= (capByFaculty.get(f.id) ?? Infinity)
     );
     if (poolToUse.length === 0) {
       skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "All faculty for this subject are at their max units" });

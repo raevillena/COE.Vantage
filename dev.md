@@ -662,7 +662,9 @@ This keeps the user in context and allows resolving conflicts **in-place**, with
 
 ---
 
-### 19. Whole-College Workload Excel Report
+### 19. Whole-College Workload Excel Report (REMOVED in v0.3.5)
+
+> Removed: the plain `GET /reports/college-workload` export and its Reports card were replaced by the registrar-layout **College Workload** card (section 30), which counts lab units 3x and shows regular load and overload. The notes below are kept as history only.
 
 **Endpoint & access**
 
@@ -1070,7 +1072,7 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 
 ### 30. Official Excel exports (class schedules, faculty workload)
 
-- Code: `backend/src/modules/reports/reportExcel.ts`; handlers in `reportController.ts`; routes `GET /reports/export/class-schedules` and `GET /reports/export/faculty-workloads` (query `academicYearId`, `semester` 1–3, optional `id` = class / faculty). ADMIN, DEAN, CHAIRMAN only; a chairman is scoped to their own department's classes / faculty. The older `college-workload` export is unchanged.
+- Code: `backend/src/modules/reports/reportExcel.ts`; handlers in `reportController.ts`; routes `GET /reports/export/class-schedules` and `GET /reports/export/faculty-workloads` (query `academicYearId`, `semester` 1–3, optional `id` = class / faculty). ADMIN, DEAN, CHAIRMAN only; a chairman is scoped to their own department's classes / faculty. The older `college-workload` export was removed in v0.3.5; these two forms replace it, under the "College Workload" card at the top of the Reports page.
 - Layout follows the registrar sample (form URO-FRM-012B header, College / Semester block). One sheet each: classes stacked with a yellow "Total Units" row; faculty grouped under a department band.
 - Meetings of one subject are folded into one row via `buildMeetingSegments`: meetings sharing time + room are one segment with its own day letters (M T W Th F Sa), segments joined by " / ". Units total counts each course once.
 - Faculty columns: `# of Units` = real units; `Actual Load` = credited units (lab ×3); `Regular Load` = the faculty's `maxUnits`; `Over load` = max(0, actual − regular). `OA load eqv.` and `Other assignments` are blank (no data). Status text sits beside the first course row.
@@ -1135,6 +1137,51 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Auto-assign (`autoAssignForClass`): a subject with rooms may only use those, still intersected with the rooms the caller can use, class capacity and lab type. If none qualifies the subject is skipped with the reason "None of this subject's assigned rooms is available to you or fits the class". There is no random fallback for these subjects. Among several allowed rooms it picks the least-booked one, and does not retry another if that one has no free slot.
 - The dashboard projection applies the same restriction when estimating room availability.
 - Subjects page: a **Rooms** column ("Any", the room names, or "N rooms") and a row action **Set rooms for auto-assign** (searchable checklist, own department first). The page now opens on the most recently created curriculum (by `createdAt`) instead of all curricula, and the curriculum filter lists every curriculum, including ones with no subjects yet.
+
+### 38. Reload buttons on the scheduler's bottom panels
+
+- The **Room availability** and **Faculty schedule** panels each have a **Reload** button next to the title (`SchedulerPage`). Room availability re-runs `refreshRoomLoads` for the selected room; Faculty schedule uses the new `refreshOverlayFaculty` for the selected faculty. Each is disabled until a room / faculty is chosen and while loading (icon spins). Only these panels' data is refetched, not the main class grid, so unsaved work in the assignment form is untouched.
+- Covered by two Playwright tests (a block added through the API appears after Reload).
+
+### 39. Schedules pages: all departments for dean / secretary
+
+- `schedules/faculty` and `schedules/student-class`: for ADMIN, DEAN, OFFICER and COLLEGE_SECRETARY the Department filter now defaults to **All departments** (it used to require picking one before any faculty or class appeared). Picking a department still narrows the list. A chairman keeps a fixed own-department scope (the server enforces it; the filter is hidden). In the all-departments view each faculty / class / room option carries the department code so same-named entries are distinguishable.
+- The faculty list now includes deans (`DEAN`) as well as faculty and chairmen, since they carry teaching loads. Room availability already listed every room for everyone.
+- Covered by Playwright tests (dean and secretary see a faculty member and a class from another department; a chairman does not).
+
+### 40. Help tips: explanatory text as (?) icons
+
+- Component `components/ui/helpTip.tsx` (`<HelpTip>text</HelpTip>`): a (?) icon button that shows a popover on hover, keyboard focus or click/tap, closes on Escape, blur or an outside click, and renders in a portal so dialogs and scroll areas never clip it (`role="tooltip"`, `aria-describedby`). Keep the text to a sentence or two in a neutral, professional register.
+- Place the icon **next to** a heading or label, not inside it (`<div className="flex items-center gap-2"><h2>…</h2><HelpTip>…</HelpTip></div>`), so the heading's or field's accessible name stays clean.
+- Converted: Reports (page, College Workload, faculty / class / room cards), Faculty (page and units), Rooms (section hints, open/closed, name, department), dashboard detail and projection, user form (email, initial password, max units), Curriculum (department scope and both IUSIS imports) and curriculum builder, Departments code naming, Profile sections, Requests, Scheduling rules, Scheduler assignment panel, prioritized-faculty dialog and the subject rooms dialog.
+- Not converted on purpose: dialog `description` lines (standard dialog semantics), empty-state messages, and the experimental grade module screens.
+- Covered by a Playwright test (hover, focus, click-to-pin, Escape, outside click).
+
+### 41. Deloading, overload / underload, faculty dashboard, conflict scan
+
+**Deloading**
+- Table `FacultyDeloading` (migration `20260605000000_faculty_deloading`): items per person, academic year and semester, each with a description and units (decimals allowed). **Effective maximum = maximum units - sum of the term's items** (never below 0; no maximum means no judgement). Matches the registrar form: Regular Load = maximum less OA, "OA load eqv." = deloading total.
+- API (`modules/deloadings`): `GET /deloadings?academicYearId&semester` (admin / dean / secretary: everyone; chairman: their department; anyone else: only themself), `PUT /deloadings/user/:userId` replaces one person's items for a term (ADMIN, or the CHAIRMAN of that person's department, which includes themself), `POST /deloadings/copy` copies a term's deloading to another for people who have none there. Dean, secretary and faculty are read-only.
+- UI: `DeloadingDialog` (term pickers, items, effective maximum preview) opens from the **Faculty page** (chairman) and the **Users page** (admin). The Faculty page copy dialog can copy deloading together with possible subjects.
+- `utils/deloading.ts` (`loadDeloadings`, `effectiveMaxUnits`, `loadState`) is the single source. It is used by the cap check on create / update of a load (error text states the maximum and deloading), auto-assign, the dashboard projection, the Excel workload form and the dashboard.
+
+**Overload / underload**
+- State per person: `over` (assigned > allowed), `under` (assigned < allowed, including 0 assigned), `full`, `unset` (no maximum set). Tolerance 0.05 units. Colours: red overload, amber underload, green full (`utils/loadState.ts`), used on the dashboard card, workload view and Faculty page.
+- `dashboardWorkload.ts` `loadWorkloadRows` feeds the summary KPI (counts of overload / underload / full), the faculty-workload detail view (maximum, deloading, allowed, assigned, difference, status; filter by status) and a person's own view.
+- New `TEACHING_ROLES` (`utils/teachingRoles.ts`): FACULTY, CHAIRMAN, DEAN and COLLEGE_SECRETARY can carry loads, appear in faculty lists and the scheduler, have a maximum and deloading, and count in these metrics.
+
+**Faculty dashboard**
+- `GET /dashboard/me` returns only the caller's own workload (no user id parameter), teaching totals and deloading items. A FACULTY user's dashboard (`FacultyDashboard`) shows that, their weekly schedule (from `/reports/faculty/:id/data`) and a link to downloads. Chairman, dean and secretary see a compact **My workload** card in the overview when they have a maximum or a load.
+
+**Conflict scan**
+- `dashboardConflicts.ts` scans the saved schedule of a term for overlaps on the same day: the same faculty, room or class in two loads. Rows of the same subject, class and time (co-instructors, split rooms) are one teaching event and do not count against the room or class. It is independent of the checks done when saving a block, so it catches approved cross-department requests, imports and direct edits. Shown as a dashboard card, an alert and the `conflicts` detail view (filter by type). Scope: a chairman sees conflicts of their department's faculty, rooms and classes.
+
+### 42. Dashboard metrics export
+
+- `GET /dashboard/export` (ADMIN, DEAN, CHAIRMAN, COLLEGE_SECRETARY; same scope as the dashboard, so a chairman exports only their department). Query: `academicYearId`, `semester`, `metric` = `all` (default) or one of `faculty-workload | room-utilization | curriculum-completion | scheduling-gaps | projection | conflicts`, `format` = `xlsx` (default) or `csv`, plus the detail-view filters (`q`, `state`, `type`, `reason`, `status`, `outcome`). CSV is for one metric only (UTF-8 with BOM, CRLF); `all` is a workbook: a **Summary** sheet (every KPI, the projection and the alerts) and one sheet per metric.
+- `dashboardExport.ts` reuses `getDashboardAnalytics` without paging, so an exported table is exactly what the detail view lists, for the same filters. Numbers stay numeric in Excel; faculty rows get the same red / amber / green fills as the screen; sheets have a frozen header, filters and landscape fit-to-width.
+- UI: **Export all metrics (Excel)** in the dashboard term overview, and **Export Excel / Export CSV** on each detail view (exports every matching row, not the visible page). Shared helper `utils/downloadFile.ts`.
+- CORS now exposes `Content-Disposition` (`exposedHeaders`). Without it a browser on another origin could not read the server's file name and every download fell back to a generic name (this also applies to the Reports downloads).
 
 ## Parked / Incomplete Features
 

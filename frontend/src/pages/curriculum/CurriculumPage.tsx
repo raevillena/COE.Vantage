@@ -12,6 +12,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
 import { parseIusisCurriculumHtml } from "../../utils/parseIusisCurriculumHtml";
 import { parseIusisCurriculumClipboard } from "../../utils/parseIusisCurriculumClipboard";
+import { HelpTip } from "../../components/ui/helpTip";
 
 export function CurriculumPage() {
   const user = useAppSelector((s) => s.auth.user);
@@ -385,7 +386,11 @@ export function CurriculumPage() {
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
+              <div className="mb-1 flex items-center gap-1.5">
+<label className="text-sm font-medium text-foreground">
+                Department</label>
+{user?.role === "CHAIRMAN" && <HelpTip>A chairman can only create curricula for their own department.</HelpTip>}
+</div>
               <Select.Root
                 value={form.departmentId || "__none__"}
                 onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}
@@ -400,9 +405,6 @@ export function CurriculumPage() {
                   ))}
                 </Select.Content>
               </Select.Root>
-              {user?.role === "CHAIRMAN" && (
-                <p className="mt-1 text-xs text-foreground-muted">Curriculum is scoped to your department.</p>
-              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
@@ -529,8 +531,11 @@ export function CurriculumPage() {
             </div>
             {importMode === "iusis" && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">Paste IUSIS curriculum HTML</label>
-                <p className="text-xs text-foreground-muted">Copy the full Laravel curriculum component from IUSIS (right‑click → Inspect → copy outer HTML of the curriculum block), then paste below.</p>
+                <div className="flex items-center gap-1.5">
+<label className="text-sm font-medium text-foreground">
+                  Paste IUSIS curriculum HTML</label>
+<HelpTip>In IUSIS, open the curriculum page, right-click the curriculum block, choose Inspect, copy its outer HTML and paste it here.</HelpTip>
+</div>
                 <textarea
                   value={importIusisHtml}
                   onChange={(e) => setImportIusisHtml(e.target.value)}
@@ -545,8 +550,11 @@ export function CurriculumPage() {
             )}
             {importMode === "clipboard" && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">Paste curriculum from IUSIS (plain text)</label>
-                <p className="text-xs text-foreground-muted">Copy the checklist from IUSIS (select the whole table or page and copy). Paste the plain text below — it should include &quot;First Year&quot;, &quot;First Semester&quot;, and rows with Code, Description, units.</p>
+                <div className="flex items-center gap-1.5">
+<label className="text-sm font-medium text-foreground">
+                  Paste curriculum from IUSIS (plain text)</label>
+<HelpTip>In IUSIS, select the whole checklist table and copy it. The pasted text should contain the year and semester headings (for example “First Year”, “First Semester”) and rows with course code, description and units.</HelpTip>
+</div>
                 <textarea
                   value={importClipboardText}
                   onChange={(e) => setImportClipboardText(e.target.value)}

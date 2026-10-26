@@ -7,7 +7,6 @@ import {
   studentClassReportData,
   roomReport,
   roomReportData,
-  collegeWorkloadReport,
   classSchedulesExcel,
   facultyWorkloadsExcel,
 } from "./reportController.js";
@@ -26,7 +25,6 @@ router.get("/student-class/:classId/data", studentClassReportData);
 router.get("/student-class/:classId", studentClassReport);
 router.get("/room/:roomId/data", roomReportData);
 router.get("/room/:roomId", roomReport);
-router.get("/college-workload", collegeWorkloadReport);
 router.get("/export/class-schedules", classSchedulesExcel);
 router.get("/export/faculty-workloads", facultyWorkloadsExcel);
 

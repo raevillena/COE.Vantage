@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "../../prisma/client.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
+import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 
 /** Institutional form header used by the registrar's workload and class schedule sheets. */
 const FORM_HEADER = {
@@ -289,7 +290,12 @@ export async function loadFacultyWorkloadsForExcel(
       },
     },
   });
-  return { academicYearName: academicYear?.name ?? "", loads };
+  const deloadings = await loadDeloadings(
+    academicYearId,
+    semester,
+    [...new Set(loads.map((l) => l.facultyId).filter((x): x is string => !!x))]
+  );
+  return { academicYearName: academicYear?.name ?? "", loads, deloadings };
 }
 
 const WORKLOAD_HEADERS = [
@@ -338,6 +344,8 @@ export async function buildFacultyWorkloadWorkbook(
     name: string;
     status: string | null;
     maxUnits: number | null;
+    deloadTotal: number;
+    deloadText: string;
     department: string;
     loads: typeof data.loads;
   };
@@ -350,6 +358,10 @@ export async function buildFacultyWorkloadWorkbook(
         name: l.faculty?.name ?? l.facultyDisplayName ?? "—",
         status: l.faculty?.status ?? null,
         maxUnits: l.faculty?.maxUnits ?? null,
+        deloadTotal: (l.facultyId && data.deloadings.get(l.facultyId)?.total) || 0,
+        deloadText: ((l.facultyId && data.deloadings.get(l.facultyId)?.items) || [])
+          .map((i) => `${i.description} (${i.units})`)
+          .join("; "),
         department: l.faculty?.department?.name ?? "OTHERS / OFF-SYSTEM FACULTY",
         loads: [],
       });
@@ -434,12 +446,19 @@ export async function buildFacultyWorkloadWorkbook(
       sheet.getCell(r, 1).value = "Total Units";
       sheet.getCell(r, 9).value = { formula: `SUM(I${firstRow}:I${lastRow})`, result: units };
       sheet.getCell(r, 10).value = { formula: `SUM(J${firstRow}:J${lastRow})`, result: round2(actual) };
-      if (fac.maxUnits != null) {
-        sheet.getCell(r, 11).value = fac.maxUnits;
+      // Regular Load = maximum units less deloading; OA load eqv. and Other assignment(s) list the deloading items.
+      const regular = effectiveMaxUnits(fac.maxUnits, fac.deloadTotal);
+      if (regular != null) {
+        sheet.getCell(r, 11).value = regular;
         sheet.getCell(r, 12).value = {
           formula: `MAX(0,J${r}-K${r})`,
-          result: round2(Math.max(0, actual - fac.maxUnits)),
+          result: round2(Math.max(0, actual - regular)),
         };
+      }
+      if (fac.deloadTotal > 0) sheet.getCell(r, 13).value = fac.deloadTotal;
+      if (fac.deloadText) {
+        sheet.getCell(r, 14).value = fac.deloadText;
+        sheet.getCell(r, 14).alignment = { wrapText: true, vertical: "middle" };
       }
       for (let c = 1; c <= LAST; c++) {
         const cell = sheet.getCell(r, c);

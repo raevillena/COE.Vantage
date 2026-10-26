@@ -68,7 +68,7 @@ export function RoomAvailabilityPage() {
         <div className="min-w-[200px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Room</label>
           <SearchableSelect
-            options={rooms.map((r) => ({ value: r.id, label: `${r.name} (cap: ${r.capacity}${r.isLab ? ", Lab" : ""})` }))}
+            options={rooms.map((r) => ({ value: r.id, label: `${r.name} (cap: ${r.capacity}${r.isLab ? ", Lab" : ""})${r.department?.code ? ` · ${r.department.code}` : ""}` }))}
             value={selectedRoomId || "__none__"}
             onValueChange={(v) => setSelectedRoomId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Select room" }}

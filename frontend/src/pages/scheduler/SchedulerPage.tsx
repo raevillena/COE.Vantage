@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
+import { HelpTip } from "../../components/ui/helpTip";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../store/hooks";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -993,6 +995,18 @@ export function SchedulerPage() {
       .finally(() => setOverlayFacultyLoading(false));
   }, [academicYearId, semester, overlayFacultyId]);
 
+  /** Reloads the faculty schedule preview panel (e.g. after another chairman changed something). */
+  const refreshOverlayFaculty = useCallback(() => {
+    if (!overlayFacultyId || !academicYearId) return;
+    setOverlayFacultyLoading(true);
+    const params = new URLSearchParams({ academicYearId, semester: String(semester), facultyId: overlayFacultyId });
+    apiClient
+      .get<FacultyLoad[]>(`/faculty-loads?${params}`)
+      .then(({ data }) => setOverlayFacultyLoads(data))
+      .catch(() => toast.error("Could not reload the faculty schedule"))
+      .finally(() => setOverlayFacultyLoading(false));
+  }, [academicYearId, semester, overlayFacultyId]);
+
   useEffect(() => {
     if (!overlayRoomId || !academicYearId) {
       setOverlayRoomLoads([]);
@@ -1538,12 +1552,14 @@ export function SchedulerPage() {
           )}
           renderAssignment={() => (
             <>
-            <h2 className="text-sm font-semibold text-foreground mb-2 shrink-0">Assignment</h2>
+            <div className="mb-2 flex shrink-0 items-center gap-1.5">
+<h2 className="text-sm font-semibold text-foreground">
+              Assignment</h2>
+<HelpTip>Drop a subject from the left onto a time slot, or use Add load, to create an assignment. Click an existing block to edit or delete it.</HelpTip>
+</div>
             <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
               {!showAssignmentForm ? (
-                <p className="text-sm text-foreground-muted">
-                  Drop a subject from the left onto a time slot, or click &quot;Add load&quot; to add an entry. Click a block to edit or delete.
-                </p>
+                <p className="text-sm text-foreground-muted">No assignment in progress.</p>
               ) : academicYearId && (editingLoadId ? editingLoad : true) ? (
                 <AssignmentForm
                   academicYearId={academicYearId}
@@ -1601,7 +1617,20 @@ export function SchedulerPage() {
               <div className="grid gap-3 min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] h-full min-h-[220px] 2xl:min-h-[260px]">
                 {/* Room availability (left) */}
                 <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-[250px]">
-                  <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Room availability</h3>
+                  <div className="mb-2 flex items-center justify-between gap-2 shrink-0">
+                    <h3 className="text-sm font-semibold text-foreground">Room availability</h3>
+                    <button
+                      type="button"
+                      onClick={() => refreshRoomLoads()}
+                      disabled={roomLoadsLoading || !selectedRoomId}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-50"
+                      aria-label="Reload room availability"
+                      title="Reload room availability"
+                    >
+                      <RefreshCw size={14} className={roomLoadsLoading ? "animate-spin" : ""} aria-hidden />
+                      Reload
+                    </button>
+                  </div>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
                     <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Room</label>
@@ -1675,14 +1704,27 @@ export function SchedulerPage() {
                     </div>
                   ) : (
                     <p className="text-xs text-foreground-muted">
-                      Select a room to preview its schedule for this term.
+                      Select a room to view its schedule for this term.
                     </p>
                   )}
                 </div>
 
                 {/* Faculty schedule preview (right) */}
                 <div className="flex min-w-0 flex-col rounded border border-border bg-surface p-3 min-h-[250px]">
-                  <h3 className="text-sm font-semibold text-foreground mb-2 shrink-0">Faculty schedule</h3>
+                  <div className="mb-2 flex items-center justify-between gap-2 shrink-0">
+                    <h3 className="text-sm font-semibold text-foreground">Faculty schedule</h3>
+                    <button
+                      type="button"
+                      onClick={() => refreshOverlayFaculty()}
+                      disabled={overlayFacultyLoading || !overlayFacultyId}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-50"
+                      aria-label="Reload faculty schedule"
+                      title="Reload faculty schedule"
+                    >
+                      <RefreshCw size={14} className={overlayFacultyLoading ? "animate-spin" : ""} aria-hidden />
+                      Reload
+                    </button>
+                  </div>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
                     <div className="min-w-0 flex-1 basis-40 max-w-xs">
                       <label className="sr-only">Faculty</label>
@@ -1719,7 +1761,7 @@ export function SchedulerPage() {
                     </div>
                   ) : (
                     <p className="text-xs text-foreground-muted">
-                      Select a faculty to preview their weekly schedule here.
+                      Select a faculty member to view their weekly schedule.
                     </p>
                   )}
                 </div>
