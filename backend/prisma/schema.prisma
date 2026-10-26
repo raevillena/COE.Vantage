@@ -16,6 +16,7 @@ enum Role {
   CHAIRMAN
   FACULTY
   OFFICER
+  COLLEGE_SECRETARY
 }
 
 model User {
@@ -160,6 +161,7 @@ model AcademicYear {
   roomTermAvailability   RoomTermAvailability[]
   crossDepartmentRequests CrossDepartmentLoadRequest[]
   schedulingRuleSetAssignments SchedulingRuleSetAssignment[]
+  subjectFacultyPriorities SubjectFacultyPriority[]
   @@index([isDeleted])
 }
 
@@ -322,13 +324,18 @@ model SubjectFacultyPriority {
   facultyId  String
   priority   Int      @default(0)
   createdAt  DateTime @default(now())
+  /// Term this "possible subject to teach" applies to. Null = legacy row from before terms existed (ignored).
+  academicYearId String?
+  semester       Int?
 
-  subject  Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  faculty  User    @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  faculty      User          @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
 
-  @@unique([subjectId, facultyId])
+  @@unique([subjectId, facultyId, academicYearId, semester])
   @@index([subjectId])
   @@index([facultyId])
+  @@index([academicYearId, semester])
 }
 
 // Configurable rule set for auto-schedule (work hours, lunch, MWF preference, etc.). Assignable per academic year and/or student class.

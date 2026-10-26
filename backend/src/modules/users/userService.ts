@@ -156,11 +156,11 @@ export async function permanentDeleteUser(id: string) {
 }
 
 /** Subjects this user is prioritized to teach (for faculty prioritization view). */
-export async function getPrioritizedSubjects(facultyId: string) {
+export async function getPrioritizedSubjects(facultyId: string, term: { academicYearId: string; semester: number }) {
   const user = await prisma.user.findUnique({ where: { id: facultyId } });
   if (!user || user.isDeleted) throw notFound("User not found");
   const list = await prisma.subjectFacultyPriority.findMany({
-    where: { facultyId },
+    where: { facultyId, academicYearId: term.academicYearId, semester: term.semester },
     orderBy: { priority: "asc" },
     include: {
       subject: {

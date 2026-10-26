@@ -1,16 +1,17 @@
 import { Router } from "express";
 import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getAvailability, setAvailability, getAvailabilityMap, transfer } from "./roomController.js";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authorize } from "../../middleware/authorize.js";
+import { authorize, readOnly } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
 import { createRoomSchema, updateRoomSchema, setRoomAvailabilitySchema, transferRoomSchema } from "./roomSchemas.js";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(readOnly("COLLEGE_SECRETARY"));
 
 // All room access: ADMIN, DEAN, CHAIRMAN, OFFICER (exclude FACULTY)
-const roomAccessRoles = ["ADMIN", "DEAN", "CHAIRMAN", "OFFICER"] as const;
+const roomAccessRoles = ["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY"] as const;
 // Create and edit room details: ADMIN, DEAN, OFFICER only (chairman can only view and edit control)
 //const roomEditRoles = ["ADMIN", "DEAN", "OFFICER"] as const;
 

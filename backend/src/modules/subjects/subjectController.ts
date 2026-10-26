@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import * as subjectService from "./subjectService.js";
-import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody } from "./subjectSchemas.js";
+import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody, CopyPrioritizedFacultyBody } from "./subjectSchemas.js";
+import { prioritizedTermQuerySchema } from "./subjectSchemas.js";
+import { badRequest } from "../../utils/errors.js";
 
 function caller(req: Request) {
   return req.user ? { role: req.user.role, departmentId: req.user.departmentId } : undefined;
@@ -49,12 +51,24 @@ export async function permanentDelete(req: Request, res: Response): Promise<void
 }
 
 export async function getPrioritizedFaculty(req: Request, res: Response): Promise<void> {
-  const list = await subjectService.getPrioritizedFaculty(req.params.id);
+  const parsed = prioritizedTermQuerySchema.safeParse(req.query);
+  if (!parsed.success) throw badRequest("academicYearId and semester are required");
+  const list = await subjectService.getPrioritizedFaculty(req.params.id, parsed.data);
   res.json(list);
 }
 
 export async function putPrioritizedFaculty(req: Request, res: Response): Promise<void> {
   const body = req.body as PutPrioritizedFacultyBody;
-  const list = await subjectService.setPrioritizedFaculty(req.params.id, body.facultyIds, caller(req));
+  const list = await subjectService.setPrioritizedFaculty(
+    req.params.id,
+    body.facultyIds,
+    { academicYearId: body.academicYearId, semester: body.semester },
+    caller(req)
+  );
   res.json(list);
+}
+
+export async function copyPrioritizedFaculty(req: Request, res: Response): Promise<void> {
+  const body = req.body as CopyPrioritizedFacultyBody;
+  res.json(await subjectService.copyPrioritizedFaculty(body, caller(req)));
 }

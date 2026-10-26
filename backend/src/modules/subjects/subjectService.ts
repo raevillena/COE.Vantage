@@ -174,11 +174,16 @@ export interface SubjectCaller {
   departmentId: string | null;
 }
 
-export async function getPrioritizedFaculty(subjectId: string) {
+export interface PriorityTerm {
+  academicYearId: string;
+  semester: number;
+}
+
+export async function getPrioritizedFaculty(subjectId: string, term: PriorityTerm) {
   const s = await prisma.subject.findUnique({ where: { id: subjectId } });
   if (!s || s.isDeleted) throw notFound("Subject not found");
   const list = await prisma.subjectFacultyPriority.findMany({
-    where: { subjectId },
+    where: { subjectId, academicYearId: term.academicYearId, semester: term.semester },
     orderBy: { priority: "asc" },
     include: { faculty: { select: { id: true, name: true, email: true } } },
   });
@@ -190,9 +195,11 @@ export async function getPrioritizedFaculty(subjectId: string) {
   }));
 }
 
+/** Replaces the faculty list of one subject for one term only; other terms are left alone. */
 export async function setPrioritizedFaculty(
   subjectId: string,
   facultyIds: string[],
+  term: PriorityTerm,
   caller?: SubjectCaller
 ) {
   const s = await prisma.subject.findUnique({
@@ -200,6 +207,8 @@ export async function setPrioritizedFaculty(
     include: { curriculum: { select: { departmentId: true } } },
   });
   if (!s || s.isDeleted) throw notFound("Subject not found");
+  const ay = await prisma.academicYear.findFirst({ where: { id: term.academicYearId, isDeleted: false } });
+  if (!ay) throw badRequest("Academic year not found");
   if (caller?.role === "CHAIRMAN" && caller.departmentId) {
     const subjectDeptId = s.curriculum?.departmentId ?? s.departmentId ?? null;
     if (subjectDeptId !== caller.departmentId) {
@@ -214,18 +223,71 @@ export async function setPrioritizedFaculty(
   const invalid = facultyIds.filter((id) => !validIds.has(id));
   if (invalid.length > 0) throw badRequest("Some faculty IDs are invalid or not faculty: " + invalid.join(", "));
 
+  const termWhere = { subjectId, academicYearId: term.academicYearId, semester: term.semester };
   await prisma.$transaction(async (tx) => {
-    await tx.subjectFacultyPriority.deleteMany({ where: { subjectId } });
+    await tx.subjectFacultyPriority.deleteMany({ where: termWhere });
     if (facultyIds.length > 0) {
       await tx.subjectFacultyPriority.createMany({
         data: facultyIds.map((facultyId, index) => ({
           subjectId,
           facultyId,
           priority: index,
+          academicYearId: term.academicYearId,
+          semester: term.semester,
         })),
       });
     }
   });
 
-  return getPrioritizedFaculty(subjectId);
+  return getPrioritizedFaculty(subjectId, term);
+}
+
+/**
+ * Copies possible subjects from one term to another so a new semester starts from the last one without
+ * touching it. Rows already in the target term are kept. A chairman copies only their own department's faculty.
+ */
+export async function copyPrioritizedFaculty(
+  body: {
+    fromAcademicYearId: string;
+    fromSemester: number;
+    toAcademicYearId: string;
+    toSemester: number;
+    facultyIds?: string[];
+  },
+  caller?: SubjectCaller
+) {
+  if (body.fromAcademicYearId === body.toAcademicYearId && body.fromSemester === body.toSemester) {
+    throw badRequest("Pick a different term to copy from.");
+  }
+  const ay = await prisma.academicYear.findFirst({ where: { id: body.toAcademicYearId, isDeleted: false } });
+  if (!ay) throw badRequest("Target academic year not found");
+
+  const facultyWhere: Record<string, unknown> = {};
+  if (caller?.role === "CHAIRMAN") {
+    if (!caller.departmentId) throw forbidden("Chairman must belong to a department.");
+    facultyWhere.faculty = { departmentId: caller.departmentId };
+  }
+  if (body.facultyIds && body.facultyIds.length > 0) facultyWhere.facultyId = { in: body.facultyIds };
+
+  const source = await prisma.subjectFacultyPriority.findMany({
+    where: {
+      academicYearId: body.fromAcademicYearId,
+      semester: body.fromSemester,
+      subject: { isDeleted: false },
+      ...facultyWhere,
+    },
+    orderBy: [{ subjectId: "asc" }, { priority: "asc" }],
+    select: { subjectId: true, facultyId: true, priority: true },
+  });
+  const result = await prisma.subjectFacultyPriority.createMany({
+    data: source.map((r) => ({
+      subjectId: r.subjectId,
+      facultyId: r.facultyId,
+      priority: r.priority,
+      academicYearId: body.toAcademicYearId,
+      semester: body.toSemester,
+    })),
+    skipDuplicates: true,
+  });
+  return { found: source.length, copied: result.count, skipped: source.length - result.count };
 }

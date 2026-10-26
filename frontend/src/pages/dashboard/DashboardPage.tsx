@@ -33,7 +33,7 @@ export function DashboardPage() {
         Welcome, {user?.name}. You are signed in as {user?.role}.
       </p>
 
-      {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && <DashboardOverview />}
+      {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && <DashboardOverview />}
 
       {/* Scheduler — primary for CHAIRMAN */}
       {user?.role === "CHAIRMAN" && (
@@ -78,7 +78,7 @@ export function DashboardPage() {
       </section>
 
       {/* Management — rooms, curriculum, subjects, student classes; ADMIN also users & academic years */}
-      {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
+      {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && (
         <section className="mb-6">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-foreground-muted">Management</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

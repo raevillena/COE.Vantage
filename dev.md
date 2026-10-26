@@ -1096,6 +1096,29 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Release checklist: add the entry, bump `VITE_APP_VERSION` in `frontend/.env.production`, tag the images.
 - Entries before v0.3.0 were reconstructed from git history; v0.2.0 and v0.2.2 are best-effort labels (the commits only tagged v0.2.1 and v0.2.3).
 
+### 33. Possible subjects to teach are per term
+
+- `SubjectFacultyPriority` now has `academicYearId` + `semester` (migration `20260602000000_priority_per_term`; unique on subject + faculty + year + semester). The migration copies existing rows to the active academic year for semesters 1 and 2, then deletes the legacy rows without a term (kept untouched if no year is active; legacy rows are ignored by the app).
+- API: `GET /subjects/:id/prioritized-faculty?academicYearId&semester`, `PUT` body includes `academicYearId` + `semester` (replaces that term's list only), `GET /users/:id/prioritized-subjects?academicYearId&semester`, and `POST /subjects/prioritized-faculty/copy` (`from*` / `to*` term, optional `facultyIds`; never overwrites rows already in the target; a chairman copies only their department's faculty).
+- Consumers filter by term: auto-assign (`autoAssignForClass`), `loadCurriculumProgress` (eligible faculty) and the dashboard projection.
+- Faculty page: the dialog edits the term selected at the top of the page, with an "Offered: This semester / All semesters" filter (uses `Subject.semester`; null counts as every semester), a native curriculum filter, and a "Copy possible subjects from another term" action. Subjects page: the prioritized-faculty dialog has its own academic year / semester pickers (defaults to the active year and the subject's semester). Users page viewer also takes a term.
+- Not touched: `Subject.semester` (the curriculum's recommended semester) is a different thing from this per-term assignment.
+
+### 34. COLLEGE_SECRETARY role (read-only, college-wide)
+
+- New `Role.COLLEGE_SECRETARY` (migration `20260603000000_add_college_secretary_role`, `ALTER TYPE ... ADD VALUE`). Not tied to a department: every scope branch in the services only narrows for `CHAIRMAN`, so the secretary gets college-wide data like the dean.
+- Rule: **view everything the dean can view, generate all reports and Excel forms, change nothing.** Enforced on the server by `readOnly("COLLEGE_SECRETARY")` (`middleware/authorize.ts`), which rejects any non-GET request, applied to the routers that also expose writes: faculty-loads, rooms, student-classes, subjects, curriculum, assignment-requests. Department, academic-year and user lists only had the role added to their GET guards. Dashboard, reports and the Excel exports allow the role directly.
+- Not granted: scheduler, Faculty page, Users, Academic years admin, Trash, scheduling rules, grade module. Assignment requests are viewable but the secretary cannot approve or reject them (buttons hidden, and the server blocks POSTs).
+- Frontend: sidebar, dashboard (overview + management cards), routes and the Reports page include the role. Subjects and Student classes hide add / edit / delete / bulk actions for it; Rooms, Departments and Curriculum already derived write access from explicit roles. The Users form lists it as a role admins can assign.
+- New write endpoints must either not allow the role in `authorize(...)` or sit behind a router that uses `readOnly`.
+
+### 35. End-to-end smoke tests (Playwright)
+
+- `frontend/tests/e2e/smoke.spec.ts`, config `frontend/playwright.config.ts`; run `npm run test:e2e` in `frontend` against an already running local stack (backend :4000, frontend :5173, seeded DB; overrides `E2E_BASE_URL`, `E2E_API_URL`, `E2E_PASSWORD`). One browser, tests run in order.
+- Covers: login changelog, chairman dashboard overview + drill-down + Faculty page (copy dialog, possible-subjects filters), admin Excel downloads and projection detail, secretary read-only UI and server-side 403s, faculty without the overview.
+- Needs accounts `admin|dean|chairman|faculty1 @coe.vantage` (seed password `Test123!`) and `secretary@coe.vantage` with role COLLEGE_SECRETARY (create it from the Users page; it is not in the seed).
+- Screenshots of failures go to `frontend/tests/e2e/.results/` (git-ignored). The suite reads data, except the Excel exports it only downloads; it creates nothing.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

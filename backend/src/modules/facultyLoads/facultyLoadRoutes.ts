@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { list, getById, preview, create, update, remove, autoAssign, resetForClass, copyFromPrevious, loadedUnits, availability } from "./facultyLoadController.js";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authorize } from "../../middleware/authorize.js";
+import { authorize, readOnly } from "../../middleware/authorize.js";
 import { validate, validateQuery } from "../../middleware/validate.js";
 import {
   createFacultyLoadSchema,
@@ -16,7 +16,8 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "OFFICER"));
+router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY"));
+router.use(readOnly("COLLEGE_SECRETARY"));
 
 router.get("/", list);
 router.post("/preview", validate(previewFacultyLoadSchema), preview);

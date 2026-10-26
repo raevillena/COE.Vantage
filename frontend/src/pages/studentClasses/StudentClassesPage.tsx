@@ -8,8 +8,11 @@ import { Select } from "../../components/ui/select";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 
 export function StudentClassesPage() {
+  /** The college secretary can view everything the dean can but never change it. */
+  const readOnly = useAppSelector((st) => st.auth.user?.role) === "COLLEGE_SECRETARY";
   const [list, setList] = useState<StudentClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -163,7 +166,7 @@ export function StudentClassesPage() {
     <div>
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-foreground">Student Classes</h1>
-        <Button type="button" onClick={openCreate}>Add Student Class</Button>
+        {!readOnly && <Button type="button" onClick={openCreate}>Add Student Class</Button>}
       </div>
       {list.length > 0 && (
         <div className="mb-4 relative max-w-md">
@@ -187,7 +190,7 @@ export function StudentClassesPage() {
       ) : list.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No student classes yet. Add one to get started.</p>
-          <Button type="button" onClick={openCreate}>Add Student Class</Button>
+          {!readOnly && <Button type="button" onClick={openCreate}>Add Student Class</Button>}
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
@@ -198,7 +201,7 @@ export function StudentClassesPage() {
         </div>
       ) : (
         <>
-          {selectedIds.size > 0 && (
+          {!readOnly && selectedIds.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
               <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
               <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
@@ -213,7 +216,7 @@ export function StudentClassesPage() {
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
-                <th className="w-10 px-2 py-2">
+                {!readOnly && (<th className="w-10 px-2 py-2">
                   <input
                     type="checkbox"
                     checked={allFilteredSelected}
@@ -222,19 +225,19 @@ export function StudentClassesPage() {
                     aria-label="Select all on page"
                     className="rounded border-border-strong focus:ring-focus-ring"
                   />
-                </th>
+                </th>)}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year Level</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Student Count</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Curriculum</th>
-                <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
+                {!readOnly && (<th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((c) => (
                 <tr key={c.id} className={selectedIds.has(c.id) ? "bg-primary-muted/30" : ""}>
-                  <td className="w-10 px-2 py-2">
+                  {!readOnly && (<td className="w-10 px-2 py-2">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(c.id)}
@@ -242,13 +245,13 @@ export function StudentClassesPage() {
                       aria-label={`Select ${c.name}`}
                       className="rounded border-border-strong focus:ring-focus-ring"
                     />
-                  </td>
+                  </td>)}
                   <td className="px-4 py-2 text-foreground">{c.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.yearLevel}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.studentCount}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.name ?? "—"}</td>
-                  <td className="px-4 py-2 text-right">
+                  {!readOnly && (<td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
                         type="button"
@@ -271,7 +274,7 @@ export function StudentClassesPage() {
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
                     </div>
-                  </td>
+                  </td>)}
                 </tr>
               ))}
             </tbody>

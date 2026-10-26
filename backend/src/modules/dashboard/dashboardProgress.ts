@@ -52,7 +52,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
           select: { studentClassId: true, subjectId: true, dayOfWeek: true, startTime: true, endTime: true },
         })
       : [],
-    prisma.subjectFacultyPriority.findMany({ select: { subjectId: true } }),
+    prisma.subjectFacultyPriority.findMany({ where: { academicYearId, semester }, select: { subjectId: true } }),
   ]);
 
   const seenSlots = new Set<string>();

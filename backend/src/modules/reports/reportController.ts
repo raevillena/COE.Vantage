@@ -4,7 +4,7 @@ import { forbidden, badRequest } from "../../utils/errors.js";
 import * as reportExcel from "./reportExcel.js";
 
 function assertFacultyReportAccess(user: { role: string; id: string }, facultyId: string): void {
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.id !== facultyId) {
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY" && user.id !== facultyId) {
     throw forbidden("Not allowed to view this report");
   }
 }
@@ -62,7 +62,7 @@ export async function notaReport(req: Request, res: Response): Promise<void> {
 }
 
 function assertClassReportAccess(user: { role: string }): void {
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN") {
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY") {
     throw forbidden("Not allowed to view this report");
   }
 }
@@ -137,7 +137,7 @@ export async function collegeWorkloadReport(req: Request, res: Response): Promis
     return;
   }
   const user = req.user!;
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN") {
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY") {
     throw forbidden("Not allowed to view this report");
   }
 
@@ -170,7 +170,7 @@ function parseExcelQuery(req: Request): { academicYearId: string; semester: numb
 }
 
 function assertExcelExportAccess(user: { role: string; departmentId?: string | null }): void {
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN") {
+  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY") {
     throw forbidden("Not allowed to export this report");
   }
   if (user.role === "CHAIRMAN" && !user.departmentId) throw forbidden("Chairman must belong to a department");

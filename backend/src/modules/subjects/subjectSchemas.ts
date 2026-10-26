@@ -32,7 +32,27 @@ export type UpdateSubjectBody = z.infer<typeof updateSubjectSchema>["body"];
 export const putPrioritizedFacultySchema = z.object({
   body: z.object({
     facultyIds: z.array(z.string().uuid()),
+    academicYearId: z.string().uuid(),
+    semester: z.number().int().min(1).max(3),
   }),
 });
+
+/** Query for reading possible subjects / prioritized faculty of one term. */
+export const prioritizedTermQuerySchema = z.object({
+  academicYearId: z.string().uuid(),
+  semester: z.coerce.number().int().min(1).max(3),
+});
+
+/** Copy possible subjects from one term to another (never overwrites rows already in the target). */
+export const copyPrioritizedFacultySchema = z.object({
+  body: z.object({
+    fromAcademicYearId: z.string().uuid(),
+    fromSemester: z.number().int().min(1).max(3),
+    toAcademicYearId: z.string().uuid(),
+    toSemester: z.number().int().min(1).max(3),
+    facultyIds: z.array(z.string().uuid()).optional(),
+  }),
+});
+export type CopyPrioritizedFacultyBody = z.infer<typeof copyPrioritizedFacultySchema>["body"];
 
 export type PutPrioritizedFacultyBody = z.infer<typeof putPrioritizedFacultySchema>["body"];

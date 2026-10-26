@@ -14,6 +14,7 @@ import type { ExperimentalFeatureKey } from "../../types/auth";
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
   DEAN: "Dean",
+  COLLEGE_SECRETARY: "College Secretary",
   CHAIRMAN: "Chairman",
   FACULTY: "Faculty",
   OFFICER: "Officer",

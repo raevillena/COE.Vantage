@@ -15,8 +15,8 @@ router.get("/for-schedules", listForSchedules);
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
-router.get("/", authorize("ADMIN", "DEAN", "CHAIRMAN"), list);
-router.get("/:id", authorize("ADMIN", "DEAN", "CHAIRMAN"), getById);
+router.get("/", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), list);
+router.get("/:id", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), getById);
 router.post("/", authorize("ADMIN"), validate(createAcademicYearSchema), create);
 router.patch("/:id", authorize("ADMIN"), validate(updateAcademicYearSchema), update);
 router.delete("/:id", authorize("ADMIN"), remove);

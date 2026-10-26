@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { Subject } from "../../types/api";
+import type { AcademicYear, Subject } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
@@ -8,6 +8,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 import {
   PrioritizedFacultyModal,
   type FacultyWithDepartment,
@@ -15,6 +16,8 @@ import {
 } from "./PrioritizedFacultyModal";
 
 export function SubjectsPage() {
+  /** The college secretary can view everything the dean can but never change it. */
+  const readOnly = useAppSelector((st) => st.auth.user?.role) === "COLLEGE_SECRETARY";
   const [list, setList] = useState<Subject[]>([]);
   /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
   const [curriculumFilter, setCurriculumFilter] = useState("");
@@ -43,6 +46,8 @@ export function SubjectsPage() {
   const [allFaculty, setAllFaculty] = useState<FacultyWithDepartment[]>([]);
   const [priorityLoading, setPriorityLoading] = useState(false);
   const [prioritySaving, setPrioritySaving] = useState(false);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  const [priorityTerm, setPriorityTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
@@ -61,6 +66,7 @@ export function SubjectsPage() {
     load();
     apiClient.get("/curriculum").then(({ data }) => setCurricula(data));
     apiClient.get("/departments").then(({ data }) => setDepartments(data));
+    apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => setAcademicYears(data)).catch(() => setAcademicYears([]));
   }, []);
 
   const openCreate = () => {
@@ -142,18 +148,19 @@ export function SubjectsPage() {
     }
   };
 
-  const openPriorityModal = async (s: Subject) => {
-    setPrioritySubject(s);
+  /** Loads one subject's faculty list for one term (the list is per academic year + semester). */
+  const loadPriority = async (s: Subject, term: { academicYearId: string; semester: number }) => {
     setPriorityList([]);
-    setAllFaculty([]);
     setPriorityLoading(true);
     try {
       const [priRes, facRes] = await Promise.all([
-        apiClient.get<{ facultyId: string; name: string; email: string; priority: number }[]>(`/subjects/${s.id}/prioritized-faculty`),
+        apiClient.get<{ facultyId: string; name: string; email: string; priority: number }[]>(
+          `/subjects/${s.id}/prioritized-faculty`,
+          { params: term }
+        ),
         apiClient.get<FacultyWithDepartment[]>("/users?role=FACULTY"),
       ]);
-      const pri = (priRes.data ?? []).map((p, i) => ({ ...p, priority: i }));
-      setPriorityList(pri);
+      setPriorityList((priRes.data ?? []).map((p, i) => ({ ...p, priority: i })));
       setAllFaculty(facRes.data ?? []);
     } catch {
       toast.error("Failed to load");
@@ -163,11 +170,29 @@ export function SubjectsPage() {
     }
   };
 
+  const openPriorityModal = async (s: Subject) => {
+    const year = academicYears.find((y) => y.isActive) ?? academicYears[0];
+    if (!year) {
+      toast.error("No academic year available");
+      return;
+    }
+    const term = { academicYearId: year.id, semester: s.semester ?? 1 };
+    setPriorityTerm(term);
+    setPrioritySubject(s);
+    setAllFaculty([]);
+    await loadPriority(s, term);
+  };
+
+  const changePriorityTerm = (next: { academicYearId: string; semester: number }) => {
+    setPriorityTerm(next);
+    if (prioritySubject) void loadPriority(prioritySubject, next);
+  };
+
   const savePriority = async (facultyIds: string[]) => {
-    if (!prioritySubject) return;
+    if (!prioritySubject || !priorityTerm) return;
     setPrioritySaving(true);
     try {
-      await apiClient.put(`/subjects/${prioritySubject.id}/prioritized-faculty`, { facultyIds });
+      await apiClient.put(`/subjects/${prioritySubject.id}/prioritized-faculty`, { facultyIds, ...priorityTerm });
       toast.success("Prioritized faculty updated");
       setPrioritySubject(null);
     } catch (err: unknown) {
@@ -247,7 +272,7 @@ export function SubjectsPage() {
     <div>
       <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Subjects</h1>
-        <Button type="button" onClick={openCreate}>Add Subject</Button>
+        {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
       </div>
       {list.length > 0 && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -284,7 +309,7 @@ export function SubjectsPage() {
       ) : list.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No subjects yet. Add one to get started.</p>
-          <Button type="button" onClick={openCreate}>Add Subject</Button>
+          {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
@@ -295,7 +320,7 @@ export function SubjectsPage() {
         </div>
       ) : (
         <>
-          {selectedIds.size > 0 && (
+          {!readOnly && selectedIds.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
               <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
               <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
@@ -310,7 +335,7 @@ export function SubjectsPage() {
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
-                <th className="w-10 px-2 py-2">
+                {!readOnly && (<th className="w-10 px-2 py-2">
                   <input
                     type="checkbox"
                     checked={allFilteredSelected}
@@ -319,20 +344,20 @@ export function SubjectsPage() {
                     aria-label="Select all on page"
                     className="rounded border-border-strong focus:ring-focus-ring"
                   />
-                </th>
+                </th>)}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Code</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Lab</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year level</th>
-                <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
+                {!readOnly && (<th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((s) => (
                 <tr key={s.id} className={selectedIds.has(s.id) ? "bg-primary-muted/30" : ""}>
-                  <td className="w-10 px-2 py-2">
+                  {!readOnly && (<td className="w-10 px-2 py-2">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(s.id)}
@@ -340,7 +365,7 @@ export function SubjectsPage() {
                       aria-label={`Select ${s.code}`}
                       className="rounded border-border-strong focus:ring-focus-ring"
                     />
-                  </td>
+                  </td>)}
                   <td className="px-4 py-2 text-foreground">{s.code}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">
@@ -349,7 +374,7 @@ export function SubjectsPage() {
                   <td className="px-4 py-2 text-foreground-muted">{s.units}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.isLab ? "Yes" : "No"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
-                  <td className="px-4 py-2 text-right">
+                  {!readOnly && (<td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
                         type="button"
@@ -373,7 +398,7 @@ export function SubjectsPage() {
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
                     </div>
-                  </td>
+                  </td>)}
                 </tr>
               ))}
             </tbody>
@@ -465,6 +490,45 @@ export function SubjectsPage() {
         onSave={savePriority}
         saving={prioritySaving}
         loading={priorityLoading}
+        termControls={
+          priorityTerm && (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div>
+                <label htmlFor="pf-ay" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
+                <select
+                  id="pf-ay"
+                  value={priorityTerm.academicYearId}
+                  onChange={(e) => changePriorityTerm({ ...priorityTerm, academicYearId: e.target.value })}
+                  disabled={priorityLoading || prioritySaving}
+                  className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                >
+                  {academicYears.map((y) => (
+                    <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="pf-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+                <select
+                  id="pf-sem"
+                  value={priorityTerm.semester}
+                  onChange={(e) => changePriorityTerm({ ...priorityTerm, semester: Number(e.target.value) })}
+                  disabled={priorityLoading || prioritySaving}
+                  className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                >
+                  <option value={1}>1st Sem</option>
+                  <option value={2}>2nd Sem</option>
+                  <option value={3}>Mid Year</option>
+                </select>
+              </div>
+            </div>
+          )
+        }
+        termLabel={
+          priorityTerm
+            ? `${academicYears.find((y) => y.id === priorityTerm.academicYearId)?.name ?? ""} · ${["", "1st Sem", "2nd Sem", "Mid Year"][priorityTerm.semester]}`
+            : undefined
+        }
       />
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>

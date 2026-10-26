@@ -1,121 +1,195 @@
-# COE.Vantage — Faculty Load Scheduling System
+<div align="center">
 
-Full-stack web application for College of Engineering faculty load scheduling. Chairmen create and manage teaching loads with conflict detection; Deans view all schedules; Admins manage users and academic years.
+<img src="frontend/public/banner.svg" alt="COE.Vantage" width="420" />
 
-## Tech Stack
+### Faculty load scheduling for the College of Engineering
 
-- **Backend:** Node.js, Express, TypeScript, PostgreSQL, Prisma, Redis, JWT (access + refresh), Zod, bcrypt
-- **Frontend:** React, TypeScript, Vite, React Router, Axios, Redux Toolkit, Tailwind CSS v4
+Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-## Prerequisites
+![Version](https://img.shields.io/badge/version-v0.3.3-197fa1)
+![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169e1?logo=postgresql&logoColor=white)
+![Status](https://img.shields.io/badge/license-internal%20use-lightgrey)
 
-- Node.js 18+
-- PostgreSQL
-- Redis
+[Features](#-features) ·
+[Quick start](#-quick-start) ·
+[Roles](#-roles) ·
+[What's new](#-whats-new) ·
+[Deployment](#-deployment) ·
+[Docs](#-documentation)
 
-## Setup
+</div>
 
-### 1. Backend
+---
+
+## ✨ Features
+
+**Scheduling**
+- 🧩 **Drag-and-drop scheduler** with live conflict preview: faculty, room and class overlaps, room capacity and laboratory mismatches are flagged before anything is saved.
+- 🤖 **Auto-assign** for a class, using only the faculty listed as *possible subjects to teach* for that term, respecting unit caps, room capacity and lab needs.
+- 📋 **Copy a class schedule** from a previous term, and reset a class in one step.
+- 🔁 **Cross-department requests**: assigning another department's faculty (also when changing the faculty of a saved load) goes to that department's chairman for approval.
+- 🧪 **Team teaching** and off-system faculty or rooms.
+
+**Faculty & rules**
+- 👥 Per-department faculty with status and **maximum units**. Chairmen and deans carry teaching loads too.
+- ⚖️ **Laboratory units count 3×** toward a faculty's load and maximum units.
+- 🗓️ **Possible subjects are kept per academic year and semester**, so planning a new term never rewrites an old one. Copy them from another term in one click.
+- 🚪 Rooms can be **opened or closed** to other departments per term, and transferred between departments.
+
+**Dashboard & reports**
+- 📊 **Term overview** for chairmen, deans and the college secretary: curriculum scheduled, faculty load used, room use and scheduling gaps, with a projected-completion estimate and the top things that need action.
+- 🔎 **Drill-down pages** behind every number, with search, filters and paging.
+- 📑 **Excel forms in the registrar's layout**: class schedules and the *Summary of Faculty Workload* (actual load, regular load, overload).
+- 🖨️ PDF schedules per faculty, class and room, plus the Notice of Teaching Assignment (NOTA).
+
+**Platform**
+- 🔐 JWT access and refresh tokens (HTTP-only cookie), password reset by email, six roles enforced on the server.
+- 🌗 Light, dark and system themes, per-user schedule colour palettes.
+- 🧭 *What's new* release notes on the login page.
+- 🧪 Experimental **grade module** with a public, access-code grade lookup.
+
+## 🧰 Tech stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | React, TypeScript, Vite, React Router, Redux Toolkit, Axios, Tailwind CSS v4, Radix UI, dnd-kit |
+| Backend | Node.js, Express, TypeScript, Prisma, Zod, bcrypt, ExcelJS, PDFKit |
+| Data | PostgreSQL, Redis (refresh and reset tokens) |
+| Tests | Playwright smoke tests |
+| Deploy | Docker, Kubernetes, nginx |
+
+## 🚀 Quick start
+
+**Prerequisites:** Node.js 18+, PostgreSQL, Redis.
+
+```bash
+git clone https://github.com/raevillena/COE.Vantage.git
+cd COE.Vantage
+```
+
+**1. Backend**
 
 ```bash
 cd backend
 npm install
-```
-
-Copy `backend/.env.example` to `backend/.env` and set:
-
-- `DATABASE_URL` — PostgreSQL connection string (e.g. `postgresql://user:password@localhost:5432/coe_vantage`)
-- `REDIS_URL` — e.g. `redis://localhost:6379`
-- `JWT_ACCESS_SECRET` — long random string
-- `JWT_REFRESH_SECRET` — long random string
-- `FRONTEND_ORIGIN` — e.g. `http://localhost:5173`
-
-Run migrations and seed:
-
-```bash
+cp env.example .env        # then fill in the values below
 npx prisma migrate deploy
-npx prisma db seed
+npx prisma generate
+npm run prisma:seed        # demo accounts and sample data (optional)
+npm run dev                # http://localhost:4000
 ```
 
-Start the server:
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection (defaults to `redis://localhost:6379`) |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Long random strings |
+| `FRONTEND_ORIGIN` | e.g. `http://localhost:5173` |
+| `TRUST_PROXY` | `true` when running behind nginx |
+| `RESET_PASSWORD_BASE_URL`, `SMTP_*` | Password-reset email |
 
-```bash
-npm run dev
-```
+Put machine-specific overrides in `backend/.env.local` (it is loaded after `.env` and is git-ignored). See [`backend/env.example`](backend/env.example) for every option.
 
-Backend runs at `http://localhost:4000`.
-
-Default admin: **admin@coe.vantage** / **Admin123!** (change in production.)
-
-### 2. Frontend
+**2. Frontend**
 
 ```bash
 cd frontend
 npm install
+npm run dev                # http://localhost:5173
 ```
 
-Create `frontend/.env` if you need to override the API base URL:
+The dev server proxies `/api` to `http://localhost:4000`. Set `VITE_API_URL` to point somewhere else.
 
-```
-VITE_API_URL=http://localhost:4000
-```
+**3. Sign in**
 
-For same-origin proxy (default), the Vite dev server proxies `/api` to `http://localhost:4000`, so you can leave this unset.
+The seed creates demo accounts, all with password `Test123!`:
 
-Start the dev server:
+`admin@coe.vantage` · `dean@coe.vantage` · `chairman@coe.vantage` · `faculty1@coe.vantage` · `officer@coe.vantage`
+
+> ⚠️ These are for local development. Change or remove them in production.
+
+## 👤 Roles
+
+| Role | Can do |
+|---|---|
+| **Admin** | Everything: users, academic years, scheduling rules, trash, college-wide data |
+| **Dean** | College-wide view, rooms and departments, cross-department requests, reports |
+| **Chairman** | Schedules their own department: scheduler, auto-assign, faculty, rooms, curricula, subjects, classes, requests |
+| **College Secretary** | Views everything the dean can and generates every report and Excel form, **read-only** (enforced on the server) |
+| **Officer** | Rooms, departments, curricula and student classes |
+| **Faculty** | Their own schedule, NOTA and reports |
+
+## 🆕 What's new
+
+The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
+
+| Version | Highlights |
+|---|---|
+| **v0.3.3** | College Secretary role (college-wide, read-only, all reports) |
+| **v0.3.1** | Possible subjects per academic year and semester, with copy from another term |
+| **v0.3.0** | Dashboard overview and drill-downs, Excel registrar forms, lab load credit (3×), chairman as faculty, cross-department approval on edit |
+| **v0.2.3** | Auto-assign uses possible subjects only; department codes in pickers |
+
+The same notes appear in the app under **What's new** on the login page.
+
+## 🧪 Testing
+
+End-to-end smoke tests run against a local stack (backend on `:4000`, frontend on `:5173`, seeded database):
 
 ```bash
-npm run dev
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e
 ```
 
-Frontend runs at `http://localhost:5173`.
+The suite also expects a `secretary@coe.vantage` account with the College Secretary role (create it from the Users page; it is not in the seed). Details are in [`dev.md`](dev.md), section 35.
 
-## Features
+## 📦 Deployment
 
-- **Auth:** Login, refresh token (HTTP-only cookie), logout, register (ADMIN only)
-- **RBAC:** ADMIN, DEAN, CHAIRMAN, FACULTY, OFFICER with protected routes
-- **CRUD:** Users, Departments, Rooms, Curriculum, Subjects, Student Classes, Academic Years
-- **Faculty loads:** Create with conflict checks (faculty/room/class overlap, capacity, lab room)
-- **Preview:** `POST /faculty-loads/preview` returns conflict flags before saving
-- **Schedules:** Faculty, student class, and room views with color-coded weekly grid
-- **Room availability:** Filter by room, academic year, semester
-- **Reports:** PDF download for faculty, student class, and room (weekly grid + summary)
+Production runs as containers on Kubernetes behind nginx. The step-by-step guide, including the Prisma migrate and seed jobs, is in [`k8s/DEPLOYMENT.md`](k8s/DEPLOYMENT.md).
 
-## API Overview
+Release checklist:
 
-- `POST /auth/login` — body: `{ email, password }` → `{ accessToken, user }`
-- `POST /auth/refresh` — cookie: refreshToken → `{ accessToken }`
-- `POST /auth/logout` — clears refresh cookie
-- `POST /auth/register` — ADMIN only
-- `GET/POST/PATCH/DELETE` — `/users`, `/departments`, `/rooms`, `/curriculum`, `/subjects`, `/student-classes`, `/academic-years`
-- `GET /academic-years/active` — get active academic year
-- `GET/POST/PATCH/DELETE /faculty-loads` — query params: facultyId, roomId, studentClassId, academicYearId, semester
-- `POST /faculty-loads/preview` — body: same as create → `{ facultyConflict, roomConflict, studentConflict, capacityIssue, labRoomMismatch }`
-- `GET /reports/faculty/:id`, `/reports/student-class/:id`, `/reports/room/:id` — query: academicYearId, semester → PDF
+1. Add the entry to `CHANGELOG.md` and `frontend/src/data/changelog.ts`, and set `VITE_APP_VERSION` for the frontend build.
+2. Build and push both images with the new tag.
+3. Update the image tag in `k8s/backend.yaml`, `k8s/frontend.yaml` and `k8s/prisma-migrate-job.yaml`.
+4. Delete the old migrate job, apply the new one, and check its logs before rolling out the backend and frontend.
 
-## Project structure
+## 🗂️ Project structure
 
 ```
 COE.Vantage/
 ├── backend/
-│   ├── prisma/schema.prisma, migrations, seed.ts
+│   ├── prisma/             schema, migrations, seed
 │   └── src/
-│       ├── config/       env, redis
-│       ├── middleware/   authenticate, authorize, validate, errorHandler
-│       ├── modules/      auth, users, departments, rooms, curriculum, subjects, studentClasses, academicYears, facultyLoads, reports
-│       ├── prisma/       client singleton
-│       ├── types/        Express user augmentation
-│       └── utils/        errors
+│       ├── config/         env, redis
+│       ├── middleware/     authenticate, authorize (+ readOnly), validate, errors
+│       ├── modules/        auth, users, departments, rooms, curriculum, subjects,
+│       │                   studentClasses, academicYears, facultyLoads, assignmentRequests,
+│       │                   schedulingRules, dashboard, reports, gradeSubjects
+│       └── utils/          workload credit, errors, email templates
 ├── frontend/
-│   └── src/
-│       ├── api/          apiClient (axios + refresh interceptor)
-│       ├── components/   layout, protectedRoute, scheduleGrid, addFacultyLoadModal
-│       ├── pages/        login, dashboard, users, rooms, curriculum, subjects, studentClasses, academicYears, scheduler, schedules/*, reports
-│       ├── store/        auth slice, hooks
-│       └── types/
-└── README.md
+│   ├── src/
+│   │   ├── components/     layout, scheduler, scheduleGrid, ui, users
+│   │   ├── data/           in-app changelog
+│   │   ├── pages/          dashboard, scheduler, faculty, schedules, reports, rooms, …
+│   │   └── store/          Redux auth state
+│   └── tests/e2e/          Playwright smoke tests
+├── k8s/                    manifests, migrate and seed jobs, deployment guide
+├── CHANGELOG.md
+└── dev.md                  design notes and behaviour reference
 ```
 
-## License
+## 📚 Documentation
 
-Private / internal use.
+- [`dev.md`](dev.md): how the scheduler, auto-assign, exports, dashboard, per-term possible subjects and roles behave, and why.
+- [`CHANGELOG.md`](CHANGELOG.md): release notes.
+- [`PRODUCT.md`](PRODUCT.md): who the product is for and what it must do.
+- [`k8s/DEPLOYMENT.md`](k8s/DEPLOYMENT.md): production deployment.
+
+## 📄 License
+
+Private, for internal use by the College of Engineering. All rights reserved.

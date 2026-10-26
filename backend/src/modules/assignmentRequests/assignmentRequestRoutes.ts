@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { create, list, getPendingCount, approve, reject } from "./assignmentRequestController.js";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authorize } from "../../middleware/authorize.js";
+import { authorize, readOnly } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
 import {
   createAssignmentRequestSchema,
@@ -12,7 +12,8 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "DEAN", "CHAIRMAN"));
+router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"));
+router.use(readOnly("COLLEGE_SECRETARY"));
 
 router.get("/count", getPendingCount);
 router.get("/", list);

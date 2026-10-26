@@ -80,6 +80,8 @@ export function UsersPage() {
   const [prioritizationUser, setPrioritizationUser] = useState<UserListItem | null>(null);
   const [prioritizationList, setPrioritizationList] = useState<PrioritizedSubjectItem[]>([]);
   const [prioritizationLoading, setPrioritizationLoading] = useState(false);
+  const [prioritizationYears, setPrioritizationYears] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
+  const [prioritizationTerm, setPrioritizationTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
 
   const handleSendResetEmail = async (email: string) => {
     setResetEmailLoading(email);
@@ -140,12 +142,12 @@ export function UsersPage() {
 
   const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
 
-  const openViewPrioritization = async (u: UserListItem) => {
-    setPrioritizationUser(u);
+  /** Possible subjects are per academic year + semester, so the viewer picks the term. */
+  const loadPrioritization = async (userId: string, term: { academicYearId: string; semester: number }) => {
     setPrioritizationList([]);
     setPrioritizationLoading(true);
     try {
-      const { data } = await apiClient.get<PrioritizedSubjectItem[]>(`/users/${u.id}/prioritized-subjects`);
+      const { data } = await apiClient.get<PrioritizedSubjectItem[]>(`/users/${userId}/prioritized-subjects`, { params: term });
       setPrioritizationList(data);
     } catch {
       toast.error("Failed to load faculty prioritization");
@@ -153,6 +155,34 @@ export function UsersPage() {
     } finally {
       setPrioritizationLoading(false);
     }
+  };
+
+  const openViewPrioritization = async (u: UserListItem) => {
+    setPrioritizationUser(u);
+    setPrioritizationList([]);
+    setPrioritizationLoading(true);
+    try {
+      const { data: years } = await apiClient.get<{ id: string; name: string; isActive: boolean }[]>("/academic-years");
+      setPrioritizationYears(years);
+      const year = years.find((y) => y.isActive) ?? years[0];
+      if (!year) {
+        setPrioritizationTerm(null);
+        setPrioritizationLoading(false);
+        return;
+      }
+      const term = { academicYearId: year.id, semester: 1 };
+      setPrioritizationTerm(term);
+      await loadPrioritization(u.id, term);
+    } catch {
+      toast.error("Failed to load faculty prioritization");
+      setPrioritizationUser(null);
+      setPrioritizationLoading(false);
+    }
+  };
+
+  const changePrioritizationTerm = (next: { academicYearId: string; semester: number }) => {
+    setPrioritizationTerm(next);
+    if (prioritizationUser) void loadPrioritization(prioritizationUser.id, next);
   };
 
   const handleDeleteConfirm = async () => {
@@ -493,7 +523,7 @@ export function UsersPage() {
           mode={userForm.id ? "edit" : "create"}
           initial={userForm.initial}
           departments={departments}
-          allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER"]}
+          allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}
           onClose={() => setUserForm(null)}
           onSubmit={submitUserForm}
         />
@@ -513,14 +543,44 @@ export function UsersPage() {
       </Dialog.Root>
 
       <Dialog.Root open={prioritizationUser !== null} onOpenChange={(open) => !open && setPrioritizationUser(null)}>
-        <Dialog.Content className="!max-w-2xl" title={`Faculty prioritization — ${prioritizationUser?.name ?? ""}`} description="Subjects this faculty is prioritized to teach (set per subject on the Subjects page).">
+        <Dialog.Content className="!max-w-2xl" title={`Faculty prioritization — ${prioritizationUser?.name ?? ""}`} description="Subjects this faculty is prioritized to teach in the selected term (set on the Faculty or Subjects page).">
           <div className="mt-4">
+            {prioritizationTerm && (
+              <div className="mb-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label htmlFor="up-ay" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
+                  <select
+                    id="up-ay"
+                    value={prioritizationTerm.academicYearId}
+                    onChange={(e) => changePrioritizationTerm({ ...prioritizationTerm, academicYearId: e.target.value })}
+                    className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  >
+                    {prioritizationYears.map((y) => (
+                      <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="up-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+                  <select
+                    id="up-sem"
+                    value={prioritizationTerm.semester}
+                    onChange={(e) => changePrioritizationTerm({ ...prioritizationTerm, semester: Number(e.target.value) })}
+                    className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  >
+                    <option value={1}>1st Sem</option>
+                    <option value={2}>2nd Sem</option>
+                    <option value={3}>Mid Year</option>
+                  </select>
+                </div>
+              </div>
+            )}
             {prioritizationLoading ? (
               <div className="flex justify-center py-8" aria-busy="true">
                 <Spinner />
               </div>
             ) : prioritizationList.length === 0 ? (
-              <p className="py-6 text-center text-foreground-muted">No subject prioritization. Prioritization is set per subject under Subjects → Set prioritized faculty.</p>
+              <p className="py-6 text-center text-foreground-muted">No possible subjects set for this term. They are set on the Faculty page (or per subject under Subjects → Set prioritized faculty).</p>
             ) : (
               <div className="rounded border border-border overflow-hidden">
                 <table className="min-w-full divide-y divide-border text-sm">

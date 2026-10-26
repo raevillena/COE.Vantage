@@ -2,6 +2,22 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.3 - 2026-10-24
+
+College Secretary
+
+- **New:** New College Secretary role: sees the whole college like the dean (dashboard, schedules, rooms, curriculum, subjects, classes, requests) and can generate every report and Excel form, without being able to change anything.
+- **Improved:** Read-only access for this role is enforced on the server, not just hidden in the screens.
+
+## v0.3.1 - 2026-10-24
+
+Possible subjects per semester
+
+- **Improved:** Possible subjects to teach are now kept per academic year and semester, so planning a new semester no longer changes earlier ones.
+- **New:** Copy a department's possible subjects from another term in one step.
+- **Improved:** The subject picker can be limited to subjects offered this semester and to one curriculum.
+- **Improved:** Auto-assign and the dashboard projection use the possible subjects of the selected term.
+
 ## v0.3.0 - 2026-10-23
 
 Dashboard overview, Excel forms, lab load credit

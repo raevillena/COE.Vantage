@@ -689,7 +689,7 @@ export async function autoAssignForClass(
 
   const subjectIds = subjects.map((s) => s.id);
   const priorities = await prisma.subjectFacultyPriority.findMany({
-    where: { subjectId: { in: subjectIds } },
+    where: { subjectId: { in: subjectIds }, academicYearId, semester },
     orderBy: { priority: "asc" },
     include: { faculty: { select: { id: true, departmentId: true } } },
   });
@@ -926,7 +926,7 @@ export async function autoAssignForClass(
     const subjectDeptId = s.departmentId ?? studentClass.curriculum.departmentId ?? null;
     const prioritized = prioritiesBySubject.get(s.id) ?? [];
     if (prioritized.length === 0) {
-      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No faculty has this subject in their possible subjects to teach" });
+      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No faculty has this subject in their possible subjects to teach for this term" });
       continue;
     }
     const prioritizedIds = new Set(prioritized.map((p) => p.facultyId));

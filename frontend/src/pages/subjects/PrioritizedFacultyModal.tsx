@@ -133,6 +133,10 @@ interface PrioritizedFacultyModalProps {
   onSave: (facultyIds: string[]) => Promise<void>;
   saving: boolean;
   loading: boolean;
+  /** Term picker shown above the panels (the list is per academic year + semester). */
+  termControls?: React.ReactNode;
+  /** Human-readable term, e.g. "2025-2026 · 2nd Sem". */
+  termLabel?: string;
 }
 
 /** Group faculty by department for the left panel. */
@@ -168,6 +172,8 @@ export function PrioritizedFacultyModal({
   onSave,
   saving,
   loading,
+  termControls,
+  termLabel,
 }: PrioritizedFacultyModalProps) {
   const [priorityList, setPriorityList] = useState<PrioritizedFacultyItem[]>(initialPriorityList);
   const [overId, setOverId] = useState<string | null>(null);
@@ -283,9 +289,10 @@ export function PrioritizedFacultyModal({
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content
         title={subject ? `Prioritized faculty — ${subject.code}` : "Prioritized faculty"}
-        description="Drag faculty from the left (by department) into the right panel to set priority order. Auto-assign will use this order. You can reorder or remove via drag or the × button."
+        description={`Drag faculty from the left (by department) into the right panel to set priority order. Auto-assign will use this order${termLabel ? ` for ${termLabel} only` : ""}. You can reorder or remove via drag or the × button.`}
         className="!max-w-[min(56rem,95vw)] w-[95vw] max-h-[90vh] overflow-hidden flex flex-col"
       >
+        {termControls}
         {loading ? (
           <div className="flex justify-center py-12" aria-busy="true">
             <Spinner />

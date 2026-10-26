@@ -1,14 +1,15 @@
 import { Router } from "express";
 import { list, getById, create, update, remove, listTrash, restore, permanentDelete, applyImport, getCurriculumSubjects, clearCurriculum } from "./curriculumController.js";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authorize } from "../../middleware/authorize.js";
+import { authorize, readOnly } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
 import { createCurriculumSchema, updateCurriculumSchema, applyImportSchema } from "./curriculumSchemas.js";
 
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN"));
+router.use(authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"));
+router.use(readOnly("COLLEGE_SECRETARY"));
 
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);

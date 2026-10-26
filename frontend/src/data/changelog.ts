@@ -15,6 +15,26 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.3",
+    date: "2026-10-24",
+    title: "College Secretary",
+    changes: [
+      { kind: "new", text: "New College Secretary role: sees the whole college like the dean (dashboard, schedules, rooms, curriculum, subjects, classes, requests) and can generate every report and Excel form, without being able to change anything." },
+      { kind: "improved", text: "Read-only access for this role is enforced on the server, not just hidden in the screens." },
+    ],
+  },
+  {
+    version: "v0.3.1",
+    date: "2026-10-24",
+    title: "Possible subjects per semester",
+    changes: [
+      { kind: "improved", text: "Possible subjects to teach are now kept per academic year and semester, so planning a new semester no longer changes earlier ones." },
+      { kind: "new", text: "Copy a department's possible subjects from another term in one step." },
+      { kind: "improved", text: "The subject picker can be limited to subjects offered this semester and to one curriculum." },
+      { kind: "improved", text: "Auto-assign and the dashboard projection use the possible subjects of the selected term." },
+    ],
+  },
+  {
     version: "v0.3.0",
     date: "2026-10-23",
     title: "Dashboard overview, Excel forms, lab load credit",

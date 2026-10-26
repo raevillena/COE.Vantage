@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import * as userService from "./userService.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
-import { forbidden } from "../../utils/errors.js";
+import { forbidden, badRequest } from "../../utils/errors.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = { ...(req.query as unknown as ListUsersQuery) };
@@ -64,6 +64,9 @@ export async function permanentDelete(req: Request, res: Response): Promise<void
 }
 
 export async function getPrioritizedSubjects(req: Request, res: Response): Promise<void> {
-  const list = await userService.getPrioritizedSubjects(req.params.id);
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester);
+  if (!academicYearId || ![1, 2, 3].includes(semester)) throw badRequest("academicYearId and semester are required");
+  const list = await userService.getPrioritizedSubjects(req.params.id, { academicYearId, semester });
   res.json(list);
 }

@@ -68,7 +68,7 @@ function RequestsNavItem({ onClose }: { onClose: () => void }) {
   const user = useAppSelector((s) => s.auth.user);
 
   useEffect(() => {
-    if (user?.role !== "CHAIRMAN" && user?.role !== "ADMIN" && user?.role !== "DEAN") return;
+    if (user?.role !== "CHAIRMAN" && user?.role !== "ADMIN" && user?.role !== "DEAN" && user?.role !== "COLLEGE_SECRETARY") return;
     apiClient
       .get<{ count: number }>("/assignment-requests/count")
       .then(({ data }) => setPendingCount(data?.count ?? 0))
@@ -131,7 +131,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <NavItem to="/schedules/rooms" icon={DoorOpen} onClose={onClose}>Room availability</NavItem>
         </div>
 
-        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "OFFICER") && (
+        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "OFFICER" || user?.role === "COLLEGE_SECRETARY") && (
           <>
             <Separator.Root className="my-2 h-px bg-border" />
             <div className="space-y-1">
@@ -139,12 +139,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 Management
               </div>
               <NavItem to="/rooms" icon={Building} onClose={onClose}>Rooms</NavItem>
-              {(user?.role === "ADMIN" || user?.role === "DEAN") && <RequestsNavItem onClose={onClose} />}
-              {(user?.role === "ADMIN" || user?.role === "OFFICER" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
+              {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "COLLEGE_SECRETARY") && <RequestsNavItem onClose={onClose} />}
+              {(user?.role === "ADMIN" || user?.role === "OFFICER" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && (
                 <>
                   <NavItem to="/departments" icon={Building2} onClose={onClose}>Departments</NavItem>
                   <NavItem to="/curriculum" icon={BookOpen} onClose={onClose}>Curriculum</NavItem>
-                  {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN") && (
+                  {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && (
                     <>
                       <NavItem to="/subjects" icon={BookMarked} onClose={onClose}>Subjects</NavItem>
                       <NavItem to="/student-classes" icon={GraduationCap} onClose={onClose}>Student classes</NavItem>

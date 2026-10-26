@@ -18,7 +18,8 @@ router.get(
       req.user?.role === "CHAIRMAN" || 
       req.user?.role === "DEAN" || 
       req.user?.role === "FACULTY" || 
-      req.user?.role === "OFFICER";
+      req.user?.role === "OFFICER" ||
+      req.user?.role === "COLLEGE_SECRETARY";
     if (isAdmin || isFacultyOnlyList) return next();
     return authorize("ADMIN")(req, res, next);
   },

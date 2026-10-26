@@ -27,7 +27,7 @@ export async function listStudentClasses(
     where.curriculum = { departmentId: caller.departmentId };
   } else if (
     opts?.departmentId &&
-    (caller?.role === "ADMIN" || caller?.role === "DEAN" || caller?.role === "OFFICER")
+    (caller?.role === "ADMIN" || caller?.role === "DEAN" || caller?.role === "OFFICER" || caller?.role === "COLLEGE_SECRETARY")
   ) {
     where.curriculum = { departmentId: opts.departmentId };
   }

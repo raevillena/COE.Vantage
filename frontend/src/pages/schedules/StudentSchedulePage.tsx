@@ -20,7 +20,7 @@ export function StudentSchedulePage() {
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
   const role = user?.role;
-  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER";
+  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {

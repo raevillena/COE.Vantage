@@ -42,6 +42,14 @@ export function ChairmanFacultyPage() {
   const [subjectsPool, setSubjectsPool] = useState<Subject[]>([]);
   const [addSubjectId, setAddSubjectId] = useState<string>("");
   const [addCurriculumId, setAddCurriculumId] = useState<string>("");
+  /** Term the open "possible subjects" dialog edits (fixed when it opens, so a mid-edit term change cannot mix terms). */
+  const [possibleTerm, setPossibleTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
+  /** "term" = only subjects offered this semester (or any); "all" = every subject of the department. */
+  const [subjectScope, setSubjectScope] = useState<"term" | "all">("term");
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyFromYearId, setCopyFromYearId] = useState("");
+  const [copyFromSemester, setCopyFromSemester] = useState(1);
+  const [copying, setCopying] = useState(false);
   const [savingSubject, setSavingSubject] = useState(false);
 
   const load = useCallback(async () => {
@@ -146,7 +154,19 @@ export function ChairmanFacultyPage() {
     loadUnits();
   };
 
+  const termLabel = (ayId: string, sem: number) => {
+    const name = academicYears.find((y) => y.id === ayId)?.name ?? "";
+    return `${name} · ${sem === 1 ? "1st Sem" : sem === 2 ? "2nd Sem" : "Mid Year"}`;
+  };
+
   const openPossibleSubjects = async (u: UserListItem) => {
+    if (!academicYearId) {
+      toast.error("Select an academic year first");
+      return;
+    }
+    const term = { academicYearId, semester };
+    setPossibleTerm(term);
+    setSubjectScope("term");
     setPossibleSubjectsUser(u);
     setPossibleSubjectsList([]);
     setAddSubjectId("");
@@ -155,7 +175,7 @@ export function ChairmanFacultyPage() {
     try {
       const [subjectsRes, prioritizedRes] = await Promise.all([
         apiClient.get<Subject[]>("/subjects"),
-        apiClient.get<PrioritizedSubjectItem[]>(`/users/${u.id}/prioritized-subjects`),
+        apiClient.get<PrioritizedSubjectItem[]>(`/users/${u.id}/prioritized-subjects`, { params: term }),
       ]);
       setSubjectsPool(subjectsRes.data ?? []);
       setPossibleSubjectsList(prioritizedRes.data ?? []);
@@ -168,11 +188,12 @@ export function ChairmanFacultyPage() {
   };
 
   const addPossibleSubject = async () => {
-    if (!possibleSubjectsUser || !addSubjectId) return;
+    if (!possibleSubjectsUser || !addSubjectId || !possibleTerm) return;
     setSavingSubject(true);
     try {
       const { data: current } = await apiClient.get<{ facultyId: string; name: string; email: string; priority: number }[]>(
-        `/subjects/${addSubjectId}/prioritized-faculty`
+        `/subjects/${addSubjectId}/prioritized-faculty`,
+        { params: possibleTerm }
       );
       const currentIds = (current ?? []).map((p) => p.facultyId);
       if (currentIds.includes(possibleSubjectsUser.id)) {
@@ -182,6 +203,7 @@ export function ChairmanFacultyPage() {
       }
       await apiClient.put(`/subjects/${addSubjectId}/prioritized-faculty`, {
         facultyIds: [...currentIds, possibleSubjectsUser.id],
+        ...possibleTerm,
       });
       const subject = subjectsPool.find((s) => s.id === addSubjectId);
       setPossibleSubjectsList((prev) => [
@@ -206,14 +228,15 @@ export function ChairmanFacultyPage() {
   };
 
   const removePossibleSubject = async (subjectId: string) => {
-    if (!possibleSubjectsUser) return;
+    if (!possibleSubjectsUser || !possibleTerm) return;
     setSavingSubject(true);
     try {
       const { data: current } = await apiClient.get<{ facultyId: string }[]>(
-        `/subjects/${subjectId}/prioritized-faculty`
+        `/subjects/${subjectId}/prioritized-faculty`,
+        { params: possibleTerm }
       );
       const nextIds = (current ?? []).map((p) => p.facultyId).filter((id) => id !== possibleSubjectsUser.id);
-      await apiClient.put(`/subjects/${subjectId}/prioritized-faculty`, { facultyIds: nextIds });
+      await apiClient.put(`/subjects/${subjectId}/prioritized-faculty`, { facultyIds: nextIds, ...possibleTerm });
       setPossibleSubjectsList((prev) => prev.filter((p) => p.subjectId !== subjectId));
       toast.success("Subject removed");
     } catch (err: unknown) {
@@ -224,14 +247,54 @@ export function ChairmanFacultyPage() {
     }
   };
 
+  const openCopy = () => {
+    const other = academicYears.find((y) => y.id !== academicYearId) ?? academicYears[0];
+    setCopyFromYearId(other?.id ?? "");
+    setCopyFromSemester(semester === 1 ? 2 : 1);
+    setCopyOpen(true);
+  };
+
+  const copyFromTerm = async () => {
+    if (!academicYearId || !copyFromYearId) return;
+    setCopying(true);
+    try {
+      const { data } = await apiClient.post<{ found: number; copied: number; skipped: number }>(
+        "/subjects/prioritized-faculty/copy",
+        {
+          fromAcademicYearId: copyFromYearId,
+          fromSemester: copyFromSemester,
+          toAcademicYearId: academicYearId,
+          toSemester: semester,
+          facultyIds: list.map((u) => u.id),
+        }
+      );
+      toast.success(
+        data.found === 0
+          ? "Nothing to copy from that term."
+          : `Copied ${data.copied} possible subject${data.copied === 1 ? "" : "s"}${data.skipped ? ` (${data.skipped} already there)` : ""}.`
+      );
+      setCopyOpen(false);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Copy failed";
+      toast.error(msg);
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  /** Subjects offered in the term's semester (a subject with no semester is offered in every semester). */
+  const poolForScope = subjectsPool.filter(
+    (sub) => subjectScope === "all" || sub.semester == null || sub.semester === (possibleTerm?.semester ?? semester)
+  );
+
   const curriculumOptions = (() => {
     const seen = new Map<string, string>();
-    for (const sub of subjectsPool) {
+    for (const sub of poolForScope) {
       if (sub.curriculumId && !seen.has(sub.curriculumId)) seen.set(sub.curriculumId, sub.curriculum?.name ?? "Curriculum");
     }
     return [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   })();
-  const subjectOptions = subjectsPool
+  const subjectOptions = poolForScope
     .filter((s) => !possibleSubjectsList.some((p) => p.subjectId === s.id))
     .filter((s) => !addCurriculumId || s.curriculumId === addCurriculumId);
 
@@ -247,7 +310,12 @@ export function ChairmanFacultyPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Faculty</h1>
-        <Button type="button" onClick={openAdd}>Add Faculty</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={openCopy} disabled={!academicYearId || academicYears.length < 1}>
+            Copy possible subjects from another term
+          </Button>
+          <Button type="button" onClick={openAdd}>Add Faculty</Button>
+        </div>
       </div>
       <p className="mb-4 text-sm text-foreground-muted">
         Department faculty. Set &quot;Possible subjects to teach&quot; to guide auto-assign: only faculty listed for a subject are considered for that subject.
@@ -398,7 +466,7 @@ export function ChairmanFacultyPage() {
         <Dialog.Content
           className="!max-w-2xl"
           title={`Possible subjects to teach — ${possibleSubjectsUser?.name ?? ""}`}
-          description="Subjects this faculty can be assigned to in auto-assign. Add or remove below; same data is used when setting prioritized faculty per subject on the Subjects page."
+          description={`Subjects this faculty can be assigned to in auto-assign for ${possibleTerm ? termLabel(possibleTerm.academicYearId, possibleTerm.semester) : "this term"} only. Other terms are not changed.`}
         >
           <div className="mt-4 space-y-4">
             {possibleSubjectsLoading ? (
@@ -408,20 +476,41 @@ export function ChairmanFacultyPage() {
             ) : (
               <>
                 <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-0 basis-48">
-                    <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
-                    <SearchableSelect
-                      options={curriculumOptions}
-                      value={addCurriculumId || "__none__"}
-                      onValueChange={(v) => {
-                        setAddCurriculumId(v === "__none__" ? "" : v);
+                  <div className="min-w-0 basis-44">
+                    <label htmlFor="ps-scope" className="mb-1 block text-sm font-medium text-foreground">Offered</label>
+                    <select
+                      id="ps-scope"
+                      value={subjectScope}
+                      onChange={(e) => {
+                        setSubjectScope(e.target.value as "term" | "all");
                         setAddSubjectId("");
                       }}
-                      placeholder="Search curriculum…"
-                      noneOption={{ value: "__none__", label: "All curricula" }}
                       disabled={savingSubject}
-                      aria-label="Filter subjects by curriculum"
-                    />
+                      className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                    >
+                      <option value="term">This semester</option>
+                      <option value="all">All semesters</option>
+                    </select>
+                  </div>
+                  <div className="min-w-0 basis-52">
+                    <label htmlFor="ps-curriculum" className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
+                    <select
+                      id="ps-curriculum"
+                      value={addCurriculumId}
+                      onChange={(e) => {
+                        setAddCurriculumId(e.target.value);
+                        setAddSubjectId("");
+                      }}
+                      disabled={savingSubject}
+                      className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                    >
+                      <option value="">All curricula</option>
+                      {curriculumOptions.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="min-w-0 flex-1 basis-48">
                     <label className="mb-1 block text-sm font-medium text-foreground">Add subject</label>
@@ -494,6 +583,49 @@ export function ChairmanFacultyPage() {
               </>
             )}
           
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
+      <Dialog.Root open={copyOpen} onOpenChange={setCopyOpen}>
+        <Dialog.Content
+          title="Copy possible subjects"
+          description={`Copy your department's possible subjects into ${termLabel(academicYearId, semester)}. Subjects already set there are kept, and the source term is not changed.`}
+        >
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="copy-ay" className="mb-1 block text-sm font-medium text-foreground">From academic year</label>
+              <select
+                id="copy-ay"
+                value={copyFromYearId}
+                onChange={(e) => setCopyFromYearId(e.target.value)}
+                className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+              >
+                {academicYears.map((y) => (
+                  <option key={y.id} value={y.id}>{y.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="copy-sem" className="mb-1 block text-sm font-medium text-foreground">From semester</label>
+              <select
+                id="copy-sem"
+                value={copyFromSemester}
+                onChange={(e) => setCopyFromSemester(Number(e.target.value))}
+                className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+              >
+                <option value={1}>1st Sem</option>
+                <option value={2}>2nd Sem</option>
+                <option value={3}>Mid Year</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" onClick={copyFromTerm} disabled={copying || !copyFromYearId}>
+              {copying ? "Copying…" : "Copy"}
+            </Button>
           </div>
         </Dialog.Content>
       </Dialog.Root>

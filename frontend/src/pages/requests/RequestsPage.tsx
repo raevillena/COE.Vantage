@@ -54,6 +54,7 @@ function roomDisplay(r: AssignmentRequest): string {
 
 export function RequestsPage() {
   const user = useAppSelector((s) => s.auth.user);
+  const canDecide = user?.role !== "COLLEGE_SECRETARY";
   const [list, setList] = useState<AssignmentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
@@ -277,7 +278,7 @@ export function RequestsPage() {
                   </td>
                   {scopeFilter !== "mine" && (statusFilter === "PENDING" || statusFilter === "__all__") && (
                     <td className="px-3 py-2 text-right">
-                      {r.status === "PENDING" && r.requestedBy?.id !== user?.id ? (
+                      {canDecide && r.status === "PENDING" && r.requestedBy?.id !== user?.id ? (
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="primary"
@@ -413,7 +414,7 @@ export function RequestsPage() {
             </div>
 
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-border pt-4 flex-shrink-0">
-              {previewRequest.status === "PENDING" && previewRequest.requestedBy?.id !== user?.id ? (
+              {canDecide && previewRequest.status === "PENDING" && previewRequest.requestedBy?.id !== user?.id ? (
                 <>
                   <Dialog.Close asChild>
                     <Button type="button" variant="secondary">Cancel</Button>

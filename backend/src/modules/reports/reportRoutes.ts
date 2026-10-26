@@ -17,7 +17,7 @@ import { authorize } from "../../middleware/authorize.js";
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "FACULTY"));
+router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "COLLEGE_SECRETARY"));
 
 router.get("/faculty/:facultyId/data", facultyReportData);
 router.get("/faculty/:facultyId/nota", notaReport);

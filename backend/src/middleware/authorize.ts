@@ -3,6 +3,17 @@ import type { Request, Response, NextFunction } from "express";
 import type { Role } from "@prisma/client";
 import { forbidden } from "../utils/errors.js";
 
+/** Roles that may read but never change data. Use after authorize() on routers that also expose writes. */
+export function readOnly(...roles: Role[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (req.user && roles.includes(req.user.role) && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      next(forbidden("This role has read-only access"));
+      return;
+    }
+    next();
+  };
+}
+
 /** Restrict route to given roles. Must be used after authenticate. */
 export function authorize(...allowedRoles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {

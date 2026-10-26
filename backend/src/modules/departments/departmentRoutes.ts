@@ -13,8 +13,8 @@ router.use(authenticate);
 router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
-router.get("/", authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN"), list);
-router.get("/:id", authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN"), getById);
+router.get("/", authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), list);
+router.get("/:id", authorize("ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), getById);
 router.post("/", authorize("ADMIN", "OFFICER", "DEAN"), validate(createDepartmentSchema), create);
 router.patch("/:id", authorize("ADMIN", "OFFICER", "DEAN"), validate(updateDepartmentSchema), update);
 router.delete("/:id", authorize("ADMIN", "OFFICER", "DEAN"), remove);

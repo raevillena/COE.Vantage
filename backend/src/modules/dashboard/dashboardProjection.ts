@@ -40,7 +40,7 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
       select: { id: true, units: true, isLab: true, departmentId: true },
     }),
     prisma.subjectFacultyPriority.findMany({
-      where: { subjectId: { in: subjectIds } },
+      where: { subjectId: { in: subjectIds }, academicYearId, semester },
       select: { subjectId: true, facultyId: true },
     }),
     prisma.user.findMany({

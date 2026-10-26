@@ -123,7 +123,7 @@ export async function getPendingCount(caller: CallerContext): Promise<number> {
       },
     });
   }
-  if (caller.role === "ADMIN" || caller.role === "DEAN") {
+  if (caller.role === "ADMIN" || caller.role === "DEAN" || caller.role === "COLLEGE_SECRETARY") {
     return prisma.crossDepartmentLoadRequest.count({
       where: { status: "PENDING" },
     });
