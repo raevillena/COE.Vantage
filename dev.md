@@ -1119,6 +1119,23 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Needs accounts `admin|dean|chairman|faculty1 @coe.vantage` (seed password `Test123!`) and `secretary@coe.vantage` with role COLLEGE_SECRETARY (create it from the Users page; it is not in the seed).
 - Screenshots of failures go to `frontend/tests/e2e/.results/` (git-ignored). The suite reads data, except the Excel exports it only downloads; it creates nothing.
 
+### 36. Repeat a block on other days
+
+- Where: both ways of adding a block, the scheduler's assignment form (`AssignmentForm`, after dropping a subject) and the **Add load** modal (`AddFacultyLoadModal`). Not offered when editing a saved load. Shared logic lives in `components/scheduler/RepeatDays.tsx` (`useRepeatDays`).
+- Behaviour: an "Also repeat on" row of Mon-Sat checkboxes (the block's own day is disabled). Ticking a day calls `POST /faculty-loads/preview` for that day with the block's faculty, subject, class, room and time; a day with a conflict is **not** ticked and the reason is shown next to it. Ticked days are re-checked automatically when anything in the block changes (and removed if the block's own day moves onto them); Save is blocked while one is checking or in conflict.
+- Saving: the main block is created first, then one `POST /faculty-loads` per ticked day (client-side, no new endpoint). A cross-department faculty creates an approval request per day instead of a load. If a day fails on save, the toast lists which days were not saved and the rest stay saved.
+- **Editing a saved block:** the same row appears with the block's other days ticked. A day counts as the same session when it has the same subject, class, faculty (or off-system name) and start/end time in that term. Those days show "saved"; unticking one marks it "will be removed when you update" and the button reads "Update (N day changes)". Ticking a new day runs the same conflict check (the block being edited is excluded so it cannot conflict with itself). On Update the block itself is PATCHed first, then new days are POSTed and removed days DELETEd one by one; failures are listed in the toast. Edits to faculty, room or time apply to the block being edited only, not to the other days.
+- Limitation: not transactional; the server still re-checks every create, so a conflict that appears between the check and the save is rejected for that day only.
+- Covered by the Playwright test "ticking a day checks for conflicts and saves one block per ticked day" (creates a Wednesday blocker through the API, expects Wed refused and Thu accepted, then removes everything it created).
+
+### 37. Subject rooms for auto-assign, and the Subjects page default
+
+- New table `SubjectRoom` (`subjectId`, `roomId`, unique together; migration `20260604000000_subject_rooms`; cascades with the subject or room). **No rows = unchanged behaviour**: auto-assign picks any room the department can use (its own rooms or rooms open for the term). Not per term: a room restriction describes the subject, not a semester.
+- API: `GET /subjects/:id/rooms`, `PUT /subjects/:id/rooms` (`roomIds`; ADMIN or CHAIRMAN, a chairman only for subjects of their department). `GET /subjects` now includes `subjectRooms` (id + name) for the table.
+- Auto-assign (`autoAssignForClass`): a subject with rooms may only use those, still intersected with the rooms the caller can use, class capacity and lab type. If none qualifies the subject is skipped with the reason "None of this subject's assigned rooms is available to you or fits the class". There is no random fallback for these subjects. Among several allowed rooms it picks the least-booked one, and does not retry another if that one has no free slot.
+- The dashboard projection applies the same restriction when estimating room availability.
+- Subjects page: a **Rooms** column ("Any", the room names, or "N rooms") and a row action **Set rooms for auto-assign** (searchable checklist, own department first). The page now opens on the most recently created curriculum (by `createdAt`) instead of all curricula, and the curriculum filter lists every curriculum, including ones with no subjects yet.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

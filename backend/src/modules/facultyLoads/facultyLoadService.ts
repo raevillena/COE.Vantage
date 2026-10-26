@@ -688,6 +688,16 @@ export async function autoAssignForClass(
   }
 
   const subjectIds = subjects.map((s) => s.id);
+  // Subjects restricted to specific rooms (no rows = any available room, as before).
+  const subjectRoomRows = await prisma.subjectRoom.findMany({
+    where: { subjectId: { in: subjectIds }, room: { isDeleted: false } },
+    select: { subjectId: true, roomId: true },
+  });
+  const allowedRoomsBySubject = new Map<string, Set<string>>();
+  for (const r of subjectRoomRows) {
+    if (!allowedRoomsBySubject.has(r.subjectId)) allowedRoomsBySubject.set(r.subjectId, new Set());
+    allowedRoomsBySubject.get(r.subjectId)!.add(r.roomId);
+  }
   const priorities = await prisma.subjectFacultyPriority.findMany({
     where: { subjectId: { in: subjectIds }, academicYearId, semester },
     orderBy: { priority: "asc" },
@@ -954,15 +964,25 @@ export async function autoAssignForClass(
 
     // Choose a room: capacity >= class size, lab vs non-lab, smallest total minutes.
     const classSize = studentClass.studentCount;
-    const roomCandidates = rooms.filter((r) => {
+    const allowedRooms = allowedRoomsBySubject.get(s.id);
+    // A subject with assigned rooms may only use those (still limited to rooms this department can use).
+    const reachableRooms = allowedRooms ? rooms.filter((r) => allowedRooms.has(r.id)) : rooms;
+    const roomCandidates = reachableRooms.filter((r) => {
       if (r.capacity < classSize) return false;
       if (s.isLab && !r.isLab) return false;
       if (!s.isLab && r.isLab) return true;
       return true;
     });
-    const roomPool = roomCandidates.length ? roomCandidates : rooms;
+    // Without assigned rooms the old fallback to any room stays; with them there is no random fallback.
+    const roomPool = roomCandidates.length ? roomCandidates : allowedRooms ? [] : rooms;
     if (!roomPool.length) {
-      skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "No suitable room (capacity or lab type)" });
+      skippedSummary.push({
+        subjectCode: s.code,
+        subjectName: s.name,
+        reason: allowedRooms
+          ? "None of this subject's assigned rooms is available to you or fits the class (capacity or lab type)"
+          : "No suitable room (capacity or lab type)",
+      });
       continue;
     }
 

@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.4",
+    date: "2026-10-26",
+    title: "Repeat blocks on other days, rooms per subject",
+    changes: [
+      { kind: "new", text: "When adding a schedule block, tick \"Also repeat on\" days to create the same block on more days in one save." },
+      { kind: "improved", text: "Each ticked day is checked for faculty, room and class conflicts first, and a day with a conflict is not added." },
+      { kind: "new", text: "Opening a saved block shows the other days it repeats on. Tick a day to add it, untick one to remove it, then Update." },
+      { kind: "new", text: "Subjects can be limited to specific rooms. Auto-assign then places that subject only in those rooms; subjects with no rooms still use any available room." },
+      { kind: "improved", text: "The Subjects page opens on the most recently added curriculum instead of all curricula." },
+    ],
+  },
+  {
     version: "v0.3.3",
     date: "2026-10-24",
     title: "College Secretary",

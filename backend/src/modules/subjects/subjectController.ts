@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as subjectService from "./subjectService.js";
-import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody, CopyPrioritizedFacultyBody } from "./subjectSchemas.js";
+import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody, CopyPrioritizedFacultyBody, PutSubjectRoomsBody } from "./subjectSchemas.js";
 import { prioritizedTermQuerySchema } from "./subjectSchemas.js";
 import { badRequest } from "../../utils/errors.js";
 
@@ -71,4 +71,13 @@ export async function putPrioritizedFaculty(req: Request, res: Response): Promis
 export async function copyPrioritizedFaculty(req: Request, res: Response): Promise<void> {
   const body = req.body as CopyPrioritizedFacultyBody;
   res.json(await subjectService.copyPrioritizedFaculty(body, caller(req)));
+}
+
+export async function getSubjectRooms(req: Request, res: Response): Promise<void> {
+  res.json(await subjectService.getSubjectRooms(req.params.id));
+}
+
+export async function putSubjectRooms(req: Request, res: Response): Promise<void> {
+  const body = req.body as PutSubjectRoomsBody;
+  res.json(await subjectService.setSubjectRooms(req.params.id, body.roomIds, caller(req)));
 }

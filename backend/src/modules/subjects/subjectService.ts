@@ -28,6 +28,7 @@ export async function listSubjects(caller?: SubjectListCaller) {
         },
       },
       department: { select: { id: true, name: true, code: true } },
+      subjectRooms: { select: { roomId: true, room: { select: { name: true } } } },
     },
     orderBy: { code: "asc" },
   });
@@ -290,4 +291,41 @@ export async function copyPrioritizedFaculty(
     skipDuplicates: true,
   });
   return { found: source.length, copied: result.count, skipped: source.length - result.count };
+}
+
+/** Rooms this subject is restricted to for auto-assign (empty = any available room). */
+export async function getSubjectRooms(subjectId: string) {
+  const s = await prisma.subject.findUnique({ where: { id: subjectId } });
+  if (!s || s.isDeleted) throw notFound("Subject not found");
+  const rows = await prisma.subjectRoom.findMany({
+    where: { subjectId, room: { isDeleted: false } },
+    include: { room: { select: { id: true, name: true, capacity: true, isLab: true, departmentId: true } } },
+    orderBy: { room: { name: "asc" } },
+  });
+  return rows.map((r) => r.room);
+}
+
+/** Replaces the room list of a subject. A chairman can only do this for subjects of their department. */
+export async function setSubjectRooms(subjectId: string, roomIds: string[], caller?: SubjectCaller) {
+  const s = await prisma.subject.findUnique({
+    where: { id: subjectId },
+    include: { curriculum: { select: { departmentId: true } } },
+  });
+  if (!s || s.isDeleted) throw notFound("Subject not found");
+  if (caller?.role === "CHAIRMAN" && caller.departmentId) {
+    const subjectDeptId = s.curriculum?.departmentId ?? s.departmentId ?? null;
+    if (subjectDeptId !== caller.departmentId) {
+      throw forbidden("You can only set rooms for subjects in your department.");
+    }
+  }
+  const unique = [...new Set(roomIds)];
+  const rooms = await prisma.room.findMany({ where: { id: { in: unique }, isDeleted: false }, select: { id: true } });
+  if (rooms.length !== unique.length) throw badRequest("Some rooms were not found.");
+  await prisma.$transaction(async (tx) => {
+    await tx.subjectRoom.deleteMany({ where: { subjectId } });
+    if (unique.length > 0) {
+      await tx.subjectRoom.createMany({ data: unique.map((roomId) => ({ subjectId, roomId })) });
+    }
+  });
+  return getSubjectRooms(subjectId);
 }

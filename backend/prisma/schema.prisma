@@ -140,6 +140,7 @@ model Room {
   controlDepartment   Department?  @relation("ControlDepartment", fields: [controlDepartmentId], references: [id], onDelete: SetNull)
   facultyLoads        FacultyLoad[]
   termAvailability    RoomTermAvailability[]
+  subjectRooms        SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
 
   @@index([departmentId])
@@ -200,6 +201,7 @@ model Subject {
   department    Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   facultyLoads  FacultyLoad[]
   subjectFacultyPriorities SubjectFacultyPriority[]
+  subjectRooms SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
   @@unique([curriculumId, code])
   @@index([isDeleted])
@@ -316,6 +318,21 @@ model FacultyLoad {
   @@index([roomId, dayOfWeek, academicYearId, semester])
   @@index([facultyId, dayOfWeek, academicYearId, semester])
   @@index([studentClassId, dayOfWeek, academicYearId, semester])
+}
+
+/// Rooms a subject is restricted to when auto-assign picks a room. No rows = any available room.
+model SubjectRoom {
+  id        String   @id @default(uuid())
+  subjectId String
+  roomId    String
+  createdAt DateTime @default(now())
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, roomId])
+  @@index([subjectId])
+  @@index([roomId])
 }
 
 model SubjectFacultyPriority {

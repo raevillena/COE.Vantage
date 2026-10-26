@@ -7,6 +7,7 @@ import { Dialog } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
+import { useRepeatDays } from "../scheduler/RepeatDays";
 
 interface AddFacultyLoadModalProps {
   academicYearId: string;
@@ -78,6 +79,32 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
     }
   };
 
+  const bodyForDay = (day: number) => ({
+    facultyId: isOthersFaculty ? null : (facultyId || null),
+    facultyDisplayName: isOthersFaculty ? (facultyDisplayName?.trim() || null) : null,
+    subjectId,
+    studentClassId,
+    roomId: isOffSystemRoom ? null : (roomId || null),
+    roomDisplayName: isOffSystemRoom ? (roomDisplayName?.trim() || "Off-system") : null,
+    dayOfWeek: day,
+    startTime,
+    endTime,
+    semester,
+    academicYearId,
+  });
+
+  const repeat = useRepeatDays({
+    enabled: true,
+    primaryDay: dayOfWeek,
+    ready:
+      Boolean(subjectId && studentClassId && academicYearId) &&
+      Boolean((!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim())) &&
+      Boolean(isOffSystemRoom || roomId) &&
+      endTime > startTime,
+    bodyForDay,
+    recheckKey: [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, startTime, endTime, academicYearId, semester].join("|"),
+  });
+
   const hasConflict = preview && (preview.facultyConflict || preview.roomConflict || preview.studentConflict || preview.capacityIssue || preview.labRoomMismatch);
 
   const handleSave = async () => {
@@ -110,7 +137,9 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
         semester,
         academicYearId,
       });
-      if (data?.requestCreated) {
+      if (repeat.days.length > 0) {
+        repeat.toastResult(await repeat.createRepeats(data));
+      } else if (data?.requestCreated) {
         toast.success("Request sent to the faculty's department chairman for approval.");
       } else {
         toast.success("Load added");
@@ -213,6 +242,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
             <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
           </div>
+          {repeat.picker}
           {preview && (
             <div className={`rounded p-3 text-sm ${hasConflict ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`} role="alert">
               {hasConflict ? (
@@ -234,8 +264,8 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
             <Button type="button" variant="secondary">Cancel</Button>
           </Dialog.Close>
           <Button type="button" variant="secondary" onClick={runPreview} disabled={loading}>Check conflicts</Button>
-          <Button type="button" onClick={handleSave} disabled={loading || (preview !== null && Boolean(hasConflict))}>
-            {loading ? "…" : "Save"}
+          <Button type="button" onClick={handleSave} disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked}>
+            {loading ? "…" : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
           </Button>
         </div>
       </Dialog.Content>

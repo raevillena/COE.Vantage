@@ -30,7 +30,7 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
   const classIds = [...new Set(open.map((e) => e.classId))];
   const subjectIds = [...new Set(open.map((e) => e.subjectId))];
 
-  const [classes, subjects, priorities, faculty, usedUnits, rooms, openRows] = await Promise.all([
+  const [classes, subjects, priorities, faculty, usedUnits, rooms, openRows, subjectRoomRows] = await Promise.all([
     prisma.studentClass.findMany({
       where: { id: { in: classIds } },
       select: { id: true, studentCount: true, curriculum: { select: { departmentId: true } } },
@@ -50,7 +50,13 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
     creditedUnitsByFaculty(academicYearId, semester, null),
     loadRoomUtilization(null, academicYearId, semester),
     prisma.roomTermAvailability.findMany({ where: { academicYearId, semester, isOpen: true }, select: { roomId: true } }),
+    prisma.subjectRoom.findMany({ where: { subjectId: { in: subjectIds } }, select: { subjectId: true, roomId: true } }),
   ]);
+  const allowedRoomsBySubject = new Map<string, Set<string>>();
+  for (const r of subjectRoomRows) {
+    if (!allowedRoomsBySubject.has(r.subjectId)) allowedRoomsBySubject.set(r.subjectId, new Set());
+    allowedRoomsBySubject.get(r.subjectId)!.add(r.roomId);
+  }
 
   const classById = new Map(classes.map((c) => [c.id, c]));
   const subjectById = new Map(subjects.map((s) => [s.id, s]));
@@ -117,7 +123,8 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
       (r) =>
         (ownerDeptId == null || r.departmentId === ownerDeptId || openRoomIds.has(r.id)) &&
         r.capacity >= cls.studentCount &&
-        (!subject.isLab || r.isLab)
+        (!subject.isLab || r.isLab) &&
+        (!allowedRoomsBySubject.has(subject.id) || allowedRoomsBySubject.get(subject.id)!.has(r.id))
     );
     if (suitable.length === 0) {
       rows.push({ ...base, outcome: "no-room" });

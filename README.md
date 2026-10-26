@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.3.3-197fa1)
+![Version](https://img.shields.io/badge/version-v0.3.4-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -28,7 +28,8 @@ Build conflict-free teaching loads, see what's left to schedule, and print the r
 
 **Scheduling**
 - 🧩 **Drag-and-drop scheduler** with live conflict preview: faculty, room and class overlaps, room capacity and laboratory mismatches are flagged before anything is saved.
-- 🤖 **Auto-assign** for a class, using only the faculty listed as *possible subjects to teach* for that term, respecting unit caps, room capacity and lab needs.
+- 🤖 **Auto-assign** for a class (optionally limiting a subject to specific rooms), using only the faculty listed as *possible subjects to teach* for that term, respecting unit caps, room capacity and lab needs.
+- 🔂 **Repeat a block on other days**: tick extra days when adding a block; each one is conflict-checked before it can be ticked. Open a saved block to add or remove days later.
 - 📋 **Copy a class schedule** from a previous term, and reset a class in one step.
 - 🔁 **Cross-department requests**: assigning another department's faculty (also when changing the faculty of a saved load) goes to that department's chairman for approval.
 - 🧪 **Team teaching** and off-system faculty or rooms.
@@ -128,6 +129,7 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.3.4** | Repeat a schedule block on other days (add or remove days when editing), limit a subject to specific rooms for auto-assign, Subjects page opens on the newest curriculum |
 | **v0.3.3** | College Secretary role (college-wide, read-only, all reports) |
 | **v0.3.1** | Possible subjects per academic year and semester, with copy from another term |
 | **v0.3.0** | Dashboard overview and drill-downs, Excel registrar forms, lab load credit (3×), chairman as faculty, cross-department approval on edit |

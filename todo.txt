@@ -27,9 +27,13 @@ Scheduler page
  additional:
  - Editing a saved load’s faculty in the Assignment form skips the cross-department approval. Only creating a load goes through it, so picking another department’s faculty while editing saves directly. maybe make this requiring another approval. done (needs migration 20260601000000_request_replaces_load)
  - Auto-assign only considers FACULTY, and the Faculty page only lets you set possible subjects for FACULTY, so a chairman is never auto-assigned. add the chairman and be considered as a faculty. done
+ - currently, when you add 1 block of schedule you only select 1 day. i want to add option to repeat the schedule on another day. so i want to be able to tick other days given that when i tick, it checks if there is no conflict in schedule. done (v0.3.4)
 
 Subjects page
- - currently, the subjects are listed as everything. i want to show them based on curriculum. done (curriculum filter)
+ - currently, the subjects are listed as everything. i want to show them based on curriculum. done (curriculum filter). done
+ - when loading the subjects i want the latest added curriculum to be the filter and not all. done (v0.3.4)
+ - there are subjects that cannot be randomly assigned to any room. so i want to be able to set the subjects a possible room to use only to be used when using auto assign. subjects that are no room assigned can stay as randomly assigned in available rooms your department own or other open rooms. done (v0.3.4, needs migration 20260604000000_subject_rooms)
+ 
 
 Reports
  - Excel export of class schedules and faculty workload (registrar layout, lab units count 3x toward actual load and the max-units cap). done

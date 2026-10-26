@@ -28,6 +28,7 @@ export interface Curriculum {
   departmentId: string | null;
   department?: { id: string; name: string; code: string | null } | null;
   deletedAt?: string | null;
+  createdAt?: string;
 }
 
 /** Extracted or to-apply subject row from curriculum import (no id). */
@@ -60,6 +61,8 @@ export interface Subject {
     department?: { id: string; name: string; code: string | null } | null;
   } | null;
   department?: { id: string; name: string; code: string | null } | null;
+  /** Rooms auto-assign is restricted to for this subject (empty = any available room). */
+  subjectRooms?: { roomId: string; room: { name: string } }[];
   deletedAt?: string | null;
 }
 

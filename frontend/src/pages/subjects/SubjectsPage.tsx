@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { AcademicYear, Subject } from "../../types/api";
+import type { AcademicYear, Room, Subject } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
@@ -33,7 +33,16 @@ export function SubjectsPage() {
     curriculumId: "",
     departmentId: "",
   });
-  const [curricula, setCurricula] = useState<{ id: string; name: string }[]>([]);
+  const [curricula, setCurricula] = useState<{ id: string; name: string; createdAt?: string }[]>([]);
+  const userDeptId = useAppSelector((st) => st.auth.user?.departmentId) ?? null;
+  /** Possible rooms for auto-assign: the subject being edited, all rooms, the ticked room ids. */
+  const [roomsSubject, setRoomsSubject] = useState<Subject | null>(null);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [roomIds, setRoomIds] = useState<Set<string>>(new Set());
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsSaving, setRoomsSaving] = useState(false);
+  const [roomSearch, setRoomSearch] = useState("");
+  const [filterInitialized, setFilterInitialized] = useState(false);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -68,6 +77,46 @@ export function SubjectsPage() {
     apiClient.get("/departments").then(({ data }) => setDepartments(data));
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => setAcademicYears(data)).catch(() => setAcademicYears([]));
   }, []);
+
+  // Start on the most recently added curriculum instead of "All curricula".
+  useEffect(() => {
+    if (filterInitialized || curricula.length === 0) return;
+    const latest = [...curricula].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
+    setCurriculumFilter(latest.id);
+    setFilterInitialized(true);
+  }, [curricula, filterInitialized]);
+
+  const openRooms = async (s: Subject) => {
+    setRoomsSubject(s);
+    setRoomSearch("");
+    setRoomIds(new Set((s.subjectRooms ?? []).map((r) => r.roomId)));
+    setRoomsLoading(true);
+    try {
+      const { data } = await apiClient.get<Room[]>("/rooms");
+      setAllRooms(data ?? []);
+    } catch {
+      toast.error("Failed to load rooms");
+      setRoomsSubject(null);
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  const saveRooms = async () => {
+    if (!roomsSubject) return;
+    setRoomsSaving(true);
+    try {
+      await apiClient.put(`/subjects/${roomsSubject.id}/rooms`, { roomIds: [...roomIds] });
+      toast.success(roomIds.size === 0 ? "Auto-assign may use any available room" : "Rooms saved");
+      setRoomsSubject(null);
+      load();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save rooms";
+      toast.error(msg);
+    } finally {
+      setRoomsSaving(false);
+    }
+  };
 
   const openCreate = () => {
     setEditingId(null);
@@ -206,6 +255,7 @@ export function SubjectsPage() {
   const searchLower = searchQuery.trim().toLowerCase();
   const curriculumOptions = (() => {
     const seen = new Map<string, string>();
+    for (const c of curricula) seen.set(c.id, c.name);
     for (const s of list) if (s.curriculumId && !seen.has(s.curriculumId)) seen.set(s.curriculumId, s.curriculum?.name ?? "Curriculum");
     const opts = [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
     if (list.some((s) => !s.curriculumId)) opts.push({ value: "__none__", label: "No curriculum" });
@@ -351,6 +401,7 @@ export function SubjectsPage() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Lab</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year level</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Rooms</th>
                 {!readOnly && (<th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>)}
               </tr>
             </thead>
@@ -374,6 +425,16 @@ export function SubjectsPage() {
                   <td className="px-4 py-2 text-foreground-muted">{s.units}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.isLab ? "Yes" : "No"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
+                  <td
+                    className="px-4 py-2 text-foreground-muted"
+                    title={(s.subjectRooms ?? []).map((r) => r.room.name).join(", ") || "Auto-assign may use any available room"}
+                  >
+                    {(s.subjectRooms ?? []).length === 0
+                      ? "Any"
+                      : (s.subjectRooms ?? []).length <= 2
+                        ? (s.subjectRooms ?? []).map((r) => r.room.name).join(", ")
+                        : `${(s.subjectRooms ?? []).length} rooms`}
+                  </td>
                   {!readOnly && (<td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
@@ -394,6 +455,7 @@ export function SubjectsPage() {
                         <DropdownMenu.Content align="end">
                           <DropdownMenu.Item onSelect={() => openEdit(s)}>Edit</DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => openPriorityModal(s)}>Set prioritized faculty</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => openRooms(s)}>Set rooms for auto-assign</DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => handleDeleteClick(s.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
@@ -478,6 +540,76 @@ export function SubjectsPage() {
               <Button type="submit">Save</Button>
             </div>
           </form>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={roomsSubject !== null} onOpenChange={(open) => !open && setRoomsSubject(null)}>
+        <Dialog.Content
+          className="!max-w-lg max-h-[90vh] overflow-y-auto"
+          title={`Rooms for auto-assign — ${roomsSubject?.code ?? ""}`}
+          description="Auto-assign will place this subject only in the rooms ticked here. Leave all unticked to let it use any available room (your department's, or other open rooms)."
+        >
+          {roomsLoading ? (
+            <div className="flex justify-center py-8" aria-busy="true">
+              <Spinner />
+            </div>
+          ) : (
+            <>
+              <label htmlFor="room-search" className="sr-only">Search rooms</label>
+              <input
+                id="room-search"
+                type="search"
+                value={roomSearch}
+                onChange={(e) => setRoomSearch(e.target.value)}
+                placeholder="Search rooms…"
+                className="mt-4 w-full rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+              />
+              <ul className="mt-3 max-h-72 divide-y divide-border overflow-y-auto rounded border border-border">
+                {[...allRooms]
+                  .filter((r) => `${r.name} ${r.department?.name ?? ""}`.toLowerCase().includes(roomSearch.trim().toLowerCase()))
+                  .sort((a, b) => {
+                    const own = (r: Room) => (r.departmentId === userDeptId ? 0 : 1);
+                    return own(a) - own(b) || a.name.localeCompare(b.name);
+                  })
+                  .map((r) => (
+                    <li key={r.id}>
+                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-surface-muted">
+                        <input
+                          type="checkbox"
+                          checked={roomIds.has(r.id)}
+                          onChange={() =>
+                            setRoomIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(r.id)) next.delete(r.id);
+                              else next.add(r.id);
+                              return next;
+                            })
+                          }
+                          className="rounded border-border-strong focus:ring-focus-ring"
+                        />
+                        <span className="flex-1 text-foreground">{r.name}</span>
+                        <span className="text-xs text-foreground-muted">
+                          {r.isLab ? "Lab · " : ""}
+                          {r.capacity} seats · {r.department?.code ?? r.department?.name ?? ""}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-2 text-xs text-foreground-muted">
+                {roomIds.size === 0 ? "No rooms ticked: any available room." : `${roomIds.size} room${roomIds.size === 1 ? "" : "s"} ticked.`} A room
+                from another department is used only while it is open for the term.
+              </p>
+            </>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <Button type="button" variant="secondary">Cancel</Button>
+            </Dialog.Close>
+            <Button type="button" onClick={saveRooms} disabled={roomsLoading || roomsSaving}>
+              {roomsSaving ? "…" : "Save"}
+            </Button>
+          </div>
         </Dialog.Content>
       </Dialog.Root>
 

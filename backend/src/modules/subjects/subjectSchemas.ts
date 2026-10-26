@@ -37,6 +37,13 @@ export const putPrioritizedFacultySchema = z.object({
   }),
 });
 
+export const putSubjectRoomsSchema = z.object({
+  body: z.object({
+    roomIds: z.array(z.string().uuid()).max(200),
+  }),
+});
+export type PutSubjectRoomsBody = z.infer<typeof putSubjectRoomsSchema>["body"];
+
 /** Query for reading possible subjects / prioritized faculty of one term. */
 export const prioritizedTermQuerySchema = z.object({
   academicYearId: z.string().uuid(),

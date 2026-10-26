@@ -2,6 +2,16 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.4 - 2026-10-26
+
+Repeat blocks on other days, rooms per subject
+
+- **New:** When adding a schedule block, tick "Also repeat on" days to create the same block on more days in one save.
+- **Improved:** Each ticked day is checked for faculty, room and class conflicts first, and a day with a conflict is not added.
+- **New:** Opening a saved block shows the other days it repeats on. Tick a day to add it, untick one to remove it, then Update.
+- **New:** Subjects can be limited to specific rooms. Auto-assign then places that subject only in those rooms; subjects with no rooms still use any available room.
+- **Improved:** The Subjects page opens on the most recently added curriculum instead of all curricula.
+
 ## v0.3.3 - 2026-10-24
 
 College Secretary

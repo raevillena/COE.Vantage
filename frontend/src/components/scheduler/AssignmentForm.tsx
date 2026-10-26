@@ -11,6 +11,7 @@ import { SearchableSelect } from "../ui/searchableSelect";
 import { Dialog } from "../ui/dialog";
 import { ScheduleGrid } from "../scheduleGrid/ScheduleGrid";
 import { groupFacultyByDepartment, facultyRoleSuffix } from "./facultyGroups";
+import { useRepeatDays } from "./RepeatDays";
 
 /** Parse "HH:mm" to minutes since midnight. */
 function timeToMinutes(time: string): number {
@@ -370,6 +371,34 @@ export function AssignmentForm({
     }
   };
 
+  /** Body for a conflict check / create of this block on a given day. */
+  const bodyForDay = (day: number) => ({
+    facultyId: isOthersFaculty ? null : facultyId || null,
+    facultyDisplayName: isOthersFaculty ? facultyDisplayName?.trim() || null : null,
+    subjectId,
+    studentClassId,
+    roomId: isOffSystemRoom ? null : roomId || null,
+    roomDisplayName: isOffSystemRoom ? roomDisplayName?.trim() || "Off-system" : null,
+    dayOfWeek: day,
+    startTime,
+    endTime,
+    semester,
+    academicYearId,
+  });
+
+  const repeat = useRepeatDays({
+    enabled: !editingLoadId || isEditingSavedLoad,
+    editingLoadId: isEditingSavedLoad ? editingLoadId : null,
+    primaryDay: dayOfWeek,
+    ready:
+      Boolean(subjectId && studentClassId && academicYearId) &&
+      Boolean((!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim())) &&
+      Boolean(isOffSystemRoom || roomId) &&
+      timeToMinutes(endTime) > timeToMinutes(startTime),
+    bodyForDay,
+    recheckKey: [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, startTime, endTime, academicYearId, semester].join("|"),
+  });
+
   const hasConflict =
     preview &&
     (preview.facultyConflict ||
@@ -418,14 +447,19 @@ export function AssignmentForm({
     try {
       if (editingLoadId) {
         const { data } = await apiClient.patch<{ requestCreated?: boolean }>(`/faculty-loads/${editingLoadId}`, payload);
-        if (data?.requestCreated) {
+        if (isEditingSavedLoad && repeat.changeCount > 0) {
+          // Days ticked or unticked in the repeat row: add the new ones, delete the removed ones.
+          repeat.toastEditResult(await repeat.applyEdits());
+        } else if (data?.requestCreated) {
           toast.success("Request sent to the faculty's department chairman. The current load stays until it is approved.");
         } else {
           toast.success("Load updated");
         }
       } else {
         const { data } = await apiClient.post<{ requestCreated?: boolean; id?: string }>("/faculty-loads", payload);
-        if (data?.requestCreated) {
+        if (repeat.days.length > 0) {
+          repeat.toastResult(await repeat.createRepeats(data));
+        } else if (data?.requestCreated) {
           toast.success("Request sent to the faculty's department chairman for approval.");
         } else {
           toast.success("Load added");
@@ -677,6 +711,7 @@ export function AssignmentForm({
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
       </div>
+      {repeat.picker}
       {isEditingSavedLoad && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
           <span className="text-xs font-medium text-foreground-muted shrink-0">Team / split</span>
@@ -755,9 +790,9 @@ export function AssignmentForm({
         <Button
           type="button"
           onClick={handleSave}
-          disabled={loading || (preview !== null && Boolean(hasConflict))}
+          disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked}
         >
-          {loading ? "…" : editingLoadId ? "Update" : "Save"}
+          {loading ? "…" : editingLoadId ? (repeat.changeCount > 0 ? `Update (${repeat.changeCount} day change${repeat.changeCount === 1 ? "" : "s"})` : "Update") : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
         </Button>
         {editingLoadId && (
           <Button type="button" variant="secondary" onClick={handleDelete} disabled={loading}>
