@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, StudentClass, Department } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
@@ -20,14 +21,19 @@ export function StudentSchedulePage() {
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
   const role = user?.role;
+  // A faculty member only sees the classes where they teach, and only through the report endpoints.
+  const isFaculty = role === "FACULTY";
   const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0].id);
+        const term = currentTerm(data);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        }
       }
     });
     if (needsDepartmentFilter) {
@@ -45,6 +51,21 @@ export function StudentSchedulePage() {
 
   useEffect(() => {
     if (!user) return;
+    if (isFaculty) {
+      if (!academicYearId) {
+        setClasses([]);
+        return;
+      }
+      const mine = new URLSearchParams({ academicYearId, semester: String(semester) });
+      apiClient
+        .get<StudentClass[]>(`/reports/my/classes?${mine}`)
+        .then(({ data }) => {
+          setClasses(data ?? []);
+          setSelectedClassId((cur) => ((data ?? []).some((c) => c.id === cur) ? cur : ""));
+        })
+        .catch(() => setClasses([]));
+      return;
+    }
     // Dean, college secretary, admin and officer see every department unless they pick one;
     // a chairman is always limited to their own department by the server.
     const params = new URLSearchParams();
@@ -53,7 +74,7 @@ export function StudentSchedulePage() {
       .get<StudentClass[]>(`/student-classes${params.toString() ? `?${params}` : ""}`)
       .then(({ data }) => setClasses(data ?? []))
       .catch(() => setClasses([]));
-  }, [user, role, needsDepartmentFilter, departmentId]);
+  }, [user, role, isFaculty, academicYearId, semester, needsDepartmentFilter, departmentId]);
 
   useEffect(() => {
     if (!academicYearId || !selectedClassId) {
@@ -61,9 +82,18 @@ export function StudentSchedulePage() {
       return;
     }
     setLoading(true);
+    if (isFaculty) {
+      const q = new URLSearchParams({ academicYearId, semester: String(semester) });
+      apiClient
+        .get<{ loads: FacultyLoad[] }>(`/reports/student-class/${selectedClassId}/data?${q}`)
+        .then(({ data }) => setLoads(data.loads ?? []))
+        .catch(() => setLoads([]))
+        .finally(() => setLoading(false));
+      return;
+    }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), studentClassId: selectedClassId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedClassId]);
+  }, [academicYearId, semester, selectedClassId, isFaculty]);
 
   return (
     <div>
@@ -106,6 +136,7 @@ export function StudentSchedulePage() {
             <Select.Content>
               <Select.Item value="1">1</Select.Item>
               <Select.Item value="2">2</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
@@ -129,7 +160,9 @@ export function StudentSchedulePage() {
           <Spinner />
         </div>
       ) : !selectedClassId ? (
-        <p className="text-foreground-muted">Select a class.</p>
+        <p className="text-foreground-muted">
+          {isFaculty && classes.length === 0 ? "You have no classes in this term." : "Select a class."}
+        </p>
       ) : loads.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted">No schedule entries for this class. Change filters to see other data.</p>

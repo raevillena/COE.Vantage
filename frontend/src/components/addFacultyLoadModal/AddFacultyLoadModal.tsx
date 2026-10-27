@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { useRepeatDays } from "../scheduler/RepeatDays";
+import { TimeRangeWarning } from "../scheduler/TimeRangeWarning";
 
 interface AddFacultyLoadModalProps {
   academicYearId: string;
@@ -242,6 +243,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
             <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="flex-1 rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
           </div>
+          <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={setEndTime} />
           {repeat.picker}
           {preview && (
             <div className={`rounded p-3 text-sm ${hasConflict ? "bg-danger-muted text-danger" : "bg-success-muted text-success"}`} role="alert">

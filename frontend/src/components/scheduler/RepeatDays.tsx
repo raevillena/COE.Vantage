@@ -280,5 +280,5 @@ export function useRepeatDays({ enabled, editingLoadId, primaryDay, ready, bodyF
     </fieldset>
   ) : null;
 
-  return { days, blocked, picker, changeCount, existingCount: Object.keys(existing).length, createRepeats, applyEdits, toastResult, toastEditResult };
+  return { days, blocked, picker, changeCount, existing, existingCount: Object.keys(existing).length, createRepeats, applyEdits, toastResult, toastEditResult };
 }

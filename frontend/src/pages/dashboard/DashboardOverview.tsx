@@ -8,6 +8,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { LOAD_STATE_BADGE } from "../../utils/loadState";
 import { Button } from "../../components/ui/button";
+import { currentTerm } from "../../utils/currentTerm";
 import { downloadFromApi } from "../../utils/downloadFile";
 import { MyWorkloadPanel } from "../../components/dashboard/MyWorkloadPanel";
 import { useAppSelector } from "../../store/hooks";
@@ -119,9 +120,11 @@ export function DashboardOverview() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data: ys }) => {
         setYears(ys);
-        const current = ys.find((y) => y.isActive) ?? ys[0];
-        if (current) setAcademicYearId(current.id);
-        else setLoading(false);
+        const term = currentTerm(ys);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        } else setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);

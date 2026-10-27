@@ -14,5 +14,13 @@ export const updateAcademicYearSchema = z.object({
   }),
 });
 
+export const setCurrentTermSchema = z.object({
+  body: z.object({
+    academicYearId: z.string().uuid(),
+    semester: z.number().int().min(1).max(3),
+  }),
+});
+
+export type SetCurrentTermBody = z.infer<typeof setCurrentTermSchema>["body"];
 export type CreateAcademicYearBody = z.infer<typeof createAcademicYearSchema>["body"];
 export type UpdateAcademicYearBody = z.infer<typeof updateAcademicYearSchema>["body"];

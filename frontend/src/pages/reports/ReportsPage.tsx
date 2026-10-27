@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear } from "../../types/api";
 import type { UserListItem } from "../../types/api";
@@ -53,18 +54,57 @@ export function ReportsPage() {
   const [roomLoads, setRoomLoads] = useState<FacultyLoad[] | null>(null);
   const [roomLoadsLoading, setRoomLoadsLoading] = useState(false);
 
+  const me = useAppSelector((s) => s.auth.user);
+  // A faculty member only sees themselves, the classes they teach and the rooms they use.
+  const isFaculty = me?.role === "FACULTY";
+
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0].id);
+        const term = currentTerm(data);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        }
       }
     });
-    apiClient.get<UserListItem[]>("/users", { params: { role: "FACULTY" } }).then(({ data }) => setFaculties(data ?? []));
-    apiClient.get<StudentClass[]>("/student-classes").then(({ data }) => setClasses(data ?? []));
-    apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(data ?? []));
-  }, []);
+    // Teaching roles all carry loads. The server narrows the list: a chairman gets their department,
+    // a faculty member only themselves.
+    apiClient
+      .get<UserListItem[]>("/users", { params: { role: ["FACULTY", "CHAIRMAN", "DEAN"] }, paramsSerializer: { indexes: null } })
+      .then(({ data }) => setFaculties((data ?? []).filter((u) => u.role === "FACULTY" || u.role === "CHAIRMAN" || u.role === "DEAN")))
+      .catch(() => setFaculties([]));
+    if (!isFaculty) {
+      apiClient.get<StudentClass[]>("/student-classes").then(({ data }) => setClasses(data ?? []));
+      apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(data ?? []));
+    }
+  }, [isFaculty]);
+
+  useEffect(() => {
+    if (!isFaculty) return;
+    if (me) setFacultyId(me.id);
+    if (!academicYearId) {
+      setClasses([]);
+      setRooms([]);
+      return;
+    }
+    const mine = new URLSearchParams({ academicYearId, semester: String(semester) });
+    apiClient
+      .get<StudentClass[]>(`/reports/my/classes?${mine}`)
+      .then(({ data }) => {
+        setClasses(data ?? []);
+        setClassId((cur) => ((data ?? []).some((c) => c.id === cur) ? cur : ""));
+      })
+      .catch(() => setClasses([]));
+    apiClient
+      .get<Room[]>(`/reports/my/rooms?${mine}`)
+      .then(({ data }) => {
+        setRooms(data ?? []);
+        setRoomId((cur) => ((data ?? []).some((r) => r.id === cur) ? cur : ""));
+      })
+      .catch(() => setRooms([]));
+  }, [isFaculty, me, academicYearId, semester]);
 
   const fetchFacultyData = useCallback(async () => {
     if (!academicYearId || !facultyId) {
@@ -228,6 +268,7 @@ export function ReportsPage() {
             <Select.Content>
               <Select.Item value="1">1</Select.Item>
               <Select.Item value="2">2</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>

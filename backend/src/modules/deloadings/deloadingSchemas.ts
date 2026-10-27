@@ -17,8 +17,8 @@ export const putDeloadingsSchema = z.object({
     items: z
       .array(
         z.object({
-          description: z.string().trim().min(1, "Describe the deloading").max(200),
-          units: z.number().gt(0, "Units must be greater than 0").max(60),
+          description: z.string().trim().min(1, "Describe the assignment").max(200),
+          units: z.number().min(0, "Units cannot be negative").max(60),
         })
       )
       .max(20),

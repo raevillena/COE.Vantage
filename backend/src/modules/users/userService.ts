@@ -5,8 +5,10 @@ import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
-export async function listUsers(query: ListUsersQuery) {
-  const where: { role?: Role | { in: Role[] }; departmentId?: string; isDeleted: boolean } = { isDeleted: false };
+/** `onlyId` narrows the list to one person (a faculty member may only list themselves). */
+export async function listUsers(query: ListUsersQuery, onlyId?: string) {
+  const where: { id?: string; role?: Role | { in: Role[] }; departmentId?: string; isDeleted: boolean } = { isDeleted: false };
+  if (onlyId) where.id = onlyId;
   if (Array.isArray(query.role)) {
     if (query.role.length > 0) where.role = { in: query.role };
   } else if (query.role) {

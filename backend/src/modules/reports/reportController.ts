@@ -2,11 +2,21 @@ import type { Request, Response } from "express";
 import * as reportService from "./reportService.js";
 import { forbidden, badRequest } from "../../utils/errors.js";
 import * as reportExcel from "./reportExcel.js";
+import { prisma } from "../../prisma/client.js";
 
-function assertFacultyReportAccess(user: { role: string; id: string }, facultyId: string): void {
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY" && user.id !== facultyId) {
-    throw forbidden("Not allowed to view this report");
+type Caller = { role: string; id: string; departmentId?: string | null };
+
+/**
+ * Faculty report scope: admin, dean and college secretary see anyone; a chairman sees their own department
+ * (and themselves); a faculty member sees only themselves.
+ */
+async function assertFacultyReportAccess(user: Caller, facultyId: string): Promise<void> {
+  if (user.id === facultyId || user.role === "ADMIN" || user.role === "DEAN" || user.role === "COLLEGE_SECRETARY") return;
+  if (user.role === "CHAIRMAN" && user.departmentId) {
+    const target = await prisma.user.findUnique({ where: { id: facultyId }, select: { departmentId: true } });
+    if (target?.departmentId === user.departmentId) return;
   }
+  throw forbidden("Not allowed to view this report");
 }
 
 export async function facultyReportData(req: Request, res: Response): Promise<void> {
@@ -18,7 +28,7 @@ export async function facultyReportData(req: Request, res: Response): Promise<vo
     return;
   }
   const user = req.user!;
-  assertFacultyReportAccess(user, facultyId);
+  await assertFacultyReportAccess(user, facultyId);
   const data = await reportService.getFacultyLoadsForReport(facultyId, academicYearId, semester);
   res.json(data);
 }
@@ -32,7 +42,7 @@ export async function facultyReport(req: Request, res: Response): Promise<void> 
     return;
   }
   const user = req.user!;
-  assertFacultyReportAccess(user, facultyId);
+  await assertFacultyReportAccess(user, facultyId);
   const { faculty, loads } = await reportService.getFacultyLoadsForReport(facultyId, academicYearId, semester);
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildFacultyPdf(faculty, loads, academicYear, semester);
@@ -51,7 +61,7 @@ export async function notaReport(req: Request, res: Response): Promise<void> {
     return;
   }
   const user = req.user!;
-  assertFacultyReportAccess(user, facultyId);
+  await assertFacultyReportAccess(user, facultyId);
   const { faculty, loads } = await reportService.getFacultyLoadsForReport(facultyId, academicYearId, semester);
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildNotaPdf(faculty, loads, academicYear, semester);
@@ -61,10 +71,59 @@ export async function notaReport(req: Request, res: Response): Promise<void> {
   doc.end();
 }
 
-function assertClassReportAccess(user: { role: string }): void {
-  if (user.role !== "ADMIN" && user.role !== "DEAN" && user.role !== "CHAIRMAN" && user.role !== "COLLEGE_SECRETARY") {
-    throw forbidden("Not allowed to view this report");
+/**
+ * Class schedule scope: admin, dean and college secretary see every class; a chairman the classes of their
+ * department curricula; a faculty member only classes where they teach a block in that term.
+ */
+async function assertClassReportAccess(user: Caller, classId: string, academicYearId: string, semester: number): Promise<void> {
+  if (user.role === "ADMIN" || user.role === "DEAN" || user.role === "COLLEGE_SECRETARY") return;
+  if (user.role === "CHAIRMAN") {
+    if (!user.departmentId) throw forbidden("Not allowed to view this report");
+    const cls = await prisma.studentClass.findUnique({ where: { id: classId }, select: { curriculum: { select: { departmentId: true } } } });
+    if (cls && cls.curriculum.departmentId !== user.departmentId) throw forbidden("Not allowed to view this report");
+    return;
   }
+  if (user.role === "FACULTY") {
+    const teaches = await prisma.facultyLoad.count({ where: { studentClassId: classId, facultyId: user.id, academicYearId, semester } });
+    if (teaches > 0) return;
+  }
+  throw forbidden("Not allowed to view this report");
+}
+
+/** Room schedule scope: staff roles see every room; a faculty member only rooms where they teach in that term. */
+async function assertRoomReportAccess(user: Caller, roomId: string, academicYearId: string, semester: number): Promise<void> {
+  if (user.role === "ADMIN" || user.role === "DEAN" || user.role === "CHAIRMAN" || user.role === "COLLEGE_SECRETARY") return;
+  if (user.role === "FACULTY") {
+    const uses = await prisma.facultyLoad.count({ where: { roomId, facultyId: user.id, academicYearId, semester } });
+    if (uses > 0) return;
+  }
+  throw forbidden("Not allowed to view this report");
+}
+
+/** The classes the caller teaches in a term (what a faculty member may open in the class view). */
+export async function myClasses(req: Request, res: Response): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester ?? 1);
+  if (!academicYearId) throw badRequest("academicYearId query is required");
+  const classes = await prisma.studentClass.findMany({
+    where: { isDeleted: false, facultyLoads: { some: { facultyId: req.user!.id, academicYearId, semester } } },
+    include: { curriculum: { select: { id: true, name: true, code: true, department: { select: { id: true, name: true, code: true } } } } },
+    orderBy: [{ yearLevel: "asc" }, { name: "asc" }],
+  });
+  res.json(classes);
+}
+
+/** The rooms the caller teaches in during a term. */
+export async function myRooms(req: Request, res: Response): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  const semester = Number(req.query.semester ?? 1);
+  if (!academicYearId) throw badRequest("academicYearId query is required");
+  const rooms = await prisma.room.findMany({
+    where: { isDeleted: false, facultyLoads: { some: { facultyId: req.user!.id, academicYearId, semester } } },
+    include: { department: { select: { id: true, name: true, code: true } } },
+    orderBy: { name: "asc" },
+  });
+  res.json(rooms);
 }
 
 export async function studentClassReportData(req: Request, res: Response): Promise<void> {
@@ -75,7 +134,7 @@ export async function studentClassReportData(req: Request, res: Response): Promi
     res.status(400).json({ message: "academicYearId query is required" });
     return;
   }
-  assertClassReportAccess(req.user!);
+  await assertClassReportAccess(req.user!, classId, academicYearId, semester);
   const data = await reportService.getStudentClassLoadsForReport(classId, academicYearId, semester);
   res.json(data);
 }
@@ -88,7 +147,7 @@ export async function studentClassReport(req: Request, res: Response): Promise<v
     res.status(400).json({ message: "academicYearId query is required" });
     return;
   }
-  assertClassReportAccess(req.user!);
+  await assertClassReportAccess(req.user!, classId, academicYearId, semester);
   const { studentClass, loads } = await reportService.getStudentClassLoadsForReport(classId, academicYearId, semester);
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildStudentClassPdf(studentClass, loads, academicYear, semester);
@@ -106,7 +165,7 @@ export async function roomReportData(req: Request, res: Response): Promise<void>
     res.status(400).json({ message: "academicYearId query is required" });
     return;
   }
-  assertClassReportAccess(req.user!);
+  await assertRoomReportAccess(req.user!, roomId, academicYearId, semester);
   const data = await reportService.getRoomLoadsForReport(roomId, academicYearId, semester);
   res.json(data);
 }
@@ -119,7 +178,7 @@ export async function roomReport(req: Request, res: Response): Promise<void> {
     res.status(400).json({ message: "academicYearId query is required" });
     return;
   }
-  assertClassReportAccess(req.user!);
+  await assertRoomReportAccess(req.user!, roomId, academicYearId, semester);
   const { room, loads } = await reportService.getRoomLoadsForReport(roomId, academicYearId, semester);
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildRoomPdf(room, loads, academicYear, semester);

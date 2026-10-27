@@ -24,8 +24,13 @@ Rooms page
 Schedules page
  - chairman should be able to see their own schedules. done
  - in schedules page, the college sec and dean must also be able to see the faculty, rooms and class schedules. all of them. while chairman remain to see in the their scope. done (v0.3.5)
+ - faculty view: remove Faculty schedule (a faculty member's own schedule is already on the dashboard). done (v0.3.7)
+ - faculty view of Class schedule: only the classes/sections where the faculty member teaches any subject. done (v0.3.7)
+ - faculty view of Room availability: only the rooms the faculty member uses. done (v0.3.7)
 
 Scheduler page
+ - import GE subjects from a file or the clipboard (Import GE button in the toolbar): match by course code, drag the rest onto the class subjects, resolve time conflicts, then add. done (v0.3.7, no migration)
+ - assignment panel: the time picker does not invert in dark mode; warn when the end time is before the start (12 AM typed for 12 PM). done (v0.3.7)
  - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict. done
  - in the auto-assign feature, i want faculty to be assigned only subjects based only in the possible subject to teach asigned in the faculty page. done
  - in the faculty selection selection when using faculty schedule view. i want to only show the ones in the department including the chairman itself. done
@@ -45,7 +50,12 @@ Subjects page
 Reports
  - Excel export of class schedules and faculty workload (registrar layout, lab units count 3x toward actual load and the max-units cap). done
  - removed the old College workload (Excel) export; registrar forms card renamed College Workload and placed first. done (v0.3.5)
+ - faculty workload Excel: list the deloading items as Other Assignment(s) (OA) beside the courses, one per row with its units under OA load eqv., regular load on the first row as in the sample; people with only deloading are listed too. done (v0.3.7)
+ - Reports page scope: a faculty member sees only their own name (faculty report and NOTA download), their own classes and rooms; chairman limited to their department; dean and college sec see everyone. done (v0.3.7)
  -
 
 Feedback
  - sidebar page at the bottom where users send what should change: page/section, kind, details, screenshots. everyone can read each other's (duplicates), only admin changes status/notes, can delete or archive pictures (bulk purge older than N months). done (v0.3.6, needs migration 20260606000000_feedback and nginx client_max_body_size 20m on the API proxy)
+
+General
+ - the semester filters default to 1st sem. let the admin or college sec set the current academic year and semester so it is the default of the filters (dashboard, schedules, scheduler, rooms, faculty, reports). done (v0.3.7, needs migration 20260607000000_current_semester)

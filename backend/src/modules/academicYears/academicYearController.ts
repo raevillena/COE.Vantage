@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as academicYearService from "./academicYearService.js";
-import type { CreateAcademicYearBody, UpdateAcademicYearBody } from "./academicYearSchemas.js";
+import type { CreateAcademicYearBody, SetCurrentTermBody, UpdateAcademicYearBody } from "./academicYearSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const list = await academicYearService.listAcademicYears();
@@ -39,6 +39,10 @@ export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateAcademicYearBody;
   const y = await academicYearService.updateAcademicYear(req.params.id, body);
   res.json(y);
+}
+
+export async function setCurrentTerm(req: Request, res: Response): Promise<void> {
+  res.json(await academicYearService.setCurrentTerm(req.body as SetCurrentTermBody));
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {

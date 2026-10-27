@@ -11,7 +11,8 @@ import { SearchableSelect } from "../ui/searchableSelect";
 import { Dialog } from "../ui/dialog";
 import { ScheduleGrid } from "../scheduleGrid/ScheduleGrid";
 import { groupFacultyByDepartment, facultyRoleSuffix } from "./facultyGroups";
-import { useRepeatDays } from "./RepeatDays";
+import { useRepeatDays, DAY_NAMES } from "./RepeatDays";
+import { TimeRangeWarning } from "./TimeRangeWarning";
 
 /** Parse "HH:mm" to minutes since midnight. */
 function timeToMinutes(time: string): number {
@@ -131,6 +132,8 @@ export function AssignmentForm({
   const [facultyLoads, setFacultyLoads] = useState<FacultyLoad[]>([]);
   const [facultyScheduleOpen, setFacultyScheduleOpen] = useState(true);
   const [coInstructorOpen, setCoInstructorOpen] = useState(false);
+  /** Other days of this block that get the same co-instructor (its saved repeat days, all ticked by default). */
+  const [coDays, setCoDays] = useState<number[]>([]);
   const [coFacultyId, setCoFacultyId] = useState("");
   const [coRoomId, setCoRoomId] = useState("");
   const [coRoomDisplayName, setCoRoomDisplayName] = useState("");
@@ -527,11 +530,29 @@ export function AssignmentForm({
         return;
       }
       const { data: created } = await apiClient.post<{ requestCreated?: boolean; id?: string }>("/faculty-loads", payload);
-      if (created?.requestCreated) {
-        toast.success("Request sent to the faculty's department chairman for approval.");
-      } else {
-        toast.success("Co-instructor added");
+      // The same co-instructor on the block's other days (each is a team peer of that day's saved block).
+      const added: number[] = [];
+      const failed: string[] = [];
+      for (const day of coDays) {
+        const siblingId = repeat.existing[day];
+        if (!siblingId) continue;
+        const dayPayload = { ...payload, dayOfWeek: day, excludeLoadId: siblingId };
+        try {
+          const { data: p } = await apiClient.post<ConflictPreview>("/faculty-loads/preview", dayPayload);
+          if (p.facultyConflict || p.roomConflict || p.studentConflict || p.capacityIssue || p.labRoomMismatch) {
+            failed.push(`${DAY_NAMES[day - 1]}: ${getConflictSummary(p)}`);
+            continue;
+          }
+          await apiClient.post("/faculty-loads", dayPayload);
+          added.push(day);
+        } catch (err: unknown) {
+          failed.push(`${DAY_NAMES[day - 1]}: ${getApiErrorMessage(err, "failed")}`);
+        }
       }
+      const extra = added.length ? ` and on ${added.map((d) => DAY_NAMES[d - 1]).join(", ")}` : "";
+      if (failed.length > 0) toast.error(`Co-instructor added on ${DAY_NAMES[dayOfWeek - 1]}${extra}. Not added: ${failed.join("; ")}`);
+      else if (created?.requestCreated) toast.success("Request sent to the faculty's department chairman for approval.");
+      else toast.success(`Co-instructor added on ${DAY_NAMES[dayOfWeek - 1]}${extra}`);
       setCoInstructorOpen(false);
       setCoFacultyId("");
       setCoPreview(null);
@@ -711,6 +732,7 @@ export function AssignmentForm({
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
       </div>
+      <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={setEndTime} />
       {repeat.picker}
       {isEditingSavedLoad && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
@@ -725,6 +747,7 @@ export function AssignmentForm({
               setCoPreview(null);
               setCoRoomId(roomId);
               setCoRoomDisplayName(roomDisplayName);
+              setCoDays(Object.keys(repeat.existing).map(Number).sort((a, b) => a - b));
               setCoInstructorOpen(true);
             }}
           >
@@ -732,7 +755,7 @@ export function AssignmentForm({
           </Button>
           {onAddAnotherSession ? (
             <Button type="button" variant="secondary" size="sm" className="min-w-0 shrink" onClick={() => onAddAnotherSession()}>
-              Another session (same subject &amp; class)
+              Split Class
             </Button>
           ) : null}
         </div>
@@ -874,6 +897,25 @@ export function AssignmentForm({
                 />
               )}
             </div>
+            {Object.keys(repeat.existing).length > 0 && (
+              <fieldset className="rounded border border-border p-2">
+                <legend className="px-1 text-xs font-medium text-foreground-muted">Also add the co-instructor on</legend>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {Object.keys(repeat.existing).map(Number).sort((a, b) => a - b).map((d) => (
+                    <label key={d} className="flex items-center gap-1 text-sm text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={coDays.includes(d)}
+                        onChange={(e) => setCoDays((cur) => (e.target.checked ? [...cur, d].sort((a, b) => a - b) : cur.filter((x) => x !== d)))}
+                        className="rounded border-border-strong focus:ring-focus-ring"
+                      />
+                      {DAY_NAMES[d - 1]}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-foreground-muted">This block repeats on these days, so the co-instructor can share them. Each day is checked when you add.</p>
+              </fieldset>
+            )}
             {coLoading && (
               <div className="rounded p-2 text-sm bg-surface-muted text-foreground-muted" role="status">
                 Checking conflicts…

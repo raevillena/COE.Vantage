@@ -10,7 +10,8 @@ export async function list(req: Request, res: Response): Promise<void> {
     query.departmentId = req.user.departmentId;
     if (!query.role) query.role = ["FACULTY", "CHAIRMAN"];
   }
-  const list = await userService.listUsers(query);
+  // A faculty member sees only themselves in people lists (schedule and report dropdowns).
+  const list = await userService.listUsers(query, req.user?.role === "FACULTY" ? req.user.id : undefined);
   res.json(list);
 }
 

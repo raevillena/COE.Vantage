@@ -17,6 +17,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.3.7" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.6" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.5" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.4" })).toBeVisible();
@@ -509,6 +510,12 @@ test.describe("deloading, underload / overload and the faculty view", () => {
       const read = await request.get(`${API}/deloadings?academicYearId=${ay.id}&semester=1`, { headers: { Authorization: `Bearer ${await token(email)}` } });
       expect(read.ok()).toBeTruthy();
     }
+    // A regular assignment has 0 deloading units; negative units are refused.
+    const zero = await request.put(`${API}/deloadings/user/${target!.id}`, { headers: adminHeaders, data: { ...body, items: [{ description: "Thesis panel", units: 0 }] } });
+    expect(zero.status()).toBe(200);
+    const negative = await request.put(`${API}/deloadings/user/${target!.id}`, { headers: adminHeaders, data: { ...body, items: [{ description: "Bad", units: -1 }] } });
+    expect(negative.status()).toBe(400);
+    await request.put(`${API}/deloadings/user/${target!.id}`, { headers: adminHeaders, data: body });
     // The chairman may edit exactly when this person belongs to their department.
     const chairHeaders = { Authorization: `Bearer ${await token("chairman@coe.vantage")}` };
     const chairList = (await (await request.get(`${API}/users?role=FACULTY`, { headers: chairHeaders })).json()) as { id: string }[];
@@ -644,5 +651,377 @@ test.describe("feedback", () => {
     await apage.getByRole("button", { name: "Yes, delete" }).click();
     await expect(apage.getByRole("heading", { name: TITLE })).toHaveCount(0);
     await actx.close();
+  });
+});
+
+test.describe("faculty scope in schedules and reports", () => {
+  async function token(request: import("@playwright/test").APIRequestContext, email: string) {
+    const r = await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } });
+    return ((await r.json()) as { accessToken: string }).accessToken;
+  }
+  const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+  test("a faculty member has no faculty schedule page and sees only their own name, classes and rooms", async ({ page, request }) => {
+    await login(page, "faculty1@coe.vantage");
+    await expect(page.getByRole("link", { name: "Class schedule", exact: true })).toBeVisible();
+    await expect(page.locator('a[href="/schedules/faculty"]')).toHaveCount(0);
+    await page.goto("/schedules/faculty");
+    await page.waitForURL("**/dashboard");
+
+    const ft = await token(request, "faculty1@coe.vantage");
+    const at = await token(request, "admin@coe.vantage");
+    const years = (await (await request.get(`${API}/academic-years/for-schedules`, { headers: auth(ft) })).json()) as { id: string; isActive: boolean }[];
+    const yearId = (years.find((y) => y.isActive) ?? years[0]).id;
+
+    // people list: only themselves
+    const people = (await (await request.get(`${API}/users?role=FACULTY&role=CHAIRMAN&role=DEAN`, { headers: auth(ft) })).json()) as { id: string; email: string }[];
+    expect(people.map((p) => p.email)).toEqual(["faculty1@coe.vantage"]);
+    const me = people[0].id;
+
+    // another person's report is refused, their own is allowed
+    const everyone = (await (await request.get(`${API}/users?role=FACULTY&role=CHAIRMAN`, { headers: auth(at) })).json()) as { id: string }[];
+    const other = everyone.find((u) => u.id !== me)!;
+    expect((await request.get(`${API}/reports/faculty/${other.id}/data?academicYearId=${yearId}&semester=1`, { headers: auth(ft) })).status()).toBe(403);
+    expect((await request.get(`${API}/reports/faculty/${other.id}/nota?academicYearId=${yearId}&semester=1`, { headers: auth(ft) })).status()).toBe(403);
+    expect((await request.get(`${API}/reports/faculty/${me}/data?academicYearId=${yearId}&semester=1`, { headers: auth(ft) })).status()).toBe(200);
+
+    // classes and rooms: only where they teach
+    // every term, so the case where the faculty member does teach is covered when the data has one
+    for (const { yr, sem } of years.flatMap((y) => [1, 2].map((n) => ({ yr: y.id, sem: n })))) {
+      const yearId = yr;
+      const mine = (await (await request.get(`${API}/reports/my/classes?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).json()) as { id: string }[];
+      const allClasses = (await (await request.get(`${API}/student-classes`, { headers: auth(at) })).json()) as { id: string }[];
+      for (const c of mine) {
+        expect((await request.get(`${API}/reports/student-class/${c.id}/data?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).status()).toBe(200);
+      }
+      const notMine = allClasses.find((c) => !mine.some((m) => m.id === c.id));
+      if (notMine) {
+        expect((await request.get(`${API}/reports/student-class/${notMine.id}/data?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).status()).toBe(403);
+      }
+      const myRooms = (await (await request.get(`${API}/reports/my/rooms?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).json()) as { id: string }[];
+      const allRooms = (await (await request.get(`${API}/rooms`, { headers: auth(at) })).json()) as { id: string }[];
+      for (const r of myRooms) {
+        expect((await request.get(`${API}/reports/room/${r.id}/data?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).status()).toBe(200);
+      }
+      const notMyRoom = allRooms.find((r) => !myRooms.some((m) => m.id === r.id));
+      if (notMyRoom) {
+        expect((await request.get(`${API}/reports/room/${notMyRoom.id}/data?academicYearId=${yearId}&semester=${sem}`, { headers: auth(ft) })).status()).toBe(403);
+      }
+    }
+  });
+
+  test("faculty pages and reports load for a faculty member, and the chairman is limited to their department", async ({ page, request }) => {
+    await login(page, "faculty1@coe.vantage");
+    await page.goto("/schedules/student-class");
+    await expect(page.getByRole("heading", { name: "Student Class Schedule" })).toBeVisible();
+    await expect(page.getByText(/Select a class\.|You have no classes in this term\./)).toBeVisible();
+    await page.goto("/schedules/rooms");
+    await expect(page.getByRole("heading", { name: "Room Availability" })).toBeVisible();
+    await expect(page.getByText(/Select a room\.|You have no rooms in this term\./)).toBeVisible();
+    await page.goto("/reports");
+    await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+    await expect(page.getByText("Select academic year and faculty to view schedule.").or(page.getByText(/Total units/)).or(page.getByText("No schedule for this faculty"))).toBeVisible();
+
+    const ct = await token(request, "chairman@coe.vantage");
+    const at = await token(request, "admin@coe.vantage");
+    const years = (await (await request.get(`${API}/academic-years/for-schedules`, { headers: auth(ct) })).json()) as { id: string; isActive: boolean }[];
+    const yearId = (years.find((y) => y.isActive) ?? years[0]).id;
+    const chairman = (await (await request.get(`${API}/users?role=CHAIRMAN`, { headers: auth(at) })).json()) as { id: string; email: string; departmentId: string | null }[];
+    const myDept = chairman.find((u) => u.email === "chairman@coe.vantage")!.departmentId;
+    const all = (await (await request.get(`${API}/users?role=FACULTY&role=CHAIRMAN`, { headers: auth(at) })).json()) as { id: string; departmentId: string | null }[];
+    const foreign = all.find((u) => u.departmentId && u.departmentId !== myDept);
+    if (foreign) {
+      expect((await request.get(`${API}/reports/faculty/${foreign.id}/data?academicYearId=${yearId}&semester=1`, { headers: auth(ct) })).status()).toBe(403);
+    }
+    const dt = await token(request, "dean@coe.vantage");
+    if (foreign) {
+      expect((await request.get(`${API}/reports/faculty/${foreign.id}/data?academicYearId=${yearId}&semester=1`, { headers: auth(dt) })).status()).toBe(200);
+    }
+  });
+});
+
+test.describe("current term", () => {
+  test("the college secretary sets the current term and the filters open on it", async ({ page, request }) => {
+    const token = async (email: string) =>
+      ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const admin = { Authorization: `Bearer ${await token("admin@coe.vantage")}` };
+    const original = (await (await request.get(`${API}/academic-years/active`, { headers: admin })).json()) as { id: string; currentSemester: number } | null;
+    test.skip(!original, "needs an active academic year");
+    // only admin and college secretary may set it
+    const faculty = { Authorization: `Bearer ${await token("faculty1@coe.vantage")}` };
+    expect((await request.put(`${API}/academic-years/current-term`, { headers: faculty, data: { academicYearId: original!.id, semester: 2 } })).status()).toBe(403);
+    expect((await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 4 } })).status()).toBe(400);
+
+    try {
+      await login(page, "secretary@coe.vantage");
+      await page.getByRole("link", { name: "Academic years", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Academic Years" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Add Academic Year" })).toHaveCount(0);
+      await page.getByLabel("Semester", { exact: true }).selectOption("2");
+      await page.getByRole("button", { name: "Set as current term" }).click();
+      await expect(page.getByText("Current term saved")).toBeVisible();
+
+      // filters now open on the 2nd semester
+      await page.goto("/schedules/student-class");
+      await expect(page.getByRole("combobox", { name: "Semester" })).toHaveText(/2/);
+      await page.goto("/reports");
+      await expect(page.getByRole("combobox", { name: "Semester" })).toHaveText(/2/);
+
+      // Mid Year is a valid current semester too
+      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 3 } });
+      await page.goto("/schedules/rooms");
+      await expect(page.getByRole("combobox", { name: "Semester" })).toHaveText(/Mid Year/);
+    } finally {
+      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: original!.currentSemester ?? 1 } });
+    }
+  });
+});
+
+test.describe("scheduler time inputs", () => {
+  test("warns when the end time is before the start (12 AM instead of 12 PM) and the time picker follows dark mode", async ({ page }) => {
+    await login_(page, "chairman@coe.vantage");
+    await page.goto("/scheduler");
+    await page.getByRole("button", { name: /Add load/ }).click();
+    const dialog = page.getByRole("dialog");
+    const [start, end] = [dialog.locator('input[type="time"]').nth(0), dialog.locator('input[type="time"]').nth(1)];
+    await start.fill("09:00");
+    await end.fill("10:00");
+    await expect(dialog.getByText(/negative length/)).toHaveCount(0);
+
+    // 12:00 AM typed for 12:00 PM
+    await end.fill("00:00");
+    const warning = dialog.getByRole("alert").filter({ hasText: "negative length" });
+    await expect(warning).toContainText("12:00 AM");
+    await expect(warning).toContainText("9:00 AM");
+    await warning.getByRole("button", { name: "Set the end time to 12:00 PM" }).click();
+    await expect(end).toHaveValue("12:00");
+    await expect(dialog.getByText(/negative length/)).toHaveCount(0);
+
+    // same time on both ends is also flagged
+    await end.fill("09:00");
+    await expect(dialog.getByRole("alert").filter({ hasText: "no length" })).toBeVisible();
+
+    // native pickers follow the theme
+    expect(await start.evaluate((el) => getComputedStyle(el).colorScheme)).toBe("light");
+    await page.evaluate(() => document.documentElement.classList.add("dark"));
+    expect(await start.evaluate((el) => getComputedStyle(el).colorScheme)).toBe("dark");
+  });
+});
+
+test.describe("GE schedule import", () => {
+  const HEADER = "Program\tYear\tSection\tCourse Code\tCourse Title\tNo. of Units\t\tCourse Title\tNo. of Units\tTime\tDay\tBldg & Room\tFaculty";
+  const SUB = "\t\t\t\t\tLec\tLab";
+
+  test("pastes a GE sheet, matches by code and by drag, resolves a conflict and saves", async ({ page, request }) => {
+    const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const headers = { Authorization: `Bearer ${token}` };
+    const get = async <T>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string; currentSemester: number }>("/academic-years/active");
+    const semester = ay.currentSemester === 2 ? 2 : 1;
+
+    type Subj = { id: string; code: string; codeKey: string; name: string };
+    const classes = await get<{ id: string; name: string }[]>("/student-classes");
+    let target: { id: string; name: string } | null = null;
+    let subjects: Subj[] = [];
+    for (const c of classes) {
+      const r = await get<{ subjects: Subj[] }>(`/ge-import/class-subjects?studentClassId=${c.id}&academicYearId=${ay.id}&semester=${semester}`);
+      if (r.subjects.length >= 2) {
+        target = c;
+        subjects = r.subjects;
+        break;
+      }
+    }
+    test.skip(!target, "needs a class with two subjects in the current term");
+    const [first, second] = subjects;
+
+    const sheet = [
+      HEADER,
+      SUB,
+      `TESTPROG\t1\tZ\t${first.code}\t${first.name}\t3\t0\t${first.name}\t3\t05:00-06:00\tS\tCAB 1\tGE Prof A`,
+      `TESTPROG\t1\tZ\tZZZ 99\tMystery GE\t3\t0\tMystery GE\t3\t05:30-06:30\tS\tCAB 2\tGE Prof B`,
+      `TESTPROG\t1\tZ\tABE 10\t\t\t\tSurveying Lab\t1\t07:30-10:30\tTh\tCOE\tCOE Faculty`,
+    ].join("\n");
+
+    const createdIds: string[] = [];
+    try {
+      await login_(page, "chairman@coe.vantage");
+      await page.goto("/scheduler");
+      await page.getByRole("button", { name: /Import GE/ }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Class to import into").selectOption(target!.id);
+      await dialog.getByLabel("Pasted schedule rows").fill(sheet);
+      await dialog.getByRole("button", { name: "Read schedule" }).click();
+      await expect(dialog.getByText(/Read 3 rows in 1 sections/)).toBeVisible();
+      await dialog.getByLabel(/Section in the file/).selectOption({ label: "TESTPROG 1-Z (3 rows)" });
+      await expect(dialog.getByText("2 rows can be scheduled.")).toBeVisible();
+      await expect(dialog.getByText(/rows by the college's own faculty/)).toBeVisible();
+      await dialog.getByRole("button", { name: "Next: match subjects" }).click();
+
+      // the first row matched by code; the unknown one is dragged onto the second subject
+      await expect(dialog.getByText(/1 matched by course code, 1 to match/)).toBeVisible();
+      const handle = dialog.getByRole("button", { name: "Drag ZZZ 99 onto a subject" });
+      const targetBox = dialog.getByRole("region", { name: "Subjects of this class" }).getByRole("listitem").filter({ hasText: second.code }).first();
+      const from = await handle.boundingBox();
+      const to = await targetBox.boundingBox();
+      await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(from!.x + from!.width / 2 + 10, from!.y + from!.height / 2 + 10, { steps: 3 });
+      for (let i = 1; i <= 12; i += 1) {
+        await page.mouse.move(from!.x + 10 + ((to!.x + 20 - from!.x - 10) * i) / 12, from!.y + 10 + ((to!.y + 10 - from!.y - 10) * i) / 12);
+        await page.waitForTimeout(30);
+      }
+      await page.waitForTimeout(150);
+      await page.mouse.up();
+      await expect(dialog.getByText(/1 matched by course code, 0 to match/)).toBeVisible();
+      await page.waitForTimeout(250); // dnd-kit swallows a click that follows a drop immediately
+      await dialog.getByRole("button", { name: /Next: review \(2 matched\)/ }).click();
+
+      // the two Saturday blocks overlap: blocking until one time is changed
+      await expect(dialog.getByText(/Overlaps another imported block/).first()).toBeVisible();
+      const add = dialog.getByRole("button", { name: /^Add \d+ blocks?$/ });
+      await expect(add).toBeDisabled();
+      await dialog.getByLabel(`Start for ${second.code} Sat`).fill("18:30");
+      await dialog.getByLabel(`End for ${second.code} Sat`).fill("19:30");
+      await expect(dialog.getByText("No conflicts to resolve")).toBeVisible();
+      const reviewed = dialog.getByLabel(/I have reviewed the warnings/);
+      if (await reviewed.count()) await reviewed.check();
+      await expect(add).toBeEnabled();
+      await add.click();
+      await expect(dialog.getByText(/Added 2 blocks to/)).toBeVisible();
+
+      const loads = await get<{ id: string; facultyDisplayName: string | null; startTime: string }[]>(
+        `/faculty-loads?studentClassId=${target!.id}&academicYearId=${ay.id}&semester=${semester}`
+      );
+      const mine = loads.filter((l) => l.facultyDisplayName === "GE Prof A" || l.facultyDisplayName === "GE Prof B");
+      createdIds.push(...mine.map((l) => l.id));
+      expect(mine.map((l) => l.startTime).sort()).toEqual(["17:00", "18:30"]);
+
+      // a second import of the same sheet finds the first block already scheduled
+      const again = await request.post(`${API}/ge-import/preview`, {
+        headers,
+        data: {
+          studentClassId: target!.id,
+          academicYearId: ay.id,
+          semester,
+          blocks: [{ key: "a", subjectId: first.id, dayOfWeek: 6, startTime: "17:00", endTime: "18:00", roomDisplayName: "CAB 1", facultyDisplayName: "GE Prof A" }],
+        },
+      });
+      expect(((await again.json()) as { blocks: { state: string }[] }).blocks[0].state).toBe("exists");
+    } finally {
+      for (const id of createdIds) await request.delete(`${API}/faculty-loads/${id}`, { headers });
+    }
+  });
+
+  test("only a chairman can use the import endpoints", async ({ request }) => {
+    for (const email of ["faculty1@coe.vantage", "dean@coe.vantage", "secretary@coe.vantage"]) {
+      const t = ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+      const res = await request.post(`${API}/ge-import/parse`, { headers: { Authorization: `Bearer ${t}` }, data: { text: "x" } });
+      expect(res.status(), email).toBe(403);
+    }
+  });
+});
+
+test.describe("GE sheet parser", () => {
+  test("reads the registrar sample as a text file and as pasted text", async ({ request }) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dir = path.resolve(process.cwd(), "..");
+    const tsv = path.join(dir, "GE subjects.txt");
+    const csv = path.join(dir, "Batac-Currimao_GE-Course-Offerings_2nd-sem_AY-2026-2027.xlsx - COE.csv");
+    test.skip(!fs.existsSync(tsv) || !fs.existsSync(csv), "needs the sample sheets in the repository root");
+    const t = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const headers = { Authorization: `Bearer ${t}` };
+    type Parsed = { rows: { code: string; codeKey: string; days: number[]; startTime: string; endTime: string; coeFaculty: boolean; problems: string[] }[]; groups: unknown[] };
+    for (const file of [tsv, csv]) {
+      const res = await request.post(`${API}/ge-import/parse`, { headers, multipart: { file: { name: path.basename(file), mimeType: "text/plain", buffer: fs.readFileSync(file) } } });
+      expect(res.status()).toBe(200);
+      const parsed = (await res.json()) as Parsed;
+      expect(parsed.rows).toHaveLength(181);
+      expect(parsed.groups).toHaveLength(45);
+      expect(parsed.rows.filter((r) => r.problems.length > 0)).toHaveLength(0);
+      const phy = parsed.rows.find((r) => r.codeKey === "PHY10")!;
+      expect(phy.days).toEqual([1, 3, 5]);
+      expect([phy.startTime, phy.endTime]).toEqual(["07:00", "08:00"]); // 7 AM, no AM/PM on the sheet
+      const afternoon = parsed.rows.find((r) => r.codeKey === "ENGL01")!;
+      expect([afternoon.startTime, afternoon.endTime]).toEqual(["13:00", "14:30"]); // 1:00 PM
+      expect(parsed.rows.filter((r) => r.coeFaculty).length).toBeGreaterThan(0);
+    }
+    const bad = await request.post(`${API}/ge-import/parse`, { headers, data: { text: "no header here" } });
+    expect(bad.status()).toBe(400);
+  });
+});
+
+test.describe("splitting a repeated subject", () => {
+  test("a co-instructor joins every repeat day and another session starts on a free day", async ({ page, request }) => {
+    const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const headers = { Authorization: `Bearer ${token}` };
+    const get = async <T,>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string }>("/academic-years/active");
+    const faculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Maria Santos"));
+    const coFaculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Revilla"));
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
+    const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
+    test.skip(!faculty || !coFaculty || !cls || !subject || !room, "needs the seeded CE data");
+    type Load = { id: string; facultyId: string | null; dayOfWeek: number; startTime: string; subject: { code: string } };
+    const loadsOf = () => get<Load[]>(`/faculty-loads?studentClassId=${cls!.id}&academicYearId=${ay.id}&semester=1`);
+
+    try {
+      let slot = "";
+      for (const hr of [10, 11, 13, 14, 15, 16, 17, 18]) {
+        const startTime = `${String(hr).padStart(2, "0")}:00`;
+        const made: string[] = [];
+        for (const dayOfWeek of [1, 3, 5]) {
+          const r = await request.post(`${API}/faculty-loads`, {
+            headers,
+            data: { facultyId: faculty!.id, subjectId: subject!.id, studentClassId: cls!.id, roomId: room!.id, dayOfWeek, startTime, endTime: `${String(hr + 1).padStart(2, "0")}:00`, semester: 1, academicYearId: ay.id },
+          });
+          if (r.status() === 201) made.push(((await r.json()) as { id: string }).id);
+        }
+        if (made.length === 3) {
+          slot = startTime;
+          break;
+        }
+        for (const id of made) await request.delete(`${API}/faculty-loads/${id}`, { headers });
+      }
+      test.skip(!slot, "needs a free slot for the faculty on Mon, Wed and Fri");
+
+      await login_(page, "chairman@coe.vantage");
+      await page.goto("/scheduler");
+      await page.getByText("Select class").first().click();
+      await page.getByRole("option", { name: "BS CE 4A" }).click();
+      await page.getByText(/D\. Santos/).first().click({ force: true });
+
+      // split: the co-instructor takes this block and the saved repeat days too
+      await page.getByRole("button", { name: "Add co-instructor" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText("Also add the co-instructor on")).toBeVisible();
+      await expect(dialog.getByRole("checkbox", { name: "Wed" })).toBeChecked();
+      await expect(dialog.getByRole("checkbox", { name: "Fri" })).toBeChecked();
+      await dialog.getByLabel("Co-instructor faculty").click();
+      await page.getByRole("option", { name: /Revilla/ }).click();
+      const addCo = dialog.getByRole("button", { name: "Add co-instructor" });
+      await expect(addCo).toBeEnabled();
+      await addCo.click();
+      await expect(page.getByText(/Co-instructor added on Mon and on Wed, Fri/)).toBeVisible();
+      const afterSplit = await loadsOf();
+      expect(afterSplit.filter((l) => l.facultyId === coFaculty!.id && l.subject.code === "CE101").map((l) => l.dayOfWeek).sort()).toEqual([1, 3, 5]);
+
+      // another session: same faculty and room come along and the day is free for the class
+      await page.getByText(/D\. Santos/).first().click({ force: true });
+      await page.getByRole("button", { name: "Split Class" }).click();
+      await expect(page.getByText("Dr. Maria Santos").first()).toBeVisible();
+      const busyDays = new Set(afterSplit.filter((l) => l.startTime === slot).map((l) => l.dayOfWeek));
+      const dayLabel = ((await page.getByLabel("Day of week").first().textContent()) ?? "").replace(/[^A-Za-z]/g, "");
+      expect(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayLabel) + 1).not.toBe(0);
+      expect(busyDays.has(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayLabel) + 1)).toBe(false);
+      await expect(page.getByText("No conflicts. You can save.")).toBeVisible();
+      await page.getByRole("button", { name: /^Save/ }).click();
+      await expect(page.getByText(/Load added|1 block added/).first()).toBeVisible();
+      const afterSession = await loadsOf();
+      expect(afterSession.filter((l) => l.subject.code === "CE101").length).toBe(afterSplit.filter((l) => l.subject.code === "CE101").length + 1);
+    } finally {
+      for (const l of await loadsOf()) if (l.subject.code === "CE101") await request.delete(`${API}/faculty-loads/${l.id}`, { headers });
+    }
   });
 });

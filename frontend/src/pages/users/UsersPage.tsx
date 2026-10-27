@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { ClipboardList, Mail, MoreVertical, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
 import type { UserListItem } from "../../types/api";
@@ -177,15 +178,14 @@ export function UsersPage() {
     setPrioritizationList([]);
     setPrioritizationLoading(true);
     try {
-      const { data: years } = await apiClient.get<{ id: string; name: string; isActive: boolean }[]>("/academic-years");
+      const { data: years } = await apiClient.get<{ id: string; name: string; isActive: boolean; currentSemester?: number }[]>("/academic-years");
       setPrioritizationYears(years);
-      const year = years.find((y) => y.isActive) ?? years[0];
-      if (!year) {
+      const term = currentTerm(years);
+      if (!term) {
         setPrioritizationTerm(null);
         setPrioritizationLoading(false);
         return;
       }
-      const term = { academicYearId: year.id, semester: 1 };
       setPrioritizationTerm(term);
       await loadPrioritization(u.id, term);
     } catch {
@@ -550,7 +550,7 @@ export function UsersPage() {
           person={{ id: deloadTarget.id, name: deloadTarget.name, maxUnits: deloadTarget.maxUnits }}
           years={deloadYears}
           academicYearId={(deloadYears.find((y) => y.isActive) ?? deloadYears[0]).id}
-          semester={1}
+          semester={currentTerm(deloadYears)?.semester ?? 1}
           canEdit
           onClose={() => setDeloadTarget(null)}
         />

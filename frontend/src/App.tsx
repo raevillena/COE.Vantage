@@ -55,14 +55,14 @@ function App() {
         <Route path="curriculum/:id/build" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><CurriculumBuildPage /></ProtectedRoute>} />
         <Route path="subjects" element={<SubjectsPage />} />
         <Route path="student-classes" element={<StudentClassesPage />} />
-        <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AcademicYearsPage /></ProtectedRoute>} />
+        <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY"]}><AcademicYearsPage /></ProtectedRoute>} />
         <Route path="departments" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"]}><DepartmentsPage /></ProtectedRoute>} />
         <Route path="scheduler" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
         <Route path="faculty" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><ChairmanFacultyPage /></ProtectedRoute>} />
         <Route path="scheduler/rules" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulingRulesPage backTo="/scheduler" title="Scheduling rule sets" /></ProtectedRoute>} />
         <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules (admin)" isAdminPage /></ProtectedRoute>} />
         <Route path="requests" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"]}><RequestsPage /></ProtectedRoute>} />
-        <Route path="schedules/faculty" element={<FacultySchedulePage />} />
+        <Route path="schedules/faculty" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY"]}><FacultySchedulePage /></ProtectedRoute>} />
         <Route path="schedules/student-class" element={<StudentSchedulePage />} />
         <Route path="schedules/rooms" element={<RoomAvailabilityPage />} />
         <Route path="reports" element={<ReportsPage />} />

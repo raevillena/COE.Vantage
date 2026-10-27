@@ -66,7 +66,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
   const total = items.reduce((sum, i) => sum + (Number(i.units) || 0), 0);
   const roundedTotal = Math.round(total * 100) / 100;
   const effective = effectiveMax(person.maxUnits, roundedTotal);
-  const invalid = items.some((i) => !i.description.trim() || !(Number(i.units) > 0));
+  const invalid = items.some((i) => !i.description.trim() || !(i.units.trim() !== "" && Number(i.units) >= 0));
 
   const save = async () => {
     setSaving(true);
@@ -88,7 +88,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="!max-w-xl max-h-[90vh] overflow-y-auto" title={`Deloading: ${person.name}`} description="Units deducted from the maximum units for one term.">
+      <Dialog.Content className="!max-w-xl max-h-[90vh] overflow-y-auto" title={`Deloading and assignments: ${person.name}`}>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="dl-ay" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
@@ -119,7 +119,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
             </select>
           </div>
           <HelpTip>
-            Each item reduces the maximum units for this term, for example an administrative designation or a research assignment. If the units assigned are below the reduced maximum the person is underloaded; above it, overloaded.
+            List the person's other assignments for the term, such as a designation, research or a thesis panel. The units of each are deducted from the maximum units (deloading). A regular assignment that does not reduce the load has 0 units. If the units assigned are below the reduced maximum the person is underloaded; above it, overloaded.
           </HelpTip>
         </div>
 
@@ -131,7 +131,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
           <>
             {items.length === 0 ? (
               <p className="mt-4 rounded border border-border bg-surface-muted/40 px-3 py-4 text-center text-sm text-foreground-muted">
-                No deloading for this term.
+                No assignments for this term.
               </p>
             ) : (
               <ul className="mt-4 space-y-2">
@@ -158,7 +158,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
                         step="0.1"
                         value={item.units}
                         onChange={(e) => setItems((prev) => prev.map((p, i) => (i === idx ? { ...p, units: e.target.value } : p)))}
-                        placeholder="Units"
+                        placeholder="Deloading units"
                         disabled={!canEdit || saving}
                         className="w-full rounded border border-border-strong px-3 py-2 text-sm tabular-nums focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-70"
                       />
@@ -169,7 +169,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
                         onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))}
                         disabled={saving}
                         className="rounded px-2 py-2 text-sm text-foreground-muted hover:bg-danger-muted hover:text-danger focus:outline-none focus:ring-2 focus:ring-focus-ring"
-                        aria-label={`Remove deloading item ${idx + 1}`}
+                        aria-label={`Remove assignment ${idx + 1}`}
                       >
                         Remove
                       </button>
@@ -187,7 +187,7 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
                 disabled={saving || items.length >= 20}
                 onClick={() => setItems((prev) => [...prev, { description: "", units: "" }])}
               >
-                Add item
+                Add assignment
               </Button>
             )}
 

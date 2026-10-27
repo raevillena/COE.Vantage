@@ -7,8 +7,19 @@ import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { HelpTip } from "../../components/ui/helpTip";
+import { useAppSelector } from "../../store/hooks";
+import { currentTerm } from "../../utils/currentTerm";
+
+const SEMESTER_LABEL: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3: "Mid Year" };
 
 export function AcademicYearsPage() {
+  const role = useAppSelector((s) => s.auth.user?.role);
+  // The college secretary sets the current term but cannot add, edit or delete academic years.
+  const canManage = role === "ADMIN";
+  const [termYearId, setTermYearId] = useState("");
+  const [termSemester, setTermSemester] = useState(1);
+  const [termSaving, setTermSaving] = useState(false);
   const [list, setList] = useState<AcademicYear[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -26,6 +37,9 @@ export function AcademicYearsPage() {
     try {
       const { data } = await apiClient.get<AcademicYear[]>("/academic-years");
       setList(data);
+      const term = currentTerm(data);
+      setTermYearId(term?.academicYearId ?? "");
+      setTermSemester(term?.semester ?? 1);
     } catch {
       toast.error("Failed to load academic years");
     } finally {
@@ -71,6 +85,23 @@ export function AcademicYearsPage() {
       toast.error(msg);
     }
   };
+
+  const saveCurrentTerm = async () => {
+    if (!termYearId) return;
+    setTermSaving(true);
+    try {
+      await apiClient.put("/academic-years/current-term", { academicYearId: termYearId, semester: termSemester });
+      toast.success("Current term saved");
+      await load();
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not save the current term");
+    } finally {
+      setTermSaving(false);
+    }
+  };
+
+  const activeYear = list.find((y) => y.isActive);
+  const termChanged = !!termYearId && (termYearId !== activeYear?.id || termSemester !== (activeYear?.currentSemester ?? 1));
 
   const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
 
@@ -145,8 +176,56 @@ export function AcademicYearsPage() {
     <div>
       <div className="mb-4 flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-foreground">Academic Years</h1>
-        <Button type="button" onClick={openCreate}>Add Academic Year</Button>
+        {canManage && <Button type="button" onClick={openCreate}>Add Academic Year</Button>}
       </div>
+
+      {list.length > 0 && (
+        <section className="mb-5 rounded border border-border bg-surface p-4" aria-label="Current term">
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold text-foreground">Current term</h2>
+            <HelpTip>
+              The academic year and semester that filters across the system open on, such as the dashboard, schedules, scheduler, rooms and reports. Users can still pick another term in each filter. Choosing a year here also makes it the active academic year.
+            </HelpTip>
+          </div>
+          <p className="mt-1 text-sm text-foreground-muted">
+            {activeYear ? `${activeYear.name}, ${SEMESTER_LABEL[activeYear.currentSemester ?? 1]}` : "No active academic year."}
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor="term-year" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
+              <select
+                id="term-year"
+                value={termYearId}
+                onChange={(e) => setTermYearId(e.target.value)}
+                disabled={termSaving}
+                className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+              >
+                {list.map((y) => (
+                  <option key={y.id} value={y.id}>{y.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="term-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+              <select
+                id="term-sem"
+                value={termSemester}
+                onChange={(e) => setTermSemester(Number(e.target.value))}
+                disabled={termSaving}
+                className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+              >
+                {[1, 2, 3].map((n) => (
+                  <option key={n} value={n}>{SEMESTER_LABEL[n]}</option>
+                ))}
+              </select>
+            </div>
+            <Button type="button" onClick={saveCurrentTerm} disabled={termSaving || !termChanged}>
+              {termSaving ? "Saving…" : "Set as current term"}
+            </Button>
+          </div>
+        </section>
+      )}
+
       {list.length > 0 && (
         <div className="mb-4 relative max-w-md">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
@@ -168,8 +247,8 @@ export function AcademicYearsPage() {
         </div>
       ) : list.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No academic years yet. Add one to get started.</p>
-          <Button type="button" onClick={openCreate}>Add Academic Year</Button>
+          <p className="text-foreground-muted mb-4">{canManage ? "No academic years yet. Add one to get started." : "No academic years yet."}</p>
+          {canManage && <Button type="button" onClick={openCreate}>Add Academic Year</Button>}
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
@@ -180,7 +259,7 @@ export function AcademicYearsPage() {
         </div>
       ) : (
         <>
-          {selectedIds.size > 0 && (
+          {canManage && selectedIds.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
               <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
               <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
@@ -195,36 +274,40 @@ export function AcademicYearsPage() {
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
-                <th className="w-10 px-2 py-2">
-                  <input
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all on page"
-                    className="rounded border-border-strong focus:ring-focus-ring"
-                  />
-                </th>
+                {canManage && (
+                  <th className="w-10 px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !allFilteredSelected; }}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all on page"
+                      className="rounded border-border-strong focus:ring-focus-ring"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Active</th>
-                <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
+                {canManage && <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredList.map((y) => (
                 <tr key={y.id} className={selectedIds.has(y.id) ? "bg-primary-muted/30" : ""}>
-                  <td className="w-10 px-2 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(y.id)}
-                      onChange={() => toggleSelect(y.id)}
-                      aria-label={`Select ${y.name}`}
-                      className="rounded border-border-strong focus:ring-focus-ring"
-                    />
-                  </td>
+                  {canManage && (
+                    <td className="w-10 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(y.id)}
+                        onChange={() => toggleSelect(y.id)}
+                        aria-label={`Select ${y.name}`}
+                        className="rounded border-border-strong focus:ring-focus-ring"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2 text-foreground">{y.name}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{y.isActive ? "Yes" : "No"}</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-foreground-muted">{y.isActive ? `Yes, ${SEMESTER_LABEL[y.currentSemester ?? 1]}` : "No"}</td>
+                  {canManage && <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
                         type="button"
@@ -247,7 +330,7 @@ export function AcademicYearsPage() {
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

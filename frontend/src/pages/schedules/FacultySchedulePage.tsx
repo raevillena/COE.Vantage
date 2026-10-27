@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, Department } from "../../types/api";
 import { departmentLabel } from "../../utils/departmentLabel";
@@ -26,8 +27,11 @@ export function FacultySchedulePage() {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0].id);
+        const term = currentTerm(data);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        }
       }
     });
     if (needsDepartmentFilter) {
@@ -120,6 +124,7 @@ export function FacultySchedulePage() {
             <Select.Content>
               <Select.Item value="1">1</Select.Item>
               <Select.Item value="2">2</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>

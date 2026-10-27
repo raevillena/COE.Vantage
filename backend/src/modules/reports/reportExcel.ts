@@ -290,12 +290,21 @@ export async function loadFacultyWorkloadsForExcel(
       },
     },
   });
-  const deloadings = await loadDeloadings(
-    academicYearId,
-    semester,
-    [...new Set(loads.map((l) => l.facultyId).filter((x): x is string => !!x))]
-  );
-  return { academicYearName: academicYear?.name ?? "", loads, deloadings };
+  const loadedIds = new Set(loads.map((l) => l.facultyId).filter((x): x is string => !!x));
+  // People whose whole assignment is deloading still belong on the form, with their other assignments.
+  const deloadOnly = await prisma.facultyDeloading.findMany({
+    where: {
+      academicYearId,
+      semester,
+      ...(facultyId ? { userId: facultyId } : {}),
+      user: { isDeleted: false, ...(caller.role === "CHAIRMAN" ? { departmentId: caller.departmentId ?? "__none__" } : {}) },
+    },
+    distinct: ["userId"],
+    select: { user: { select: { id: true, name: true, status: true, maxUnits: true, department: { select: { name: true } } } } },
+  });
+  const extraFaculty = deloadOnly.map((d) => d.user).filter((u) => !loadedIds.has(u.id));
+  const deloadings = await loadDeloadings(academicYearId, semester, [...loadedIds, ...extraFaculty.map((u) => u.id)]);
+  return { academicYearName: academicYear?.name ?? "", loads, deloadings, extraFaculty };
 }
 
 const WORKLOAD_HEADERS = [
@@ -345,7 +354,7 @@ export async function buildFacultyWorkloadWorkbook(
     status: string | null;
     maxUnits: number | null;
     deloadTotal: number;
-    deloadText: string;
+    deloadItems: { description: string; units: number }[];
     department: string;
     loads: typeof data.loads;
   };
@@ -359,14 +368,25 @@ export async function buildFacultyWorkloadWorkbook(
         status: l.faculty?.status ?? null,
         maxUnits: l.faculty?.maxUnits ?? null,
         deloadTotal: (l.facultyId && data.deloadings.get(l.facultyId)?.total) || 0,
-        deloadText: ((l.facultyId && data.deloadings.get(l.facultyId)?.items) || [])
-          .map((i) => `${i.description} (${i.units})`)
-          .join("; "),
+        deloadItems: (l.facultyId && data.deloadings.get(l.facultyId)?.items) || [],
         department: l.faculty?.department?.name ?? "OTHERS / OFF-SYSTEM FACULTY",
         loads: [],
       });
     }
     entries.get(key)!.loads.push(l);
+  }
+
+  for (const u of data.extraFaculty) {
+    const summary = data.deloadings.get(u.id);
+    entries.set(u.id, {
+      name: u.name,
+      status: u.status ?? null,
+      maxUnits: u.maxUnits ?? null,
+      deloadTotal: summary?.total ?? 0,
+      deloadItems: summary?.items ?? [],
+      department: u.department?.name ?? "OTHERS / OFF-SYSTEM FACULTY",
+      loads: [],
+    });
   }
 
   const byDepartment = new Map<string, Entry[]>();
@@ -440,25 +460,43 @@ export async function buildFacultyWorkloadWorkbook(
         for (let c = 1; c <= LAST; c++) sheet.getCell(r, c).border = BORDER;
         r++;
       }
+
+      // Other assignments (deloading) sit beside the courses, one item per row: its description under
+      // "OTHER ASSIGNMENT(S)" and its units under "OA load eqv.". More items than courses add rows.
+      fac.deloadItems.forEach((item, i) => {
+        const row = firstRow + i;
+        if (row > r - 1) {
+          for (let c = 1; c <= LAST; c++) sheet.getCell(row, c).border = BORDER;
+          r++;
+        }
+        const desc = sheet.getCell(row, 14);
+        desc.value = item.description;
+        desc.alignment = { wrapText: true, vertical: "middle" };
+        const eqv = sheet.getCell(row, 13);
+        eqv.value = item.units > 0 ? item.units : null; // an assignment without deloading has no equivalent
+        eqv.alignment = { horizontal: "center", vertical: "middle" };
+      });
+      if (!sheet.getCell(firstRow, 1).value && fac.status) sheet.getCell(firstRow, 1).value = fac.status;
       const lastRow = r - 1;
 
       // Actual Load credits lab units 3x; Regular Load is the faculty's max units; Over load is the excess.
       sheet.getCell(r, 1).value = "Total Units";
       sheet.getCell(r, 9).value = { formula: `SUM(I${firstRow}:I${lastRow})`, result: units };
       sheet.getCell(r, 10).value = { formula: `SUM(J${firstRow}:J${lastRow})`, result: round2(actual) };
-      // Regular Load = maximum units less deloading; OA load eqv. and Other assignment(s) list the deloading items.
+      // Regular Load = maximum units less deloading (also shown on the first row, as on the form).
       const regular = effectiveMaxUnits(fac.maxUnits, fac.deloadTotal);
       if (regular != null) {
+        const firstRegular = sheet.getCell(firstRow, 11);
+        firstRegular.value = regular;
+        firstRegular.alignment = { horizontal: "center", vertical: "middle" };
         sheet.getCell(r, 11).value = regular;
         sheet.getCell(r, 12).value = {
           formula: `MAX(0,J${r}-K${r})`,
           result: round2(Math.max(0, actual - regular)),
         };
       }
-      if (fac.deloadTotal > 0) sheet.getCell(r, 13).value = fac.deloadTotal;
-      if (fac.deloadText) {
-        sheet.getCell(r, 14).value = fac.deloadText;
-        sheet.getCell(r, 14).alignment = { wrapText: true, vertical: "middle" };
+      if (fac.deloadTotal > 0) {
+        sheet.getCell(r, 13).value = { formula: `SUM(M${firstRow}:M${lastRow})`, result: fac.deloadTotal };
       }
       for (let c = 1; c <= LAST; c++) {
         const cell = sheet.getCell(r, c);

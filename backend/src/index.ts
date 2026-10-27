@@ -20,6 +20,7 @@ import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignment
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboardRoutes.js";
 import { deloadingRoutes } from "./modules/deloadings/deloadingRoutes.js";
+import { geImportRoutes } from "./modules/geImport/geImportRoutes.js";
 import { feedbackRoutes } from "./modules/feedback/feedbackRoutes.js";
 import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
 import { gradeSubjectRoutes } from "./modules/gradeSubjects/gradeSubjectRoutes.js";
@@ -41,7 +42,7 @@ app.use(
   })
 );
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" })); // pasted GE schedule tables are a few hundred KB at most
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
@@ -61,6 +62,7 @@ app.use("/reports", reportRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/deloadings", deloadingRoutes);
 app.use("/feedback", feedbackRoutes);
+app.use("/ge-import", geImportRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 app.use("/grade-subjects", gradeSubjectRoutes);
 

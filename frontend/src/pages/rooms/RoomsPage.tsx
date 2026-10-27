@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, Department, Room } from "../../types/api";
 import { HelpTip } from "../../components/ui/helpTip";
@@ -109,8 +110,9 @@ export function RoomsPage() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data }) => {
         setAcademicYears(data);
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0]?.id ?? "");
+        const term = currentTerm(data);
+        setAcademicYearId(term?.academicYearId ?? "");
+        if (term) setSemester(term.semester);
       })
       .catch(() => setAcademicYears([]));
   }, []);

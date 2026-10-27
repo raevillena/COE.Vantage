@@ -2,6 +2,20 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.7 - 2026-10-27
+
+GE import, current term and faculty view
+
+- **New:** Import GE schedule in the scheduler: paste rows or choose a file (Excel, CSV or text) of the GE course offerings, match them to the class subjects by course code, drag the rest onto the right subject, and resolve time conflicts before adding. Faculty and rooms stay as text.
+- **New:** Current term: the admin or college secretary sets the current academic year and semester, and filters across the system open on it instead of the 1st semester.
+- **Improved:** The college secretary can open the Academic years page to set the current term.
+- **Improved:** Faculty see only their own name, classes and rooms: no Faculty schedule page, Class schedule and Room availability list only where they teach, and Reports offer only their own faculty report and NOTA. A chairman is limited to their department.
+- **Improved:** Deloading is now Deloading and assignments: an assignment that does not reduce the load takes 0 units.
+- **Improved:** The faculty workload Excel lists the deloading items as Other Assignment(s) beside the courses, with their units under OA load eqv., and includes people who only have deloading.
+- **Improved:** Splitting a repeated subject: a co-instructor can join every day the block repeats on, and Split Class starts on a free day with the same faculty and room.
+- **Improved:** A warning appears when the end time is before the start time, for example 12:00 AM typed for 12:00 PM, with a one-click fix.
+- **Fixed:** Time pickers follow dark mode.
+
 ## v0.3.6 - 2026-10-27
 
 Feedback page

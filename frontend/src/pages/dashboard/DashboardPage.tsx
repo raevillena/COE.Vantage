@@ -62,11 +62,13 @@ export function DashboardPage() {
       <section className="mb-6">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-foreground-muted">Schedules</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <DashboardCard
-            to="/schedules/faculty"
-            title="Faculty schedule"
-            subtitle="View weekly teaching loads by faculty"
-          />
+          {user?.role !== "FACULTY" && (
+            <DashboardCard
+              to="/schedules/faculty"
+              title="Faculty schedule"
+              subtitle="View weekly teaching loads by faculty"
+            />
+          )}
           <DashboardCard
             to="/schedules/student-class"
             title="Class schedule"

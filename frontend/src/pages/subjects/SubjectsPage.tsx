@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, Room, Subject } from "../../types/api";
 import toast from "react-hot-toast";
@@ -221,12 +222,13 @@ export function SubjectsPage() {
   };
 
   const openPriorityModal = async (s: Subject) => {
-    const year = academicYears.find((y) => y.isActive) ?? academicYears[0];
-    if (!year) {
+    const current = currentTerm(academicYears);
+    if (!current) {
       toast.error("No academic year available");
       return;
     }
-    const term = { academicYearId: year.id, semester: s.semester ?? 1 };
+    // A subject offered in one semester opens on it; one offered in both opens on the current semester.
+    const term = { academicYearId: current.academicYearId, semester: s.semester ?? current.semester };
     setPriorityTerm(term);
     setPrioritySubject(s);
     setAllFaculty([]);

@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, Room } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { useAppSelector } from "../../store/hooks";
 
 export function RoomAvailabilityPage() {
+  // A faculty member only sees the rooms they teach in, and only through the report endpoints.
+  const isFaculty = useAppSelector((s) => s.auth.user?.role) === "FACULTY";
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
@@ -19,12 +23,31 @@ export function RoomAvailabilityPage() {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0].id);
+        const term = currentTerm(data);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        }
       }
     });
-    apiClient.get("/rooms").then(({ data }) => setRooms(data));
-  }, []);
+    if (!isFaculty) apiClient.get("/rooms").then(({ data }) => setRooms(data));
+  }, [isFaculty]);
+
+  useEffect(() => {
+    if (!isFaculty) return;
+    if (!academicYearId) {
+      setRooms([]);
+      return;
+    }
+    const mine = new URLSearchParams({ academicYearId, semester: String(semester) });
+    apiClient
+      .get<Room[]>(`/reports/my/rooms?${mine}`)
+      .then(({ data }) => {
+        setRooms(data ?? []);
+        setSelectedRoomId((cur) => ((data ?? []).some((r) => r.id === cur) ? cur : ""));
+      })
+      .catch(() => setRooms([]));
+  }, [isFaculty, academicYearId, semester]);
 
   useEffect(() => {
     if (!academicYearId || !selectedRoomId) {
@@ -32,9 +55,18 @@ export function RoomAvailabilityPage() {
       return;
     }
     setLoading(true);
+    if (isFaculty) {
+      const q = new URLSearchParams({ academicYearId, semester: String(semester) });
+      apiClient
+        .get<{ loads: FacultyLoad[] }>(`/reports/room/${selectedRoomId}/data?${q}`)
+        .then(({ data }) => setLoads(data.loads ?? []))
+        .catch(() => setLoads([]))
+        .finally(() => setLoading(false));
+      return;
+    }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: selectedRoomId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedRoomId]);
+  }, [academicYearId, semester, selectedRoomId, isFaculty]);
 
   const room = rooms.find((r) => r.id === selectedRoomId);
 
@@ -62,6 +94,7 @@ export function RoomAvailabilityPage() {
             <Select.Content>
               <Select.Item value="1">1</Select.Item>
               <Select.Item value="2">2</Select.Item>
+              <Select.Item value="3">Mid Year</Select.Item>
             </Select.Content>
           </Select.Root>
         </div>
@@ -83,7 +116,9 @@ export function RoomAvailabilityPage() {
           <Spinner />
         </div>
       ) : !selectedRoomId ? (
-        <p className="text-foreground-muted">Select a room.</p>
+        <p className="text-foreground-muted">
+          {isFaculty && rooms.length === 0 ? "You have no rooms in this term." : "Select a room."}
+        </p>
       ) : loads.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted">No schedule entries for this room. Change filters to see other data.</p>

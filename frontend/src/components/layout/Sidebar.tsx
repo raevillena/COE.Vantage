@@ -127,7 +127,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
             Schedules
           </div>
-          <NavItem to="/schedules/faculty" icon={UserCircle} onClose={onClose}>Faculty schedule</NavItem>
+          {user?.role !== "FACULTY" && <NavItem to="/schedules/faculty" icon={UserCircle} onClose={onClose}>Faculty schedule</NavItem>}
           <NavItem to="/schedules/student-class" icon={GraduationCap} onClose={onClose}>Class schedule</NavItem>
           <NavItem to="/schedules/rooms" icon={DoorOpen} onClose={onClose}>Room availability</NavItem>
         </div>
@@ -152,6 +152,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                       {user?.role === "CHAIRMAN" && <NavItem to="/faculty" icon={Users} onClose={onClose}>Faculty</NavItem>}
                     </>
                   )}
+                  {user?.role === "COLLEGE_SECRETARY" && <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>}
                   {user?.role === "ADMIN" && (
                     <>
                       <NavItem to="/users" icon={Users} onClose={onClose}>Users</NavItem>

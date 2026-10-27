@@ -41,7 +41,7 @@ async function assertLoadNotLocked(
 }
 
 /** CHAIRMAN can only create/update loads for student classes in their department's curricula. */
-async function assertStudentClassInDepartment(studentClassId: string, caller: CallerContext): Promise<void> {
+export async function assertStudentClassInDepartment(studentClassId: string, caller: CallerContext): Promise<void> {
   if (!caller || caller.role !== "CHAIRMAN" || caller.departmentId == null) return;
   const sc = await prisma.studentClass.findUnique({
     where: { id: studentClassId },

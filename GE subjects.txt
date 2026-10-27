@@ -1,0 +1,234 @@
+Program	Year	Section	Course Code	Course Title	No. of Units		Course Title	No. of Units	Time	Day	Bldg & Room	Faculty
+					Lec	Lab						
+BSABE	1	A	ENGL 01	Intensive English	3	0	Intensive English	3	01:00-02:30	TTh	CAB 106	Dexter A. Adriatico
+BSABE	1	A	NATSCI 13	Environmental Science	3	0	Environmental Science	3	01:00-02:00	MWF	CAB 106	Angelica T. Baral
+BSABE	1	A	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	07:00-08:00	MWF	CAB 105	Angelica T. Baral
+BSABE	1	A	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	M	CAS 104	Angelica T. Baral
+BSABE	1	A	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	02:30-04:00	TTh	CAB 106	Reymark A. Tumamao 
+BSABE	1	A	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	10:00-12:00	F	TB 4	Derick Sam C. Cadiente
+BSABE	1	A	ABE 10				Surveying Lab	1	07:30-10:30	Th	COE	COE Faculty
+												
+BSABE	1	B	ENGL 01	Intensive English	3	0	Intensive English	3	09:00-10:00	MWF	CAB 105	Dexter A. Adriatico
+BSABE	1	B	NATSCI 13	Environmental Science	3	0	Environmental Science	3	10:30-12:00	TTh	CAB 105	Angelica T. Baral
+BSABE	1	B	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	08:00-09:00	MWF	CAB 105	Angelica T. Baral
+BSABE	1	B	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	W	CAS 105	Angelica T. Baral
+BSABE	1	B	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	01:00-02:30	TTh	CAB 105	Reymark A. Tumamao 
+BSABE	1	B	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	10:00-12:00	M	TB 1	Athina Alexis P. Blanco
+BSABE	1	B	ABE 10				Surveying Lab	1	07:30-10:30	T	COE	COE Faculty
+												
+BSABE	2	A	SOCSC 12	Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	01:00-02:00	MWF	CAB 207	Crishia Faye Angellee A. Peralta
+BSABE	2	A	PATHFit 4	Physical Activities Towards Health and Fitness 4 (Sports)	2	0	Sports	2	10:00-12:00	W	TB 4	Mark Angelo A. Barangan
+BSABE	2	A	SSCI 22 	Principles of Soil Science			Principles of Soil Science Lab	1	02:00-05:00	W	COE	COE Faculty
+BSABE	2	A	MECH 105B 	Fluid Mechanics			Fluid Mechanics Lab	1	07:30-10:30	T	COE	COE Faculty
+BSABE	2	A	ABE 12 	Materials and Processes for ABE			Materials and Processes for ABE Lab	1	07:30-10:30	Th	COE	COE Faculty
+												
+BSABE	3	A	PHILO 01	Ethics	3	0	Ethics	3	07:00-08:00	MWF	CAB 106	Rommel John G. Obena, Jr. 
+BSABE	3	A	STS 01	Science, Technology and Society	3	0	Science, Technology, and Society	3	01:00-02:00	MWF	CAB 108	Bella Rose O. Tabula
+BSABE	3	A	ABE 121				Irrigation and Drainage Engineering Lab	1	09:00-12:00	W	COE	COE Faculty
+BSABE	3	A	ABE 131				AB Machinery and Mechanization Lab	1	02:00-05:00	W	COE	COE Faculty
+BSABE	3	A	ABE 132				Renewable Energy for AB Applications Lab	1	02:00-05:00	T	COE	COE Faculty
+BSABE	3	A	ABE 141				AB Products Processing and Storage Lab	1	08:00-11:00	M	COE	COE Faculty
+BSABE	3	A	ABE 151				AB Structures Engineering Lab	1	02:00-05:00	M	COE	COE Faculty
+												
+BSCERE	1	A	SOCSC 02				Understanding the Self	3	02:00-03:00	MWF	CAB 206	Jhoanna Marie A. Gacula 
+BSCERE	1	A	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	08:00-09:00	MWF	CAB 107	Harlene Christine D. Dugay
+BSCERE	1	A	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	Th	CAS 104	Je'miah G. Rabena
+BSCERE	1	A	PATHFit 2	Exercised-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	10:00-12:00	W	TB 2	Athina Alexis P. Blanco
+BSCERE	1	A	CHE 20	Exercised-based Fitness Activities	2	0	Analytical Chemistry lab	2	08:00-11:00	TTh	COE	COE Faculty
+												
+BSCERE	2	A	PHILO 01	Ethics	3	0	Ethics 	3	01:00-02:30	TTh	CAB 205	Herdy L. Yumul 
+BSCERE	2	A	HUM 11	Philippine Popular Culture	3	0	Philippine Popular Culture	3	02:30-04:00	TTh	CAB 205	Alma A. Sierra
+BSCERE	2	A	PATHFit 4	Sports	2	0	Sports	2	10:00-12:00	Th	TB 4	Mark Angelo A. Barangan
+BSCERE	2	A	CERE 122				Ceramic Raw Materials and Processes lab	1	02:00-05:00	M	COE	COE Faculty
+BSCERE	2	A	CERE 114				Microscopy and X-ray Characterization lab	1	02:00-05:00	W	COE	COE Faculty
+												
+BSCERE	3	A	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	01:00-02:00	MWF	CAB 210	Neil Archie L. Garcia 
+BSCERE	3	A	STS 01	Science Technology and Society	3	0	Science, Technology, and Society	3	12:30-02:00	TTh	CAB 210	Allen James A. Ursua
+BSCERE	3	A	CERE 132				Cement Manufacturing lab	1	02:00-05:00	T	COE	COE Faculty
+BSCERE	3	A	CERE 133				Ceramic Whitewares lab	1	02:00-05:00	W	COE	COE Faculty
+BSCERE	3	A	CERE 134				Structural Clay Products lab	1	02:00-05:00	Th	COE	COE Faculty
+												
+BSCHE	1	A	PHILO 01	Ethics	3	0	Ethics	3	02:30-04:00	TTh	CAB 207	Herdy L. Yumul 
+BSCHE	1	A	STS 01	Science, Technology and Society	3	0	Science, Technology, and Society	3	01:00-02:30	TTh	CAB 207	Bella Rose O. Tabula
+BSCHE	1	A	PATHFit 2	Physial Activities Toward Halth and Fitness II: Exercise-based Fitness Activitites	2	0	Exercise-based Fitness Activities	2	08:00-10:00	W	TB 1	Jomarie V. Agbayani
+BSCHE	1	A	CHE 20	Physial Activities Toward Halth and Fitness II: Exercise-based Fitness Activitites	2	0	Analytical Chemistry	1	02:00-05:00	M	COE	COE Faculty
+												
+BSCHE	2	A	HUM 11	Pop Culture	3	0	Philippine Popular Culture	3	08:00-09:00	MWF	CAB 208	Alma A. Sierra
+BSCHE	2	A	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	04:00-05:00	MWF	CAB 207	Dave Louis M. Baptista
+BSCHE	2	A	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	03:00-04:00	MWF	CAB 207	Jessica C. Guillermo 
+BSCHE	2	A	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	10:00-11:00	MWF	CAB 109	Vitoria A. Morales 
+BSCHE	2	A	PATHFit 4	Physial Activities Toward Halth and Fitness IV (Sports)	2	0	Sports	2	01:00-03:00	M	CC 2	Reygan A. Butali
+BSCHE	2	A	CHE 126				Physical Chemistry Lab	1	02:00-05:00	T	COE	COE Faculty
+												
+BSCE	1	A	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	08:00-09:00	MWF	CAB 205	Jarod Mitchell I. Palma
+BSCE	1	A	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	11:00-02:00	T	CAS 214	Jarod Mitchell I. Palma
+BSCE	1	A	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	09:00-10:30	TTh	CAB 205	Reymark A. Tumamao 
+BSCE	1	A	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	09:00-10:00	MWF	CAB 205	Marlyn S. Cacatian 
+BSCE	1	A	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	07:00-08:00	MWF	CAB 205	Cyrelle J. Dominico 
+BSCE	1	A	PATHFit 2 	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	01:00-03:00	F	TB 1	Athina Alexis P. Blanco
+												
+BSCE	1	B	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	09:00-10:00	MWF	CAB 207	Jarod Mitchell I.  Palma
+BSCE	1	B	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	11:00-02:00	Th	CAS 214	Jarod Mitchell I. Palma
+BSCE	1	B	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	11:00-12:00	MWF	CAB 207	Reymark A. Tumamao 
+BSCE	1	B	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	09:00-10:30	TTh	CAB 207	Romelyn N. Pabro 
+BSCE	1	B	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	07:30-09:00	TTh	CAB 207	Cyrelle J. Dominico 
+BSCE	1	B	PATHFit 2 	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	03:00-05:00	T	TB 4	Athina Alexis P. Blanco
+												
+BSCE	1	C	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	09:00-10:30	TTh	CAB 208	Kriezher Veehne M. Pagatpatan
+BSCE	1	C	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	02:00-05:00	T	CAS 214	Kriezher Veehne M. Pagatpatan
+BSCE	1	C	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	03:00-04:00	MWF	CAB 106	Reymark A. Tumamao 
+BSCE	1	C	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	07:30-09:00	TTh	CAB 208	Romelyn N. Pabro 
+BSCE	1	C	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	04:00-05:00	MWF	CAB 106	Cyrelle J. Dominico 
+BSCE	1	C	PATHFit 2 	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	01:00-03:00	Th	TB 4	Athina Alexis P. Blanco
+												
+BSCE	1	D	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	09:00-10:30	TTh	CAB 206	Francess Jelline B. Oandasan
+BSCE	1	D	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	08:00-11:00	W	CAS 214	Francess Jelline B. Oandasan
+BSCE	1	D	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal	3	11:00-12:00	MWF	CAB 104	Mikaela Marie J. Aguinaldo 
+BSCE	1	D	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	07:30-09:00	TTh	CAB 206	CAS-DSS Faculty A
+BSCE	1	D	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	02:30-04:00	TTh	CAB 206	Justin Arvee N. Agtang 
+BSCE	1	D	PATHFit 2 	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	08:00-10:00	F	TB 2	Athina Alexis Blanco
+												
+BSCE	1	E	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	10:30-12:00	TTh	CAB 206	Francess Jelline B. Oandasan
+BSCE	1	E	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	11:00-02:00	W	CAS 214	Francess Jelline B. Oandasan
+BSCE	1	E	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal	3	01:00-02:30	TTh	CAB 206	Mikaela Marie J. Aguinaldo 
+BSCE	1	E	SOCSC 02	Understanding the Self	3	0	Understanding the Self	3	10:00-11:00	MWF	CAB 207	Marlyn S. Cacatian 
+BSCE	1	E	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	08:00-09:00	MWF	CAB 207	Cyrelle J. Dominico 
+BSCE	1	E	PATHFit 2 	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	03:00-05:00	Th	CMEA 2	Kasel Kate Dale P. Cadeliña
+												
+BSCE	2	A	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2		Sports	2	08:00-10:00	Th	SP	Derick Sam C. Cadiente
+												
+BSCE	2	B	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2		Sports	2	03:00-05:00	M	SP	Derick Sam C. Cadiente
+												
+BSCE	2	C	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2		Sports	2	03:00-05:00	Th	SP	Derick Sam C. Cadiente
+												
+BSCE	2	D	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2		Sports	2	08:00-10:00	W	SP	Angelo A. Lamsen
+												
+BSCE	2	E	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2		Sports	2	08:00-10:00	Th	SP 	Angelo A. Lamsen
+												
+BSCpE	1	A	MATH 01	Mathematics for the Modern World	3	0	Mathematics in the Modern World	3	09:00-10:30	TTh	CAB 105	Liliwa A. Olalo
+BSCpE	1	A	PATHFit 2	"Physical Activities Toward Health
+and Fitness II: Exercise-based
+Fitness Activities"	2	0	Exercise-based Fitness Activities	2	01:00-03:00	T	TB 5	Derick Sam C. Cadiente
+BSCpE	1	A	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	10:00-11:00	MWF	CAB 209	Allen James A. Ursua
+BSCpE	1	A	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	11:00-02:00	M	CAS 214	Allen James A. Ursua
+BSCpE	1	A	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	09:00-10:00	MWF	CAB 209	Harlene Christine D. Dugay
+BSCpE	1	A	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	W	CAS 104	Harlene Christine D. Dugay
+												
+BSCpE	1	B	MATH 01	Mathematics for the Modern World	3	0	Mathematics in the Modern World	3	09:00-10:00	MWF	CAB 206	Dinah C. Vidad
+BSCpE	1	B	PATHFit 2	"Physical Activities Toward Health
+and Fitness II: Exercise-based
+Fitness Activities"	2	0	Exercise-based Fitness Activities	2	01:00-03:00	F	TB 5	Derick Sam C. Cadiente
+BSCpE	1	B	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	08:00-09:00	MWF	CAB 206	Allen James A. Ursua
+BSCpE	1	B	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	08:00-11:00	Th	CAS 214	Allen James A. Ursua
+BSCpE	1	B	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	10:00-11:00	MWF	CAB 206	Je'miah T. Rabena
+BSCpE	1	B	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	11:00-02:00	T	CAS 104	Je'miah T. Rabena
+												
+BSCpE	1	C	MATH 01	Mathematics for the Modern World	3	0	Mathematics in the Modern World	3	09:00-10:00	MWF	CAB 208	Idello Melvin H. Cayabyab
+BSCpE	1	C	PATHFit 2	"Physical Activities Toward Health
+and Fitness II: Exercise-based
+Fitness Activities"	2	0	Exercise-based Fitness Activities	2	01:00-03:00	M	TB 2	Angelo A. Lamsen
+BSCpE	1	C	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	10:00-11:00	MWF	CAB 208	Bella Rose O. Tabula
+BSCpE	1	C	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	08:00-11:00	T	CAS 214	Bella Rose O. Tabula
+BSCpE	1	C	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	11:00-12:00	MWF	CAB 208	Je'miah T. Rabena
+BSCpE	1	C	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	11:00-02:00	Th	CAS 104	Je'miah T. Rabena
+												
+BSCpE	2	A	COMM 01	Purposive Communication	3	0	Purposive Communication	3	02:00-03:00	MWF	CAB 110	Edmar M. Delos Santos
+BSCpE	2	A	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	03:00-04:00	MWF	CAB 110	Romelyn N. Pabro 
+BSCpE	2	A	NATSCI 13	Environmental Science	3	0	Environmental Science	3	09:00-10:30	TTh	CAB 209	Edzer Roger D. Antolin
+BSCpE	2	A	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	04:00-05:00	MWF	CAB 110	Mikaela Marie J. Aguinaldo
+BSCpE	2	A	PATHFit 4	Physical activities Towards health and Fitness 4 (Sports)	2	0	Sports	2	10:00-12:00	M	CC 2	Reygan A. Butali
+												
+BSCpE	2	B	COMM 01	Purposive Communication	3	0	Purposive Communication	3	03:00-04:00	MWF	CAB 105	Myra Eugenia S. Castillo
+BSCpE	2	B	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	04:00-05:00	MWF	CAB 105	Romelyn N. Pabro 
+BSCpE	2	B	NATSCI 13	Environmental Science	3	0	Environmental Science	3	02:00-03:00	MWF	CAB 105	Edzer Roger D. Antolin
+BSCpE	2	B	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal	3	10:00-11:00	MWF	CAB 105	Reymark A. Tumamao 
+BSCpE	2	B	PATHFit 4	Physical activities Towards health and Fitness 4 (Sports)	2	0	Sports	2	08:00-10:00	W	CC 2	Reygan A. Butali
+												
+BSCpE	2	C	COMM 01	Purposive Communication	3	0	Purposive Communication	3	01:00-02:30	TTh	CAB 209	Jhon Sherwin S. Duran
+BSCpE	2	C	SOCSC 02	Understanding the Self	3	0	Understanding the Self 	3	02:30-04:00	TTh	CAB 209	Jhoanna Marie A. Gacula 
+BSCpE	2	C	NATSCI 13	Environmental Science	3	0	Environmental Science	3	10:30-12:00	TTh	CAB 209	Edzer Roger D. Antolin
+BSCpE	2	C	PI 01	Life and Works of Rizal	3	0	Life and Works of Rizal 	3	02:00-03:00	MWF	CAB 210	Neil Archie L. Garcia 
+BSCpE	2	C	PATHFit 4	Physical activities Towards health and Fitness 4 (Sports)	2	0	Sports	2	10:00-12:00	F	CC 3	Reygan A. Butali
+												
+BSCpE	3	A	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	07:30-09:00	TTh	CAB 104	Marjorie P. Garcia 
+												
+BSCpE	3	B	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	09:00-10:30	TTh	CAB 104	Marjorie P. Garcia 
+												
+BSCpE	4	A	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	03:00-04:00	MWF	CAS 207	Rommel M. Dascil
+												
+BSCpE	4	B	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	04:00-05:00	MWF	CAS 207	Rommel M. Dascil
+												
+BS ECE	1	A	MATH 01	Mathematics in Modern World	3	0	Mathematics in the Modern World	3	02:00-03:00	MWF	CAB 108	Ciriaco T. Ragual
+BS ECE 	1	A	PATHFit 2	Exercise Based Fitness Activities	2	0	Exercise-based Fitness Activities	2	10:00-12:00	Th	TB 2	Reygan A. Butali
+BS ECE 	1	A	STS 01	Science, Technology & Society	3	0	Science, Technology, and Society	3	03:00-04:00	MWF	CAB 108	Joyce Hope C. Delos Santos
+												
+BS ECE 	2	A	PATHFit 4	Physical Activities Toward Health and Fitness 3 (Sports)	2	0	Sports	2	08:00-10:00	F	SP	Angelo A. Lamsen
+BS ECE 	2	A	COMM 01	Purposive Communication	3	0	Purposive Communication	3	02:00-03:00	MWF	CAB 207	Ryand Angelo G. Ugalde
+												
+BS ECE 	3	A	HUM 01	Art Appreciation	3	0	Art Appreciation	3	09:00-10:00	MWF	CAB 210	Janet F. Rivera
+BS ECE 	3	A	SOCSC 01	Readings in Philippine History	3	0	Readings in Philippine History	3	07:00-08:00	MWF	CAB 210	Leslie Kay R. Corpuz
+BS ECE 	3	A	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	08:00-09:00	MWF	CAB 210	Justin Arvee N. Agtang 
+												
+BSEE	1	A	ENGL 01	Intensive English	3	0	Intensive English	3	07:30-09:00	TTh	CAB 105	Richmond Romar S. Rivera
+BSEE	1	A	COMM 01	Purposive Communication	3	0	Purposive Communication	3	10:00-11:00	MWF	CAB 210	Jhon Sherwin S. Duran
+BSEE	1	A	PHILO 01	Ethics	3	0	Ethics	3	11:00-12:00	MWF	CAB 210	Rommel John G. Obena, Jr. 
+BSEE	1	A	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	01:00-03:00	Th	TB 2	Reygan A. Butali
+												
+BSEE	1	B	ENGL 01	Intensive English	3	0	Intensive English	3	09:00-10:30	TTh	CAB 103	Angelyn D. Dela Cruz
+BSEE	1	B	COMM 01	Purposive Communication	3	0	Purposive Communication	3	09:00-10:00	MWF	CAB 104	Edmar M. Delos Santos
+BSEE	1	B	PHILO 01	Ethics	3	0	Ethics	3	10:00-11:00	MWF	CAB 104	Rommel John G. Obena, Jr. 
+BSEE	1	B	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	01:00-03:00	Th	CMEA 2	John Paul A. Cabarles
+												
+BSEE	1	C	ENGL 01	Intensive English	3	0	Intensive English	3	01:00-02:30	TTh	CAB 107	Richmond Romar S. Rivera
+BSEE	1	C	COMM 01	Purposive Communication	3	0	Purposive Communication	3	01:00-02:00	MWF	CAB 107	Angel Christin E. Ped
+BSEE	1	C	PHILO 01	Ethics	3	0	Ethics	3	02:00-03:00	MWF	CAB 107	Rommel John G. Obena, Jr. 
+BSEE	1	C	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	08:00-10:00	Th	CMEA 2	John Paul A. Cabarles
+												
+BSEE	2	A	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	07:00-08:00	MWF	CAB 104	Marjorie P. Garcia 
+BSEE	2	A	HUM 01	Art Appreciation	3	0	Art Appreciation	3	08:00-09:00	MWF	CAB 104	Djoanna D. Pungtilan
+BSEE	2	A	PATHFit 4	Sports	2	0	Sports	2	08:00-10:00	T	CC 4	Jesson Ramil D. Cid
+												
+BSEE	2	B	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	08:00-09:00	MWF	CAB 103	Crishia Faye Angellee A. Peralta
+BSEE	2	B	HUM 01	Art Appreciation	3	0	Art Appreciation	3	09:00-10:00	MWF	CAB 103	Djoanna D. Pungtilan
+BSEE	2	B	PATHFit 4	Sports	2	0	Sports	2	08:00-10:00	Th	CC 4	Jesson Ramil D. Cid
+												
+BSEE	2	C	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	11:00-12:00	MWF	CAB 103	Crishia Faye Angellee A. Peralta
+BSEE	2	C	HUM 01	Art Appreciation	3	0	Art Appreciation	3	10:00-11:00	MWF	CAB 103	Djoanna D. Pungtilan
+BSEE	2	C	PATHFit 4	Sports	2	0	Sports	2	08:00-10:00	W	CC 4	Jesson Ramil D. Cid
+												
+BSEE	3	A	SOCSC 01	Readings in the Philippine History	3	0	Readings in Philippine History	3	02:00-03:00	MWF	CAB 205	Weena G. Franco 
+												
+BSEE	3	B	SOCSC 01	Readings in the Philippine History	3	0	Readings in Philippine History	3	10:00-11:00	MWF	CAB 113	Girlie A. Obrero 
+												
+BSEE	3	C	SOCSC 01	Readings in the Philippine History	3	0	Readings in Philippine History	3	11:00-12:00	MWF	CAB 113	Girlie A. Obrero 
+												
+BSME	1	A	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	08:00-09:00	MWF	CAB 209	Bella Rose O. Tabula
+BSME	1	A	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	08:00-11:00	Th	CAS 216	Bella Rose O. Tabula
+BSME	1	A	STS 01	Science, Technology and Society	3	0	Science, Technology, and Society	3	12:30-02:00	TTh	CAB 110	Crisanta G. Galinato
+BSME	1	A	COMM 01	Purposive Communication	3	0	Purposive Communication	3	11:00-12:00	MWF	CAB 205	Angel Cristin E. Ped
+BSME	1	A	SOCSC 01	Reading in the Philippine History	3	0	Readings in Philippine History	3	10:00-11:00	MWF	CAB 205	Jerry C. Buenavista
+BSME	1	A	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	01:00-02:00	MWF	CAB 205	Edzer Roger D. Antolin
+BSME	1	A	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	Th	CAS 105	Edzer Roger D. Antolin
+BSME	1	A	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	03:00-05:00	W	TB 5	Vince Louisse D. Salacup
+BSME	1	A	CAD 11	Exercise-based Fitness Activities	2	0	Computer Aided Drafting Lab	1	02:00-05:00	M	COE	COE Faculty
+												
+BSME	1	B	CHE 10 	Chemistry for Engineers Lec	3	1	Chemistry for Engineers Lec	3	10:30-12:00	TTh	CAB 210	Kriezher Veehne M. Pagatpatan
+BSME	1	B	CHE 10 	Chemistry for Engineers Lab	3	1	Chemistry for Engineers Lab	1	02:00-05:00	Th	CAS 214	Kriezher Veehne M. Pagatpatan
+BSME	1	B	STS 01	Science, Technology and Society	3	0	Science, Technology, and Society	3	09:00-10:30	TTh	CAB 210	Jarod Mitchell I. Palma
+BSME	1	B	COMM 01	Purposive Communication	3	0	Purposive Communication	3	01:00-02:00	MWF	CAB 206	Ryand Angelo G. Ugalde
+BSME	1	B	SOCSC 01	Reading in the Philippine History	3	0	Readings in Philippine History	3	11:00-12:00	MWF	CAB 209	Leslie Kay R. Corpuz
+BSME	1	B	PHY 10 	Physics for Engineers Lec	3	0	Physics for Engineers Lec	3	10:00-11:00	MWF	CAB 204	Edzer Roger D. Antolin
+BSME	1	B	PHY 10 	Physics for Engineers Lab	0	1	Physics for Engineers Lab	1	02:00-05:00	T	CAS 105	Edzer Roger D. Antolin
+BSME	1	B	PATHFit 2	Exercise-based Fitness Activities	2	0	Exercise-based Fitness Activities	2	08:00-10:00	W	CMEA 2	John Paul A. Cabarles
+BSME	1	B	CAD 11	Exercise-based Fitness Activities	2	0	Computer Aided Drafting Lab	1	02:00-05:00	W	COE	COE Faculty
+												
+BSME	2	A	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	10:30-12:00	TTh	CAB 208	Justin Arvee N. Agtang 
+BSME	2	A	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	01:00-02:30	TTh	CAB 208	Crishia Faye Angellee A. Peralta
+BSME	2	A	PATHFit 4	Sports	2	0	Sports	2	08:00-10:00	T	Gymnatorium	Joselito M. Custodio
+BSME	2	A	ME 142	Sports	2	0	Machine Shop Theory Lab	2	02:00-05:00	MW	COE	COE Faculty
+												
+BSME	2	B	SOCSC 03	The Contemporary World	3	0	The Contemporary World	3	12:30-02:00	TTh	CAB 104	Justin Arvee N. Agtang 
+BSME	2	B	SOCSC 12	The Entrepreneurial Mind	3	0	The Entrepreneurial Mind	3	10:30-12:00	TTh	CAB 207	Crishia Faye Angellee A. Peralta
+BSME	2	B	PATHFit 4	Sports	2	0	Sports	2	08:00-10:00	Th	Gymnatorium	Joselito M. Custodio
+BSME	2	B	ME 142	Sports	2	0	Machine Shop Theory Lab	2	02:00-05:00	TTh	COE	COE Faculty
+												

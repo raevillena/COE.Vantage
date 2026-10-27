@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { RefreshCw } from "lucide-react";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useNavigate } from "react-router-dom";
@@ -35,6 +36,8 @@ import {
 import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOverlay";
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
+import { GeImportModal } from "../../components/scheduler/geImport/GeImportModal";
+import { FileUp } from "lucide-react";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
@@ -63,7 +66,9 @@ interface PendingAssignment {
   startTime?: string;
   endTime?: string;
   facultyId?: string;
+  facultyDisplayName?: string;
   roomId?: string;
+  roomDisplayName?: string;
 }
 
 interface MoveConflictState {
@@ -229,6 +234,7 @@ export function SchedulerPage() {
   const [editingLoadId, setEditingLoadId] = useState<string | null>(null);
   const [editingLoad, setEditingLoad] = useState<FacultyLoad | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [geImportOpen, setGeImportOpen] = useState(false);
   /** When false, main schedule shows only up to 6 PM; "+" expands to show later hours. */
   const [showLateHours, setShowLateHours] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -466,9 +472,10 @@ export function SchedulerPage() {
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      if (data.length >= 1) {
-        const active = data.find((y) => y.isActive);
-        setAcademicYearId(active?.id ?? data[0].id);
+      const term = currentTerm(data);
+      if (term) {
+        setAcademicYearId(term.academicYearId);
+        setSemester(term.semester);
       }
     });
     apiClient
@@ -927,7 +934,8 @@ export function SchedulerPage() {
   }, [moveConflict, academicYearId, semester]);
 
   const showAssignmentForm = pendingAssignment !== null || editingLoadId !== null;
-  let assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad
+  // The saved block only fills the form while it is being edited; right after "Split Class" the stale copy must not leak in.
+  let assignmentInitialValues: Partial<AssignmentFormValues> = editingLoad && editingLoadId
     ? {
         facultyId: editingLoad.facultyId != null ? editingLoad.facultyId : "__others__",
         facultyDisplayName: editingLoad.facultyDisplayName ?? "",
@@ -946,6 +954,18 @@ export function SchedulerPage() {
           dayOfWeek: pendingAssignment.dayOfWeek,
           startTime: pendingAssignment.startTime,
           endTime: pendingAssignment.endTime,
+          ...(pendingAssignment.facultyId || pendingAssignment.facultyDisplayName
+            ? {
+                facultyId: pendingAssignment.facultyId ?? "__others__",
+                facultyDisplayName: pendingAssignment.facultyDisplayName ?? "",
+              }
+            : {}),
+          ...(pendingAssignment.roomId || pendingAssignment.roomDisplayName
+            ? {
+                roomId: pendingAssignment.roomId ?? "__off_system__",
+                roomDisplayName: pendingAssignment.roomDisplayName ?? "",
+              }
+            : {}),
         }
       : {};
 
@@ -965,11 +985,21 @@ export function SchedulerPage() {
 
   const handleAddAnotherSessionFromEdit = useCallback(() => {
     if (!editingLoad) return;
+    // A second session is another meeting of the subject, so it starts on the first day where the class is free
+    // at the same time (never on top of a saved block), with the same faculty and room ready to confirm.
+    const sameClass = loads.filter((l) => l.studentClassId === editingLoad.studentClassId);
+    const busy = (day: number) =>
+      sameClass.some((l) => l.dayOfWeek === day && l.startTime < editingLoad.endTime && l.endTime > editingLoad.startTime);
+    const order = [1, 2, 3, 4, 5, 6].map((_, i) => ((editingLoad.dayOfWeek - 1 + 1 + i) % 6) + 1);
+    const freeDay = order.find((d) => !busy(d));
     setPendingAssignment({
       subjectId: editingLoad.subjectId,
       subjectCode: editingLoad.subject?.code,
       subjectName: editingLoad.subject?.name,
       studentClassId: editingLoad.studentClassId,
+      ...(freeDay ? { dayOfWeek: freeDay, startTime: editingLoad.startTime, endTime: editingLoad.endTime } : {}),
+      ...(editingLoad.facultyId ? { facultyId: editingLoad.facultyId } : editingLoad.facultyDisplayName ? { facultyDisplayName: editingLoad.facultyDisplayName } : {}),
+      ...(editingLoad.roomId ? { roomId: editingLoad.roomId } : editingLoad.roomDisplayName ? { roomDisplayName: editingLoad.roomDisplayName } : {}),
     });
     setPendingAssignmentDragged(false);
     setEditingLoadId(null);
@@ -978,7 +1008,7 @@ export function SchedulerPage() {
     if (viewMode === "faculty" && editingLoad.studentClassId) {
       setOverlayClassId(editingLoad.studentClassId);
     }
-  }, [editingLoad, viewMode, selectedFacultyId]);
+  }, [editingLoad, loads, viewMode, selectedFacultyId]);
 
   useEffect(() => {
     if (!overlayFacultyId || !academicYearId) {
@@ -1327,6 +1357,18 @@ export function SchedulerPage() {
                 </svg>
               </span>
               <span className="hidden sm:inline">Add load</span>
+            </Button>
+          )}
+          {academicYearId && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setGeImportOpen(true)}
+              className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
+              title="Import a GE course offering sheet into a class"
+            >
+              <FileUp size={16} aria-hidden />
+              <span className="hidden sm:inline">Import GE</span>
             </Button>
           )}
           <div className="flex items-center gap-1.5">
@@ -1828,6 +1870,20 @@ export function SchedulerPage() {
         </DragOverlay>
       </DndContext>
 
+      {geImportOpen && academicYearId && (
+        <GeImportModal
+          studentClasses={studentClasses}
+          initialClassId={studentClassId}
+          academicYearId={academicYearId}
+          academicYearName={academicYears.find((y) => y.id === academicYearId)?.name ?? ""}
+          semester={semester}
+          onClose={() => setGeImportOpen(false)}
+          onSaved={() => {
+            refreshLoads();
+            refreshRoomLoads();
+          }}
+        />
+      )}
       {addModalOpen && academicYearId && (
         <AddFacultyLoadModal
           academicYearId={academicYearId}

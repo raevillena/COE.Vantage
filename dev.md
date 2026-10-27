@@ -1192,6 +1192,40 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Multer errors (file too big, too many files) are mapped to 400 in `errorHandler`.
 - Deployment: the reverse proxy in front of the API must allow request bodies of about 20 MB (`client_max_body_size 20m;` in nginx, the default is 1 MB), see `k8s/nginx-vantage.conf`.
 
+### 44. Faculty scope in schedules and reports (v0.3.7)
+
+- A FACULTY user no longer has a Faculty schedule page (sidebar link and dashboard card hidden, route allows ADMIN, DEAN, CHAIRMAN, OFFICER, COLLEGE_SECRETARY only). Their own schedule is on the dashboard.
+- New `GET /reports/my/classes` and `GET /reports/my/rooms` (`academicYearId`, `semester`): the classes and rooms where the caller has at least one block in that term. Class and Room schedule pages and the Reports page use them for a faculty member, and load the grid from `/reports/student-class/:id/data` and `/reports/room/:id/data` because `/faculty-loads`, `/student-classes` and `/rooms` stay closed to FACULTY.
+- Report access (`reportController.ts`): faculty report and NOTA: ADMIN, DEAN, COLLEGE_SECRETARY any person; CHAIRMAN their own department (or themselves); FACULTY only themselves. Class report: staff all (chairman: classes of their department curricula); FACULTY only a class where they teach in that term. Room report: staff all; FACULTY only a room they use in that term. Anything else is 403.
+- `GET /users` for a FACULTY caller returns only themselves (`listUsers(query, onlyId)`), so the Reports faculty dropdown shows just their name. The Reports page now asks for FACULTY, CHAIRMAN and DEAN so a chairman or dean can open their own report too.
+- Faculty workload Excel (`reportExcel.ts`): deloading items are written beside the course rows, one item per row (description in OTHER ASSIGNMENT(S), units in OA load eqv.; extra rows are added when there are more items than courses), as in the registrar sample. Regular Load (maximum less deloading) is on the first row and the total row; the total row sums OA load eqv. People who have deloading but no saved load in the term are listed too (department scoped for a chairman).
+
+### 45. Current term (default semester) (v0.3.7)
+
+- `AcademicYear.currentSemester` (1, 2 or 3 = Mid Year, default 1; migration `20260607000000_current_semester`). With the existing single active academic year it is the **current term**.
+- `PUT /academic-years/current-term` `{ academicYearId, semester }` (ADMIN and COLLEGE_SECRETARY): makes that year the active one and sets its semester. The Academic Years page has a "Current term" card for it; the college secretary can open the page (route and sidebar link) but sees no add, edit or delete.
+- `utils/currentTerm.ts` returns the term filters open on (active year plus its `currentSemester`, or the first year on the 1st semester when none is active). Used by the dashboard, faculty dashboard, scheduler, schedules, rooms, faculty, reports, subjects (possible-subjects term) and users (prioritization and deloading). The schedule and report semester selects gained a Mid Year option so a current semester of 3 can be shown. Users can still pick another term in any filter.
+
+### 46. Dark-mode pickers and time range warning (v0.3.7)
+
+- `style.css` sets `color-scheme: light` on `:root` and `dark` on `:root.dark`, so native controls (time and date pickers, select lists, scrollbars) follow the theme app-wide.
+- `components/scheduler/TimeRangeWarning.tsx` shows under the time inputs of the Assignment panel and the Add load dialog when the end is not after the start (usually 12:00 AM typed for 12:00 PM). It names both times in 12-hour form and offers "Set the end time to 12:00 PM" when the same clock time 12 hours later fits. It is a warning only; saving is still blocked by the existing validation.
+
+### 47. Import GE schedule (v0.3.7)
+
+- Scheduler toolbar **Import GE** (chairman only) opens a wide four-step modal (`components/scheduler/geImport/`): **Source** (class, then paste or file: .xlsx, .csv, .tsv, .txt), **Match subjects**, **Review and resolve**, **Done**. It imports one class at a time for the scheduler's current term (1st or 2nd semester; the load table does not take Mid Year).
+- Backend `modules/geImport` (mounted at `/ge-import`, CHAIRMAN only): `POST /parse` (file or `{ text }`; `geParser.ts` finds the header row by "Course Code", tolerates the two-row header, blank separator rows, duplicate Course Title and No. of Units columns, quoted cells, carried-forward Program/Year/Section), `GET /class-subjects` (the class curriculum subjects for its year level and the semester, with required and scheduled minutes), `POST /preview` and `POST /save` (same checks; save repeats them in one transaction and creates all or nothing).
+- Reading rules: a day string is split into days (`MWF` -> Mon, Wed, Fri; `TTh` -> Tue, Thu) and every day becomes one block. Times without AM or PM are read as 7-11 AM, 12 noon, 1-6 PM (`01:00-02:30` is 1:00-2:30 PM); the review step lets the user correct them. Rows whose faculty is "COE Faculty" are the college's own subjects and are skipped. Rows with no time, day or code are listed and left out.
+- Matching: normalized course code (upper case, no spaces or punctuation) equals a class subject code; the rest are dragged (dnd-kit, `pointerWithin`) or chosen from the card's Match to list, or skipped. Several rows may go to one subject (lecture and lab of one code).
+- Conflicts: **blocking** (must be fixed or the block skipped): overlap with a saved block of the class, overlap between imported blocks, end not after start, missing faculty or room text, subject not in the class curriculum, and a room that is one of ours and already in use. **Warnings** (reviewed with a checkbox): the same faculty name or room text possibly used elsewhere (saved blocks of other classes and within the import), a room too small, hours per week different from the subject requirement. Blocks identical to a saved one are "already scheduled" and skipped, so importing twice is safe.
+- Saved blocks use off-system faculty (`facultyDisplayName`, `facultyId` null). A room whose text equals one of the college rooms (ignoring case and punctuation) and that the chairman may assign becomes that room (`roomId`), so real room conflicts apply; otherwise it stays as `roomDisplayName`.
+- JSON body limit raised to 1 MB for pasted tables. Sample sheets: `GE subjects.txt` and the CSV in the repository root (the parser test reads them).
+
+### 48. Split a repeated subject (v0.3.7)
+
+- Adding a co-instructor to a saved block now offers "Also add the co-instructor on" with the block's saved repeat days (same subject, class, faculty and time), all ticked. Each day is checked (team peer of that day's block) and created; a day that fails is reported and the rest still go in. `useRepeatDays` now returns `existing` (day -> saved block id).
+- "Split Class" starts on the first day, after the edited block's, where the class has no overlapping block at the same time, with the same faculty and room ready to confirm. The stale copy of the edited block no longer fills the new form (`assignmentInitialValues` uses `editingLoad` only while `editingLoadId` is set). `PendingAssignment` gained `facultyDisplayName` and `roomDisplayName`.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

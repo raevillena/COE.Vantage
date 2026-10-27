@@ -85,6 +85,8 @@ export interface AcademicYear {
   id: string;
   name: string;
   isActive: boolean;
+  /** 1 = 1st, 2 = 2nd, 3 = Mid Year: the semester filters open on while this year is the active one. */
+  currentSemester?: number;
   deletedAt?: string | null;
 }
 

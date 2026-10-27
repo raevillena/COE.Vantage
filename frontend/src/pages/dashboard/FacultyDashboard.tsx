@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { currentTerm } from "../../utils/currentTerm";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, FacultyLoad } from "../../types/api";
@@ -23,8 +24,11 @@ export function FacultyDashboard() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data }) => {
         setYears(data);
-        const current = data.find((y) => y.isActive) ?? data[0];
-        if (current) setAcademicYearId(current.id);
+        const term = currentTerm(data);
+        if (term) {
+          setAcademicYearId(term.academicYearId);
+          setSemester(term.semester);
+        }
       })
       .catch(() => setYears([]));
   }, []);

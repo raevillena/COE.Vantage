@@ -36,8 +36,14 @@
   --color-focus-ring: #197fa1;
 }
 
+/* Native controls (time and date pickers, scrollbars, select lists) follow the theme. */
+:root {
+  color-scheme: light;
+}
+
 /* Dark theme: logo dark neutrals (#1C1E20, #0D0D0D) with teal/cyan accents from logo */
 :root.dark {
+  color-scheme: dark;
   /* Surfaces: logo dark charcoal (#1C1E20, near-blacks) */
   --color-surface: #0d0d0e;
   --color-surface-muted: #0d0d0e;
