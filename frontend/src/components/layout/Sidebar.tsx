@@ -20,6 +20,7 @@ import {
   User,
   Info,
   FlaskConical,
+  MessageSquarePlus,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
@@ -193,6 +194,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="space-y-1">
           <NavItem to="/profile" icon={User} onClose={onClose}>Profile</NavItem>
           <NavItem to="/about" icon={Info} onClose={onClose}>About</NavItem>
+          <NavItem to="/feedback" icon={MessageSquarePlus} onClose={onClose}>Feedback</NavItem>
         </div>
       </nav>
     </aside>

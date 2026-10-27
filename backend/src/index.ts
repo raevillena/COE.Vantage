@@ -20,6 +20,7 @@ import { assignmentRequestRoutes } from "./modules/assignmentRequests/assignment
 import { reportRoutes } from "./modules/reports/reportRoutes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboardRoutes.js";
 import { deloadingRoutes } from "./modules/deloadings/deloadingRoutes.js";
+import { feedbackRoutes } from "./modules/feedback/feedbackRoutes.js";
 import { schedulingRuleRoutes } from "./modules/schedulingRules/schedulingRuleRoutes.js";
 import { gradeSubjectRoutes } from "./modules/gradeSubjects/gradeSubjectRoutes.js";
 
@@ -59,6 +60,7 @@ app.use("/assignment-requests", assignmentRequestRoutes);
 app.use("/reports", reportRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/deloadings", deloadingRoutes);
+app.use("/feedback", feedbackRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 app.use("/grade-subjects", gradeSubjectRoutes);
 

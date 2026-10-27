@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.6",
+    date: "2026-10-27",
+    title: "Feedback page",
+    changes: [
+      { kind: "new", text: "Feedback page (bottom of the sidebar, for every role): send a problem, change request or idea for any page or section, with details and up to 5 screenshots. Pictures can be chosen, dropped or pasted with Ctrl+V and are resized automatically." },
+      { kind: "new", text: "Everyone can read the feedback list, search and filter it by page, kind and status, so duplicates are easy to spot." },
+      { kind: "new", text: "Administrators set each item's status (New, Planned, Done, Declined), add a note everyone can see, and archive or delete items." },
+      { kind: "improved", text: "Picture housekeeping for administrators: see the space pictures use, delete single pictures, or clear pictures older than a chosen number of months (default 6, finished or archived items only) while keeping the feedback text." },
+    ],
+  },
+  {
     version: "v0.3.5",
     date: "2026-10-26",
     title: "Deloading, workload dashboard and exports",

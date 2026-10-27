@@ -1183,6 +1183,15 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - UI: **Export all metrics (Excel)** in the dashboard term overview, and **Export Excel / Export CSV** on each detail view (exports every matching row, not the visible page). Shared helper `utils/downloadFile.ts`.
 - CORS now exposes `Content-Disposition` (`exposedHeaders`). Without it a browser on another origin could not read the server's file name and every download fell back to a generic name (this also applies to the Reports downloads).
 
+### 43. Feedback / review page
+
+- Sidebar link **Feedback** (bottom group, all roles including COLLEGE_SECRETARY; it is not scheduling data so `readOnly` does not apply). Route `/feedback` -> `pages/feedback/FeedbackPage.tsx`.
+- Model `Feedback` (page, type BUG|CHANGE|IDEA, title, description, status NEW|PLANNED|DONE|DECLINED, adminNote, archivedAt) and `FeedbackImage` (mimeType, size, `data Bytes` = Postgres `bytea`). Migration `20260606000000_feedback`. Images live in their own table so list queries never load bytes.
+- API (`modules/feedback`): `GET /feedback` (everyone sees everyone's, filters `status|type|page|q|archived=false|true|all`, newest first, 300 max), `POST /feedback` (multipart, field `images` up to 5 x 3 MB, PNG/JPEG/WebP checked by magic bytes, not by extension), `GET /feedback/:id`, `GET /feedback/images/:id` (bytes; the UI fetches it as a blob because the session is a bearer token, an `img src` cannot send it). ADMIN only: `PATCH /feedback/:id` (status, adminNote, archived), `DELETE /feedback/:id`, `DELETE /feedback/images/:id`, `DELETE /feedback/:id/images`, `GET /feedback/storage` and `DELETE /feedback/images?olderThanMonths=6&closedOnly=true`.
+- Keeping the DB small: the browser resizes screenshots before upload (`utils/compressImage.ts`, max 1600 px, WebP). Admins have a **Picture storage** panel: total size, and a bulk delete of pictures older than N months (default 6), by default only for Done, Declined or archived items. Only the pictures are removed; the text, status and note stay. Deleted rows are reused by Postgres automatically (autovacuum); the file size on disk does not shrink unless a `VACUUM FULL` is run.
+- Multer errors (file too big, too many files) are mapped to 400 in `errorHandler`.
+- Deployment: the reverse proxy in front of the API must allow request bodies of about 20 MB (`client_max_body_size 20m;` in nginx, the default is 1 MB), see `k8s/nginx-vantage.conf`.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

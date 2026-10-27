@@ -25,6 +25,7 @@ import { ChairmanFacultyPage } from "./pages/faculty/ChairmanFacultyPage";
 import { UserProfilePage } from "./pages/profile/UserProfilePage";
 import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
 import { ForgotPasswordPage } from "./pages/forgotPassword/ForgotPasswordPage";
+import { FeedbackPage } from "./pages/feedback/FeedbackPage";
 import { AboutPage } from "./pages/about/AboutPage";
 import { NotFoundPage } from "./pages/notFound/NotFoundPage";
 import { ExperimentalGradesPage } from "./pages/experimental/ExperimentalGradesPage";
@@ -67,6 +68,7 @@ function App() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="trash" element={<ProtectedRoute allowedRoles={["ADMIN"]}><TrashPage /></ProtectedRoute>} />
         <Route path="profile" element={<UserProfilePage />} />
+        <Route path="feedback" element={<FeedbackPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route
           path="experimental/grades"

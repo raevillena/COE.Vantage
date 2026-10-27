@@ -1,8 +1,14 @@
 Dashboard page
  - make the dashboard show information regarding classes, rooms. information that are useful and information that needs action. done (phase 1: GET /dashboard/summary + term overview)
+ - faculty view (personal workload and schedule only). done (v0.3.5)
+ - conflict counts (faculty and room conflicts) as a separate checking mechanism. done (v0.3.5)
+ - faculty metrics: number of faculty with overload and underload, colored. done (v0.3.5)
+ - table export of the dashboard metrics (all metrics in one Excel, or one detail view as Excel/CSV). done (v0.3.5)
+ - "required hrs/week" counts every non-deleted student class (not tied to a term) times its curriculum subjects for the year level and semester, so old or test classes inflate it. open: decide whether to count only classes with a schedule in the selected term, or add an active-this-term flag on classes.
 
 Faculty page
  - chairman should be able to change the max or minimum units. done
+ - deloading: multiple items per faculty (per term) with equivalent units deducted from the max units; overload/underload shown in colors and used as the basis for the dashboard. done (v0.3.5, needs migration 20260605000000_faculty_deloading)
  - reuse the edit modal in admin view and change the status as well. done
  - chairman should be also able to add new faculty just like adding users in the admin view. but user role must only be limited to faculty. done
 
@@ -38,4 +44,8 @@ Subjects page
 
 Reports
  - Excel export of class schedules and faculty workload (registrar layout, lab units count 3x toward actual load and the max-units cap). done
- - 
+ - removed the old College workload (Excel) export; registrar forms card renamed College Workload and placed first. done (v0.3.5)
+ -
+
+Feedback
+ - sidebar page at the bottom where users send what should change: page/section, kind, details, screenshots. everyone can read each other's (duplicates), only admin changes status/notes, can delete or archive pictures (bulk purge older than N months). done (v0.3.6, needs migration 20260606000000_feedback and nginx client_max_body_size 20m on the API proxy)

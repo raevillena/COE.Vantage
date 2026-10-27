@@ -17,6 +17,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.3.6" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.5" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.4" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.3" })).toBeVisible();
@@ -554,5 +555,94 @@ test.describe("dashboard export", () => {
     const { accessToken } = (await login.json()) as { accessToken: string };
     const res = await request.get(`${API}/dashboard/export?metric=conflicts&format=csv`, { headers: { Authorization: `Bearer ${accessToken}` } });
     expect(res.status()).toBe(403);
+  });
+});
+
+test.describe("feedback", () => {
+  // 1x1 transparent PNG
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  const TITLE = `E2E feedback ${Date.now()}`;
+
+  test("anyone can send feedback with a picture, everyone can read it, only an admin changes it", async ({ browser, request }) => {
+    // faculty submits
+    const fctx = await browser.newContext();
+    const fpage = await fctx.newPage();
+    await login(fpage, "faculty1@coe.vantage");
+    await fpage.getByRole("link", { name: "Feedback" }).click();
+    await expect(fpage.getByRole("heading", { name: "Feedback", exact: true })).toBeVisible();
+    await expect(fpage.getByLabel("Picture storage")).toHaveCount(0);
+    await fpage.getByRole("button", { name: "New feedback" }).click();
+    const dlg = fpage.getByRole("dialog");
+    await dlg.getByLabel("Page or section").selectOption("Scheduler");
+    await dlg.getByLabel("Title").fill(TITLE);
+    await dlg.getByLabel("Details").fill("The room list should show capacity next to the name.");
+    await dlg.getByLabel("Choose pictures").setInputFiles({ name: "shot.png", mimeType: "image/png", buffer: PNG });
+    await expect(dlg.getByRole("img", { name: /shot/ })).toBeVisible();
+    await dlg.getByRole("button", { name: "Send feedback" }).click();
+    await expect(fpage.getByRole("heading", { name: TITLE })).toBeVisible();
+
+    // another user (chairman) sees it but has no admin controls
+    const cctx = await browser.newContext();
+    const cpage = await cctx.newPage();
+    await login(cpage, "chairman@coe.vantage");
+    await cpage.goto("/feedback");
+    await cpage.getByRole("heading", { name: TITLE }).click();
+    const cdlg = cpage.getByRole("dialog");
+    await expect(cdlg.getByText("The room list should show capacity")).toBeVisible();
+    await expect(cdlg.getByRole("img", { name: /Picture 1/ })).toBeVisible();
+    await expect(cdlg.getByRole("button", { name: "Archive" })).toHaveCount(0);
+    await expect(cdlg.getByLabel("Status")).toHaveCount(0);
+
+    // API: a non-admin cannot change status or delete
+    const login1 = await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } });
+    const ctoken = ((await login1.json()) as { accessToken: string }).accessToken;
+    const list = (await (await request.get(`${API}/feedback?q=${encodeURIComponent(TITLE)}`, { headers: { Authorization: `Bearer ${ctoken}` } })).json()) as { id: string }[];
+    expect(list).toHaveLength(1);
+    const id = list[0].id;
+    expect((await request.patch(`${API}/feedback/${id}`, { data: { status: "DONE" }, headers: { Authorization: `Bearer ${ctoken}` } })).status()).toBe(403);
+    expect((await request.delete(`${API}/feedback/${id}`, { headers: { Authorization: `Bearer ${ctoken}` } })).status()).toBe(403);
+    // a non-picture renamed to .png is rejected
+    const bad = await request.post(`${API}/feedback`, {
+      headers: { Authorization: `Bearer ${ctoken}` },
+      multipart: { page: "Reports", type: "BUG", title: "not a picture", description: "text file", images: { name: "x.png", mimeType: "image/png", buffer: Buffer.from("hello world, not an image") } },
+    });
+    expect(bad.status()).toBe(400);
+    await cctx.close();
+    await fctx.close();
+
+    // admin: status, note, archive, delete picture, purge, delete
+    const actx = await browser.newContext();
+    const apage = await actx.newPage();
+    await login(apage, "admin@coe.vantage");
+    await apage.goto("/feedback");
+    await expect(apage.getByLabel("Picture storage")).toBeVisible();
+    await apage.getByRole("heading", { name: TITLE }).click();
+    const adlg = apage.getByRole("dialog");
+    await adlg.getByLabel("Status").selectOption("DONE");
+    await adlg.getByLabel("Note for everyone").fill("Added in the next release");
+    await adlg.getByRole("button", { name: "Save" }).click();
+    await expect(apage.getByText("Saved")).toBeVisible();
+    await adlg.getByRole("button", { name: "Archive" }).click();
+    await expect(adlg.getByRole("button", { name: "Restore" })).toBeVisible();
+    await adlg.getByRole("button", { name: "Close" }).click();
+    // archived items leave the default list
+    await expect(apage.getByRole("heading", { name: TITLE })).toHaveCount(0);
+    await apage.getByLabel("Archive", { exact: true }).selectOption("true");
+    await expect(apage.getByRole("heading", { name: TITLE })).toBeVisible();
+
+    // the housekeeping panel counts this picture as purgeable (done + archived, any age)
+    await apage.getByLabel("Older than").selectOption("0");
+    await expect(apage.getByRole("button", { name: /Delete \d+ pictures? \(/ })).toBeEnabled();
+    await apage.getByRole("button", { name: /Delete \d+ pictures? \(/ }).click();
+    await apage.getByRole("button", { name: "Yes, delete" }).click();
+    await expect(apage.getByText(/Deleted \d+ pictures?/)).toBeVisible();
+    // text and note survive; the picture is gone
+    await apage.getByRole("heading", { name: TITLE }).click();
+    await expect(apage.getByRole("dialog").getByText("No pictures attached.")).toBeVisible();
+    await expect(apage.getByRole("dialog").getByLabel("Note for everyone")).toHaveValue("Added in the next release");
+    await apage.getByRole("button", { name: "Delete feedback" }).click();
+    await apage.getByRole("button", { name: "Yes, delete" }).click();
+    await expect(apage.getByRole("heading", { name: TITLE })).toHaveCount(0);
+    await actx.close();
   });
 });

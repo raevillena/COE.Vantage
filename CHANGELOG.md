@@ -2,6 +2,15 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.6 - 2026-10-27
+
+Feedback page
+
+- **New:** Feedback page (bottom of the sidebar, for every role): send a problem, change request or idea for any page or section, with details and up to 5 screenshots. Pictures can be chosen, dropped or pasted with Ctrl+V and are resized automatically.
+- **New:** Everyone can read the feedback list, search and filter it by page, kind and status, so duplicates are easy to spot.
+- **New:** Administrators set each item's status (New, Planned, Done, Declined), add a note everyone can see, and archive or delete items.
+- **Improved:** Picture housekeeping for administrators: see the space pictures use, delete single pictures, or clear pictures older than a chosen number of months (default 6, finished or archived items only) while keeping the feedback text.
+
 ## v0.3.5 - 2026-10-26
 
 Deloading, workload dashboard and exports
