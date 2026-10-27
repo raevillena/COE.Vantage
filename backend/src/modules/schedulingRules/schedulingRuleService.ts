@@ -5,6 +5,9 @@ import { normalizeConfig, DEFAULT_SCHEDULING_CONFIG } from "./schedulingRuleType
 
 export type CallerContext = { role: string; departmentId: string | null };
 
+/** The admin and the college secretary manage the rule sets of the whole college; a chairman only their department. */
+const isCollegeWide = (caller: CallerContext) => caller.role === "ADMIN" || caller.role === "COLLEGE_SECRETARY";
+
 /**
  * Resolve which rule set applies for (academicYearId, studentClassId).
  * Order: (year, class) exact > (year, null) > (null, class) > first system default.
@@ -76,8 +79,8 @@ export async function listRuleSets(caller: CallerContext) {
   if (caller.role === "CHAIRMAN" && caller.departmentId) {
     // Chairman sees their department's sets plus global (null department)
     where.OR = [{ departmentId: caller.departmentId }, { departmentId: null }];
-  } else if (caller.role !== "ADMIN") {
-    // Other non-admin roles only see global sets
+  } else if (!isCollegeWide(caller)) {
+    // Other roles only see global sets
     where.departmentId = null;
   }
 
@@ -115,8 +118,8 @@ export async function createRuleSet(
   body: { name: string; description?: string; config: SchedulingRuleSetConfig },
   caller: CallerContext
 ) {
-  if (caller.role !== "ADMIN" && caller.role !== "CHAIRMAN") {
-    throw forbidden("Only admin or chairman can create rule sets");
+  if (!isCollegeWide(caller) && caller.role !== "CHAIRMAN") {
+    throw forbidden("Only admin, college secretary or chairman can create rule sets");
   }
   // Chairman rule sets must always be department-scoped. If chairman has no department, disallow.
   const departmentId =
@@ -190,8 +193,8 @@ export async function setAssignment(
   body: { academicYearId?: string | null; studentClassId?: string | null; ruleSetId: string },
   caller: CallerContext
 ) {
-  if (caller.role !== "ADMIN" && caller.role !== "CHAIRMAN") {
-    throw forbidden("Only admin or chairman can set assignments");
+  if (!isCollegeWide(caller) && caller.role !== "CHAIRMAN") {
+    throw forbidden("Only admin, college secretary or chairman can set assignments");
   }
   const ruleSet = await prisma.schedulingRuleSet.findUnique({ where: { id: body.ruleSetId } });
   if (!ruleSet) throw notFound("Scheduling rule set not found");
@@ -226,8 +229,8 @@ export async function setAssignment(
 
 export async function removeAssignment(academicYearId: string | null, studentClassId: string | null, caller: CallerContext) {
   // Only admin can remove assignments; chairmen override admin defaults by adding more specific assignments.
-  if (caller.role !== "ADMIN") {
-    throw forbidden("Only admin can remove assignments");
+  if (!isCollegeWide(caller)) {
+    throw forbidden("Only admin or college secretary can remove assignments");
   }
   await prisma.schedulingRuleSetAssignment.deleteMany({
     where: { academicYearId, studentClassId },

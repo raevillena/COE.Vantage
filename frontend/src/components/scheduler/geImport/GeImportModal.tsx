@@ -39,6 +39,11 @@ const fieldClass =
 export function GeImportModal({ studentClasses, initialClassId, academicYearId, academicYearName, semester, onClose, onSaved }: Props) {
   const [step, setStep] = useState(1);
   const [classId, setClassId] = useState(initialClassId);
+  /** College = the sheet the college secretary added for this term; custom = paste or choose a file here. */
+  const [mode, setMode] = useState<"college" | "custom">("college");
+  const [college, setCollege] = useState<
+    { status: "loading" } | { status: "none" } | { status: "ready"; parsed: GeParsed; info: { rowCount: number; sourceName: string | null; uploadedByName: string | null; updatedAt: string } }
+  >({ status: "loading" });
   const [source, setSource] = useState<"file" | "paste">("paste");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -54,6 +59,12 @@ export function GeImportModal({ studentClasses, initialClassId, academicYearId, 
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ created: number; alreadyScheduled: number; skipped: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Every step starts at the top of the dialog.
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [step]);
 
   const termOk = semester === 1 || semester === 2;
   const cls = studentClasses.find((c) => c.id === classId);
@@ -79,6 +90,51 @@ export function GeImportModal({ studentClasses, initialClassId, academicYearId, 
       cancelled = true;
     };
   }, [classId, academicYearId, semester, termOk]);
+
+  // The college sheet of this term, when the college secretary has added one.
+  useEffect(() => {
+    if (!termOk) {
+      setCollege({ status: "none" });
+      setMode("custom");
+      return;
+    }
+    let cancelled = false;
+    setCollege({ status: "loading" });
+    apiClient
+      .get<
+        | { exists: false }
+        | { exists: true; set: { rowCount: number; sourceName: string | null; uploadedByName: string | null; updatedAt: string }; rows: GeParsed["rows"]; groups: GeParsed["groups"]; warnings: string[] }
+      >("/ge-import/college", { params: { academicYearId, semester } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data.exists) {
+          setCollege({ status: "none" });
+          setMode("custom");
+          return;
+        }
+        const parsedSet: GeParsed = { rows: data.rows, groups: data.groups, warnings: data.warnings };
+        setCollege({ status: "ready", parsed: parsedSet, info: data.set });
+        setMode("college");
+        setParsed(parsedSet);
+        setAssign({});
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCollege({ status: "none" });
+          setMode("custom");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [academicYearId, semester, termOk]);
+
+  const chooseMode = (next: "college" | "custom") => {
+    setMode(next);
+    setAssign({});
+    if (next === "college" && college.status === "ready") setParsed(college.parsed);
+    else setParsed(null);
+  };
 
   // Picking a class selects the matching section of the file.
   useEffect(() => {
@@ -217,7 +273,7 @@ export function GeImportModal({ studentClasses, initialClassId, academicYearId, 
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && !saving && onClose()}>
-      <Dialog.Content className="!max-w-6xl w-[96vw] max-h-[92vh] overflow-y-auto" title="Import GE schedule">
+      <Dialog.Content ref={contentRef} className="!max-w-6xl w-[96vw] max-h-[92vh] overflow-y-auto" title="Import GE schedule">
         <ol className="mt-2 flex flex-wrap gap-2 text-xs" aria-label="Steps">
           {STEPS.map((label, i) => (
             <li
@@ -249,6 +305,39 @@ export function GeImportModal({ studentClasses, initialClassId, academicYearId, 
               </div>
               {!termOk && <p className="rounded border border-warning bg-warning-muted px-3 py-2 text-sm text-warning">Schedules can be imported for the 1st or 2nd semester only. Change the semester in the scheduler first.</p>}
 
+              <fieldset className="rounded border border-border p-3">
+                <legend className="px-1 text-xs font-medium text-foreground-muted">Where the GE schedule comes from</legend>
+                <div className="space-y-1.5 text-sm">
+                  <label className={`flex items-start gap-2 ${college.status === "ready" ? "text-foreground" : "text-foreground-muted"}`}>
+                    <input
+                      type="radio"
+                      name="ge-mode"
+                      checked={mode === "college"}
+                      disabled={college.status !== "ready"}
+                      onChange={() => chooseMode("college")}
+                      className="mt-1"
+                    />
+                    <span>
+                      College GE schedule
+                      <span className="block text-xs text-foreground-muted">
+                        {college.status === "loading" && "Checking…"}
+                        {college.status === "none" && "The college secretary has not added a GE schedule for this term."}
+                        {college.status === "ready" &&
+                          `${college.info.rowCount} rows added by ${college.info.uploadedByName ?? "the college secretary"} on ${new Date(college.info.updatedAt).toLocaleDateString()}.`}
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-foreground">
+                    <input type="radio" name="ge-mode" checked={mode === "custom"} onChange={() => chooseMode("custom")} className="mt-1" />
+                    <span>
+                      Custom
+                      <span className="block text-xs text-foreground-muted">Paste rows or choose a file for this import only.</span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              {mode === "custom" && (
               <div>
                 <div className="mb-2 flex items-center gap-2">
                   <div role="tablist" aria-label="Source" className="inline-flex overflow-hidden rounded border border-border">
@@ -303,10 +392,12 @@ export function GeImportModal({ studentClasses, initialClassId, academicYearId, 
                 </div>
               </div>
 
+              )}
+
               {parsed && (
                 <div className="space-y-3 rounded border border-border bg-surface-muted/40 p-3">
                   <p className="text-sm text-foreground">
-                    Read {parsed.rows.length} rows in {parsed.groups.length} sections.
+                    {mode === "college" ? "Using" : "Read"} {parsed.rows.length} rows in {parsed.groups.length} sections.
                   </p>
                   {parsed.warnings.map((w) => (
                     <p key={w} className="text-sm text-warning">{w}</p>

@@ -59,3 +59,8 @@ Feedback
 
 General
  - the semester filters default to 1st sem. let the admin or college sec set the current academic year and semester so it is the default of the filters (dashboard, schedules, scheduler, rooms, faculty, reports). done (v0.3.7, needs migration 20260607000000_current_semester)
+
+College secretary
+ - GE subjects menu page: the college secretary adds the whole GE sheet (file or clipboard) per academic year and semester; chairmen import from it in the scheduler (default) or use a custom paste as before. done (v0.3.8, needs migration 20260608000000_ge_offering_sets)
+ - the college secretary creates and edits academic years and selects the current term like the admin (deleting stays with the admin). done (v0.3.8)
+ - the college secretary has the Scheduling rules page, college-wide like the admin. done (v0.3.8)

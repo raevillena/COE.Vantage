@@ -33,4 +33,19 @@ export const classSubjectsQuerySchema = z.object({
 });
 export type ClassSubjectsQuery = z.infer<typeof classSubjectsQuerySchema>["query"];
 
+export const collegeQuerySchema = z.object({
+  query: z.object({
+    academicYearId: z.string().uuid(),
+    semester: z.coerce.number().int().min(1).max(2),
+  }),
+});
+export type CollegeQuery = z.infer<typeof collegeQuerySchema>["query"];
+
+/** Fields of the college upload; they arrive as multipart text next to the file, or as JSON with `text`. */
+export const collegeUploadSchema = z.object({
+  academicYearId: z.string().uuid(),
+  semester: z.coerce.number().int().min(1).max(2),
+  text: z.string().max(900_000).optional(),
+});
+
 export const parseTextSchema = z.object({ text: z.string().min(1).max(900_000) });

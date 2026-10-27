@@ -20,8 +20,8 @@ router.put("/current-term", authorize("ADMIN", "COLLEGE_SECRETARY"), validate(se
 
 router.get("/", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), list);
 router.get("/:id", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), getById);
-router.post("/", authorize("ADMIN"), validate(createAcademicYearSchema), create);
-router.patch("/:id", authorize("ADMIN"), validate(updateAcademicYearSchema), update);
+router.post("/", authorize("ADMIN", "COLLEGE_SECRETARY"), validate(createAcademicYearSchema), create);
+router.patch("/:id", authorize("ADMIN", "COLLEGE_SECRETARY"), validate(updateAcademicYearSchema), update);
 router.delete("/:id", authorize("ADMIN"), remove);
 
 router.post("/:id/restore", authorize("ADMIN"), restore);

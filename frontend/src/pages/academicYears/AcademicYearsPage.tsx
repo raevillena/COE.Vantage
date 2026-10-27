@@ -15,8 +15,9 @@ const SEMESTER_LABEL: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3: 
 
 export function AcademicYearsPage() {
   const role = useAppSelector((s) => s.auth.user?.role);
-  // The college secretary sets the current term but cannot add, edit or delete academic years.
-  const canManage = role === "ADMIN";
+  // The college secretary adds and edits academic years and sets the current term; only the admin moves them to the trash.
+  const isAdmin = role === "ADMIN";
+  const canManage = isAdmin || role === "COLLEGE_SECRETARY";
   const [termYearId, setTermYearId] = useState("");
   const [termSemester, setTermSemester] = useState(1);
   const [termSaving, setTermSaving] = useState(false);
@@ -259,7 +260,7 @@ export function AcademicYearsPage() {
         </div>
       ) : (
         <>
-          {canManage && selectedIds.size > 0 && (
+          {isAdmin && selectedIds.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted/60 px-3 py-2">
               <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
               <Button type="button" variant="secondary" onClick={() => setSelectedIds(new Set())}>
@@ -274,7 +275,7 @@ export function AcademicYearsPage() {
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
-                {canManage && (
+                {isAdmin && (
                   <th className="w-10 px-2 py-2">
                     <input
                       type="checkbox"
@@ -294,7 +295,7 @@ export function AcademicYearsPage() {
             <tbody className="divide-y divide-border">
               {filteredList.map((y) => (
                 <tr key={y.id} className={selectedIds.has(y.id) ? "bg-primary-muted/30" : ""}>
-                  {canManage && (
+                  {isAdmin && (
                     <td className="w-10 px-2 py-2">
                       <input
                         type="checkbox"
@@ -318,6 +319,7 @@ export function AcademicYearsPage() {
                       >
                         <Pencil size={20} className="shrink-0" aria-hidden />
                       </button>
+                      {isAdmin && (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
                           <button type="button" className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" aria-label={`Actions for ${y.name}`}>
@@ -329,6 +331,7 @@ export function AcademicYearsPage() {
                           <DropdownMenu.Item onSelect={() => handleDeleteClick(y.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
+                      )}
                     </div>
                   </td>}
                 </tr>

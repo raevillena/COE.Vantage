@@ -23,7 +23,7 @@ import {
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize("ADMIN", "CHAIRMAN"));
+router.use(authorize("ADMIN", "CHAIRMAN", "COLLEGE_SECRETARY"));
 
 router.get("/", list);
 router.get("/resolve", resolve); // query: academicYearId, studentClassId

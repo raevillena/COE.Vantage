@@ -26,6 +26,7 @@ import { UserProfilePage } from "./pages/profile/UserProfilePage";
 import { ResetPasswordPage } from "./pages/resetPassword/ResetPasswordPage";
 import { ForgotPasswordPage } from "./pages/forgotPassword/ForgotPasswordPage";
 import { FeedbackPage } from "./pages/feedback/FeedbackPage";
+import { GeSubjectsPage } from "./pages/geSubjects/GeSubjectsPage";
 import { AboutPage } from "./pages/about/AboutPage";
 import { NotFoundPage } from "./pages/notFound/NotFoundPage";
 import { ExperimentalGradesPage } from "./pages/experimental/ExperimentalGradesPage";
@@ -60,7 +61,8 @@ function App() {
         <Route path="scheduler" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
         <Route path="faculty" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><ChairmanFacultyPage /></ProtectedRoute>} />
         <Route path="scheduler/rules" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulingRulesPage backTo="/scheduler" title="Scheduling rule sets" /></ProtectedRoute>} />
-        <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules (admin)" isAdminPage /></ProtectedRoute>} />
+        <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules" isAdminPage /></ProtectedRoute>} />
+        <Route path="ge-subjects" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY"]}><GeSubjectsPage /></ProtectedRoute>} />
         <Route path="requests" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"]}><RequestsPage /></ProtectedRoute>} />
         <Route path="schedules/faculty" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY"]}><FacultySchedulePage /></ProtectedRoute>} />
         <Route path="schedules/student-class" element={<StudentSchedulePage />} />

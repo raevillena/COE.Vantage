@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.8",
+    date: "2026-10-27",
+    title: "College GE schedule",
+    changes: [
+      { kind: "new", text: "GE subjects page for the college secretary: add the whole GE course offering sheet of a term once, by pasting it or choosing a file, and replace or remove it later. It has academic year and semester filters." },
+      { kind: "improved", text: "Import GE in the scheduler now starts from the college GE schedule when one is saved for the term. Choose Custom to paste or upload a sheet for a single import, as before." },
+      { kind: "improved", text: "The college secretary can create and edit academic years and set the current term like the admin. Moving a year to the trash stays with the admin." },
+      { kind: "improved", text: "The college secretary manages the Scheduling rules for the whole college, like the admin." },
+    ],
+  },
+  {
     version: "v0.3.7",
     date: "2026-10-27",
     title: "GE import, current term and faculty view",

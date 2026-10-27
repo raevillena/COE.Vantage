@@ -2,6 +2,15 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.8 - 2026-10-27
+
+College GE schedule
+
+- **New:** GE subjects page for the college secretary: add the whole GE course offering sheet of a term once, by pasting it or choosing a file, and replace or remove it later. It has academic year and semester filters.
+- **Improved:** Import GE in the scheduler now starts from the college GE schedule when one is saved for the term. Choose Custom to paste or upload a sheet for a single import, as before.
+- **Improved:** The college secretary can create and edit academic years and set the current term like the admin. Moving a year to the trash stays with the admin.
+- **Improved:** The college secretary manages the Scheduling rules for the whole college, like the admin.
+
 ## v0.3.7 - 2026-10-27
 
 GE import, current term and faculty view

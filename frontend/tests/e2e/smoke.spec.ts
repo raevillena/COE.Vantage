@@ -3,6 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 const PASSWORD = process.env.E2E_PASSWORD ?? "Test123!";
 const API = process.env.E2E_API_URL ?? "http://localhost:4000";
 
+async function browserLogin(browser: import("@playwright/test").Browser, email: string): Promise<Page> {
+  const page = await (await browser.newContext()).newPage();
+  await login(page, email);
+  return page;
+}
+
 async function login(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
@@ -17,6 +23,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.3.8" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.7" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.6" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.5" })).toBeVisible();
@@ -88,7 +95,7 @@ test.describe("college secretary", () => {
     await expect(page.getByText("College of Engineering").first()).toBeVisible();
 
     const nav = page.getByRole("navigation");
-    await expect(nav.getByRole("link", { name: "Subjects" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Subjects", exact: true })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Scheduler" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Users" })).toHaveCount(0);
 
@@ -756,7 +763,7 @@ test.describe("current term", () => {
       await login(page, "secretary@coe.vantage");
       await page.getByRole("link", { name: "Academic years", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Academic Years" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Add Academic Year" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Add Academic Year" })).toBeVisible(); // the college secretary adds academic years too
       await page.getByLabel("Semester", { exact: true }).selectOption("2");
       await page.getByRole("button", { name: "Set as current term" }).click();
       await expect(page.getByText("Current term saved")).toBeVisible();
@@ -849,6 +856,8 @@ test.describe("GE schedule import", () => {
       await page.getByRole("button", { name: /Import GE/ }).click();
       const dialog = page.getByRole("dialog");
       await dialog.getByLabel("Class to import into").selectOption(target!.id);
+      await expect(dialog.getByText("Checking…")).toHaveCount(0);
+      await dialog.getByRole("radio", { name: /Custom/ }).check();
       await dialog.getByLabel("Pasted schedule rows").fill(sheet);
       await dialog.getByRole("button", { name: "Read schedule" }).click();
       await expect(dialog.getByText(/Read 3 rows in 1 sections/)).toBeVisible();
@@ -859,6 +868,9 @@ test.describe("GE schedule import", () => {
 
       // the first row matched by code; the unknown one is dragged onto the second subject
       await expect(dialog.getByText(/1 matched by course code, 1 to match/)).toBeVisible();
+      await dialog.evaluate((el) => {
+        el.scrollTop = 0; // a drag near the top edge would auto-scroll the dialog
+      });
       const handle = dialog.getByRole("button", { name: "Drag ZZZ 99 onto a subject" });
       const targetBox = dialog.getByRole("region", { name: "Subjects of this class" }).getByRole("listitem").filter({ hasText: second.code }).first();
       const from = await handle.boundingBox();
@@ -912,11 +924,93 @@ test.describe("GE schedule import", () => {
     }
   });
 
-  test("only a chairman can use the import endpoints", async ({ request }) => {
-    for (const email of ["faculty1@coe.vantage", "dean@coe.vantage", "secretary@coe.vantage"]) {
-      const t = ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
-      const res = await request.post(`${API}/ge-import/parse`, { headers: { Authorization: `Bearer ${t}` }, data: { text: "x" } });
-      expect(res.status(), email).toBe(403);
+  test("import endpoints: the chairman imports, the college secretary keeps the college sheet, others have no access", async ({ request }) => {
+    const tok = async (email: string) =>
+      ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const as = async (email: string) => ({ Authorization: `Bearer ${await tok(email)}` });
+    for (const email of ["faculty1@coe.vantage", "dean@coe.vantage"]) {
+      expect((await request.post(`${API}/ge-import/parse`, { headers: await as(email), data: { text: "x" } })).status(), email).toBe(403);
+    }
+    const secretary = await as("secretary@coe.vantage");
+    // the secretary may read a sheet, but scheduling into a class belongs to the chairman
+    expect((await request.post(`${API}/ge-import/parse`, { headers: secretary, data: { text: "no header" } })).status()).toBe(400);
+    const zero = "00000000-0000-4000-8000-000000000000";
+    expect((await request.post(`${API}/ge-import/preview`, { headers: secretary, data: { studentClassId: zero, academicYearId: zero, semester: 1, blocks: [] } })).status()).toBe(403);
+    // and the chairman cannot replace the college sheet
+    expect((await request.put(`${API}/ge-import/college`, { headers: await as("chairman@coe.vantage"), data: { academicYearId: zero, semester: 1, text: "x" } })).status()).toBe(403);
+  });
+
+  test("the college secretary adds the college GE sheet and the chairman imports from it", async ({ page, request }) => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const tsv = path.resolve(process.cwd(), "..", "GE subjects.txt");
+    test.skip(!fs.existsSync(tsv), "needs the sample sheet in the repository root");
+    const tok = async (email: string) =>
+      ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const sec = { Authorization: `Bearer ${await tok("secretary@coe.vantage")}` };
+    const ay = (await (await request.get(`${API}/academic-years/active`, { headers: sec })).json()) as { id: string; currentSemester: number };
+    const semester = ay.currentSemester === 2 ? 2 : 1;
+    const before = (await (await request.get(`${API}/ge-import/college?academicYearId=${ay.id}&semester=${semester}`, { headers: sec })).json()) as { exists: boolean };
+    test.skip(before.exists, "a college GE sheet is already saved for the current term");
+
+    try {
+      await login_(page, "secretary@coe.vantage");
+      await page.getByRole("link", { name: "GE subjects", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "GE subjects" })).toBeVisible();
+      await expect(page.getByText(/Nothing is saved for this term yet/)).toBeVisible();
+      await page.getByLabel("Pasted GE sheet").fill(fs.readFileSync(tsv, "utf8"));
+      await page.getByRole("button", { name: "Check the sheet" }).click();
+      await expect(page.getByText("Read 181 rows in 45 sections.")).toBeVisible();
+      await page.getByRole("button", { name: /^Save for / }).click();
+      await expect(page.getByText(/181 rows from Pasted rows/)).toBeVisible();
+      await page.getByLabel("Program").selectOption("BSCE");
+      await expect(page.getByText(/rows$/).first()).toBeVisible();
+      await expect(page.getByRole("cell", { name: /^BSCE 1-A$/ }).first()).toBeVisible();
+
+      // the chairman gets it as the default source in the scheduler
+      const chairman = await browserLogin(page.context().browser()!, "chairman@coe.vantage");
+      await chairman.goto("/scheduler");
+      await chairman.getByRole("button", { name: /Import GE/ }).click();
+      const dialog = chairman.getByRole("dialog");
+      await expect(dialog.getByRole("radio", { name: /College GE schedule/ })).toBeChecked();
+      await expect(dialog.getByText(/181 rows added by/)).toBeVisible();
+      await expect(dialog.getByText("Using 181 rows in 45 sections.")).toBeVisible();
+      await dialog.getByRole("radio", { name: /Custom/ }).check();
+      await expect(dialog.getByLabel("Pasted schedule rows")).toBeVisible();
+      await chairman.context().close();
+    } finally {
+      await request.delete(`${API}/ge-import/college?academicYearId=${ay.id}&semester=${semester}`, { headers: sec });
+    }
+  });
+
+  test("the college secretary creates academic years and manages scheduling rules; deleting stays with the admin", async ({ page, request }) => {
+    const tok = async (email: string) =>
+      ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const sec = { Authorization: `Bearer ${await tok("secretary@coe.vantage")}` };
+    const admin = { Authorization: `Bearer ${await tok("admin@coe.vantage")}` };
+    const created = await request.post(`${API}/academic-years`, { headers: sec, data: { name: "E2E 2098-2099", isActive: false } });
+    expect(created.status()).toBe(201);
+    const id = ((await created.json()) as { id: string }).id;
+    try {
+      expect((await request.patch(`${API}/academic-years/${id}`, { headers: sec, data: { name: "E2E 2098-2099b" } })).status()).toBe(200);
+      expect((await request.delete(`${API}/academic-years/${id}`, { headers: sec })).status()).toBe(403);
+
+      const rules = await request.post(`${API}/scheduling-rule-sets`, {
+        headers: sec,
+        data: { name: "E2E rules", description: null, config: { workStartMinutes: 420, workEndMinutes: 1080, lunchStartMinutes: 720, lunchEndMinutes: 780, slotStepMinutes: 30, avoidLunchSpan: true, preferMwfFor3UnitLecture: true, preferTthFor3UnitLecture: false, maxBlockMinutes: 180 } },
+      });
+      expect(rules.status()).toBe(201);
+      expect((await request.delete(`${API}/scheduling-rule-sets/${((await rules.json()) as { id: string }).id}`, { headers: sec })).status()).toBe(204);
+
+      await login_(page, "secretary@coe.vantage");
+      await page.getByRole("link", { name: "Academic years", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Add Academic Year" })).toBeVisible();
+      await expect(page.getByRole("checkbox", { name: /^Select / })).toHaveCount(0);
+      await page.getByRole("link", { name: "Scheduling rules", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Scheduling rules", exact: true })).toBeVisible();
+    } finally {
+      await request.delete(`${API}/academic-years/${id}`, { headers: admin });
+      await request.delete(`${API}/academic-years/trash/${id}`, { headers: admin });
     }
   });
 });

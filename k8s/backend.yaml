@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: raevillena21/coe-vantage-backend:v0.3.7
+          image: raevillena21/coe-vantage-backend:v0.3.8
           imagePullPolicy: Always
           ports:
             - containerPort: 4000

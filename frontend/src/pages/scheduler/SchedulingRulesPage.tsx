@@ -65,7 +65,8 @@ export interface SchedulingRulesPageProps {
 export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
   const { backTo = "/scheduler", title = "Scheduling rule sets", isAdminPage = false } = props;
   const user = useAppSelector((s) => s.auth.user);
-  const isAdmin = user?.role === "ADMIN";
+  // The admin and the college secretary manage the rule sets of the whole college.
+  const isAdmin = user?.role === "ADMIN" || user?.role === "COLLEGE_SECRETARY";
   const [ruleSets, setRuleSets] = useState<SchedulingRuleSet[]>([]);
   const [assignments, setAssignments] = useState<SchedulingRuleSetAssignment[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);

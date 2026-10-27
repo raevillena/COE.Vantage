@@ -21,6 +21,7 @@ import {
   Info,
   FlaskConical,
   MessageSquarePlus,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
@@ -152,9 +153,16 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                       {user?.role === "CHAIRMAN" && <NavItem to="/faculty" icon={Users} onClose={onClose}>Faculty</NavItem>}
                     </>
                   )}
-                  {user?.role === "COLLEGE_SECRETARY" && <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>}
+                  {user?.role === "COLLEGE_SECRETARY" && (
+                    <>
+                      <NavItem to="/ge-subjects" icon={FileSpreadsheet} onClose={onClose}>GE subjects</NavItem>
+                      <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>
+                      <NavItem to="/admin/scheduling-rules" icon={SlidersHorizontal} onClose={onClose}>Scheduling rules</NavItem>
+                    </>
+                  )}
                   {user?.role === "ADMIN" && (
                     <>
+                      <NavItem to="/ge-subjects" icon={FileSpreadsheet} onClose={onClose}>GE subjects</NavItem>
                       <NavItem to="/users" icon={Users} onClose={onClose}>Users</NavItem>
                       <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>
                       <NavItem to="/admin/scheduling-rules" icon={SlidersHorizontal} onClose={onClose}>Scheduling rules</NavItem>

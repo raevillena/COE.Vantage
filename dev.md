@@ -1226,6 +1226,15 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Adding a co-instructor to a saved block now offers "Also add the co-instructor on" with the block's saved repeat days (same subject, class, faculty and time), all ticked. Each day is checked (team peer of that day's block) and created; a day that fails is reported and the rest still go in. `useRepeatDays` now returns `existing` (day -> saved block id).
 - "Split Class" starts on the first day, after the edited block's, where the class has no overlapping block at the same time, with the same faculty and room ready to confirm. The stale copy of the edited block no longer fills the new form (`assignmentInitialValues` uses `editingLoad` only while `editingLoadId` is set). `PendingAssignment` gained `facultyDisplayName` and `roomDisplayName`.
 
+### 49. College GE sheet, secretary rights (v0.3.8)
+
+- Model `GeOfferingSet` (one per academic year and semester 1 or 2; `rows` = the parsed `GeRow` list as JSON, `rowCount`, `sourceName`, `uploadedByName`); migration `20260608000000_ge_offering_sets`. Uploading a sheet for a term replaces the one saved before.
+- API under `/ge-import`: `GET /college?academicYearId&semester` (CHAIRMAN, COLLEGE_SECRETARY, ADMIN, DEAN) returns `{ exists: false }` or `{ exists, set, rows, groups, warnings }`; `PUT /college` (COLLEGE_SECRETARY, ADMIN; multipart `file` or JSON `text`, plus `academicYearId` and `semester`) parses with `parseSource` and saves; `DELETE /college`. `POST /parse` is open to CHAIRMAN, COLLEGE_SECRETARY and ADMIN; class-subjects, preview and save stay CHAIRMAN only.
+- Page `/ge-subjects` (sidebar GE subjects for the college secretary and the admin): year and semester filters (default: the current term), saved-sheet status with remove, add or replace by paste or file (Check the sheet, then Save with a replace confirmation), and the saved rows with program and text filters.
+- Import GE modal (scheduler): step 1 now chooses the source: **College GE schedule** (default when the term has one, with who added it and when) or **Custom** (paste or file, as before). Everything after step 1 is the same. Every step opens scrolled to the top of the dialog.
+- Academic years: `POST /academic-years` and `PATCH /academic-years/:id` also allow COLLEGE_SECRETARY (create, rename, set active). Trash, restore and permanent delete stay ADMIN. The page hides selection and trash for the college secretary.
+- Scheduling rules: the routes allow COLLEGE_SECRETARY and the service treats it like ADMIN (`isCollegeWide`): sees all rule sets, creates global ones, sets and removes assignments. Page `/admin/scheduling-rules` (title now "Scheduling rules") and a sidebar link for the college secretary.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

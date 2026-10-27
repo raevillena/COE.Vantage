@@ -251,12 +251,33 @@ export function normalizeGeTable(table: string[][]): GeParseResult {
   }
   if (rows.length === 0) warnings.push("The header was found but no course rows follow it");
 
-  const groups = new Map<string, { key: string; program: string; year: number | null; section: string; count: number }>();
+  return { rows, groups: buildGroups(rows), warnings };
+}
+
+/** Program / year / section groups of the rows, in file order. */
+export function buildGroups(rows: GeRow[]): GeParseResult["groups"] {
+  const groups = new Map<string, GeParseResult["groups"][number]>();
   for (const row of rows) {
     const key = `${row.program}|${row.year ?? ""}|${row.section}`;
     const g = groups.get(key) ?? { key, program: row.program, year: row.year, section: row.section, count: 0 };
     g.count += 1;
     groups.set(key, g);
   }
-  return { rows, groups: [...groups.values()], warnings };
+  return [...groups.values()];
+}
+
+/** Reads an uploaded file (.xlsx, .csv, .tsv, .txt) or pasted text into normalized rows. */
+export async function parseSource(file: { originalname: string; buffer: Buffer } | undefined, text: string | undefined): Promise<GeParseResult> {
+  let table: string[][];
+  if (file) {
+    const name = file.originalname.toLowerCase();
+    if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) table = await parseWorkbookTable(file.buffer);
+    else if (name.endsWith(".xls") || name.endsWith(".pdf")) throw badRequest("Save the file as .xlsx or CSV first");
+    else table = parseTextTable(file.buffer.toString("utf8"));
+  } else if (text && text.trim() !== "") {
+    table = parseTextTable(text);
+  } else {
+    throw badRequest("Choose a file or paste the rows, including the header row");
+  }
+  return normalizeGeTable(table);
 }
