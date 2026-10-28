@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound } from "../../utils/errors.js";
 import { buildGroups } from "./geParser.js";
+import { notifyUsers, userIdsWithRole } from "../notifications/notificationService.js";
 import type { GeParseResult, GeRow } from "./geParser.js";
 
 const meta = (s: { id: string; academicYearId: string; semester: number; rowCount: number; sourceName: string | null; uploadedByName: string | null; updatedAt: Date }) => ({
@@ -37,6 +38,15 @@ export async function saveCollegeSet(
     create: { academicYearId, semester, ...data },
     update: data,
   });
+  void userIdsWithRole("CHAIRMAN").then((ids) =>
+    notifyUsers(ids, {
+      type: "GE_SHEET",
+      title: "The college GE sheet was updated",
+      body: `${parsed.rows.length} rows for the ${["", "1st semester", "2nd semester", "Mid year"][semester] ?? "semester " + semester}. Import it from the scheduler.`,
+      link: "/scheduler",
+      groupKey: "ge-sheet",
+    })
+  );
   return { set: meta(set), rows: parsed.rows, groups: parsed.groups, warnings: parsed.warnings };
 }
 

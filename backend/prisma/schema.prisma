@@ -27,6 +27,7 @@ model User {
   departmentId String?
   name         String
   experimentalFeatures Json?
+  lastSeenVersion String? // newest release this person has looked at in the notification bell
   status       String?    // e.g. Full-time, Part-time (from faculty list)
   maxUnits     Int?       // max load units per term (null = no cap)
   isDeleted    Boolean    @default(false)
@@ -39,6 +40,7 @@ model User {
   subjectFacultyPriorities SubjectFacultyPriority[]
   deloadings FacultyDeloading[]
   feedbacks Feedback[]
+  notifications Notification[]
   crossDepartmentRequestsRequested CrossDepartmentLoadRequest[] @relation("RequestedBy")
   crossDepartmentRequestsResponded CrossDepartmentLoadRequest[] @relation("RespondedBy")
   crossDepartmentRequestsAsFaculty CrossDepartmentLoadRequest[] @relation("FacultyRequested")
@@ -451,6 +453,25 @@ model Feedback {
   @@index([status, archivedAt])
   @@index([createdAt])
   @@index([userId])
+}
+
+// Bell notification for one user. Events of one kind fold into a single unread row (groupKey, count).
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String    // SCHEDULE, DELOADING, REQUEST, REQUEST_RESULT, FEEDBACK, TERM, GE_SHEET ...
+  title     String
+  body      String?
+  link      String?   // app route the notification opens
+  groupKey  String?
+  count     Int       @default(1)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, updatedAt])
 }
 
 // Screenshot stored in the database. Kept in its own table so lists never load the bytes; can be purged to limit size.

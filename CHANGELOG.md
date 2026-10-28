@@ -2,6 +2,23 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.4.1 - 2026-10-28
+
+Notification bell and scheduler tidy-up
+
+- **New:** A notification bell in the top bar. It shows an unread count and lists the changes that concern you, newest first. Click one to open the page it is about, or use Mark all read.
+- **New:** You are told when a teaching block is assigned to you, changed or removed, when your deloading or maximum units change, and when the current term changes.
+- **New:** Chairmen are told when another department asks for one of their faculty and when their own request is approved or rejected, and when the college secretary updates the GE sheet.
+- **New:** Feedback: admins are told about new feedback, and the author is told when an admin changes the status or adds a note.
+- **New:** New releases appear in the bell with a link to what is new, until you have looked at them.
+- **Improved:** Many changes in a row, such as auto-assign or several repeat days, fold into one notification with a count. You are never notified about your own action. The bell refreshes every minute.
+- **Improved:** The scheduler toolbar is tidier: filters with Rules and Auto-schedule on the first row, and Import GE, More (Copy previous, Reset) and Add load on the second. It keeps the same two-row layout on every screen size.
+- **New:** A Legend button in the curriculum pane explains the subject status colours, and one in the schedule panel explains the block markers (laboratory-only, awaiting approval, conflict, selected, Split, closed room).
+- **Improved:** Block colors moved next to the schedule Legend. It shows the current palette, opens on hover to show every palette, and the Auto-schedule button takes its colour from the chosen palette.
+- **Improved:** Reset now opens a dialog that names the class and term, and its confirm button unlocks after a 3 second countdown.
+- **Improved:** The schedule grid has a faint line at every hour.
+- **Improved:** The registrar card on the Reports page is called Department Workload for chairmen.
+
 ## v0.4.0 - 2026-10-28
 
 Lecture and laboratory units

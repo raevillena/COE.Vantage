@@ -11,6 +11,7 @@ import type {
   ResetFacultyLoadBody,
   SlotAvailabilityQuery,
 } from "./facultyLoadSchemas.js";
+import { notifyScheduleChange } from "../notifications/notificationService.js";
 import type { CopyFromPreviousFacultyLoadBody } from "./facultyLoadSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -70,6 +71,7 @@ export async function create(req: Request, res: Response): Promise<void> {
     }
   }
   const load = await facultyLoadService.createFacultyLoad(body, caller);
+  void notifyScheduleChange(load.facultyId, "assigned", `${load.subject.code} · ${load.studentClass.name}`, { exceptUserId: req.user?.id });
   res.status(201).json(load);
 }
 
@@ -112,13 +114,26 @@ export async function update(req: Request, res: Response): Promise<void> {
       }
     }
   }
+  const before = await prisma.facultyLoad.findUnique({ where: { id: req.params.id }, select: { facultyId: true } });
   const load = await facultyLoadService.updateFacultyLoad(req.params.id, body, caller);
+  const detail = `${load.subject.code} · ${load.studentClass.name}`;
+  if (before?.facultyId && before.facultyId !== load.facultyId) {
+    void notifyScheduleChange(before.facultyId, "removed", detail, { exceptUserId: req.user?.id });
+    void notifyScheduleChange(load.facultyId, "assigned", detail, { exceptUserId: req.user?.id });
+  } else {
+    void notifyScheduleChange(load.facultyId, "changed", detail, { exceptUserId: req.user?.id });
+  }
   res.json(load);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
   const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const gone = await prisma.facultyLoad.findUnique({
+    where: { id: req.params.id },
+    select: { facultyId: true, subject: { select: { code: true } }, studentClass: { select: { name: true } } },
+  });
   await facultyLoadService.deleteFacultyLoad(req.params.id, caller);
+  if (gone) void notifyScheduleChange(gone.facultyId, "removed", `${gone.subject?.code ?? ""} · ${gone.studentClass?.name ?? ""}`, { exceptUserId: req.user?.id });
   res.status(204).send();
 }
 

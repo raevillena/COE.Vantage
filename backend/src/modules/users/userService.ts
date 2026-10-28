@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { notifyUsers } from "../notifications/notificationService.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 /** `onlyId` narrows the list to one person (a faculty member may only list themselves). */
@@ -109,7 +110,7 @@ export async function updateUser(
     const dept = await prisma.department.findUnique({ where: { id: body.departmentId } });
     if (!dept || dept.isDeleted) throw badRequest("Department not found");
   }
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id },
     data: {
       email: body.email,
@@ -121,6 +122,16 @@ export async function updateUser(
     },
     select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true },
   });
+  if (body.maxUnits !== undefined && body.maxUnits !== user.maxUnits) {
+    void notifyUsers([id], {
+      type: "DELOADING",
+      title: "Your maximum units changed",
+      body: updated.maxUnits == null ? "You no longer have a unit cap" : `Your maximum is now ${updated.maxUnits} units per term`,
+      link: "/dashboard",
+      groupKey: "max-units",
+    }, { exceptUserId: caller?.id });
+  }
+  return updated;
 }
 
 export async function softDeleteUser(id: string) {

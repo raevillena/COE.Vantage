@@ -2,6 +2,7 @@ import { prisma } from "../../prisma/client.js";
 import type { Prisma } from "@prisma/client";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { isTeachingRole } from "../../utils/teachingRoles.js";
+import { chairmenOf, notifyScheduleChange, notifyUsers } from "../notifications/notificationService.js";
 import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
 export interface CallerContext {
@@ -48,6 +49,17 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
       requestedBy: { select: { name: true } },
     },
   });
+  void notifyUsers(
+    await chairmenOf(faculty.departmentId),
+    {
+      type: "REQUEST",
+      title: (n) => (n === 1 ? "An assignment request needs your response" : `${n} assignment requests need your response`),
+      body: `${request.requestedBy.name} asks for ${request.faculty.name}: ${request.subject.code} · ${request.studentClass.name}`,
+      link: "/requests",
+      groupKey: "request-new",
+    },
+    { exceptUserId: requestedById }
+  );
   return request;
 }
 
@@ -180,13 +192,16 @@ export async function approveRequest(id: string, caller: CallerContext, body?: R
     where: { id },
     data: { status: "APPROVED", respondedById: caller.id, respondedAt: new Date(), notes: body?.notes ?? undefined },
   });
+  const what = `${request.subject.code} · ${request.studentClass.name}`;
+  void notifyUsers([request.requestedById], { type: "REQUEST_RESULT", title: "Your assignment request was approved", body: `${what}${body?.notes ? `. ${body.notes}` : ""}`, link: "/requests" }, { exceptUserId: caller.id });
+  void notifyScheduleChange(request.facultyId, "assigned", what, { exceptUserId: caller.id });
   return { load, requestId: id };
 }
 
 export async function rejectRequest(id: string, caller: CallerContext, body?: RespondAssignmentRequestBody) {
   const request = await prisma.crossDepartmentLoadRequest.findUnique({
     where: { id },
-    include: { faculty: { select: { departmentId: true } } },
+    include: { faculty: { select: { departmentId: true } }, subject: { select: { code: true } }, studentClass: { select: { name: true } } },
   });
   if (!request) throw notFound("Request not found");
   if (request.status !== "PENDING") throw badRequest("Request is no longer pending");
@@ -200,5 +215,6 @@ export async function rejectRequest(id: string, caller: CallerContext, body?: Re
     where: { id },
     data: { status: "REJECTED", respondedById: caller.id, respondedAt: new Date(), notes: body?.notes ?? undefined },
   });
+  void notifyUsers([request.requestedById], { type: "REQUEST_RESULT", title: "Your assignment request was rejected", body: `${request.subject.code} · ${request.studentClass.name}${body?.notes ? `. ${body.notes}` : ""}`, link: "/requests" }, { exceptUserId: caller.id });
   return { requestId: id };
 }

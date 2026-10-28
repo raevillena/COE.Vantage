@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
+import { notifyScheduleChange } from "../notifications/notificationService.js";
 import { creditedLoadUnits, type SubjectComponents } from "../../utils/workload.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
@@ -1187,6 +1188,10 @@ export async function autoAssignForClass(
     }
     return results;
   });
+
+  const perFaculty = new Map<string, number>();
+  for (const load of created) if (load.facultyId) perFaculty.set(load.facultyId, (perFaculty.get(load.facultyId) ?? 0) + 1);
+  for (const [facultyId, n] of perFaculty) void notifyScheduleChange(facultyId, "assigned", `${n} ${n === 1 ? "block" : "blocks"} (auto-assign)`, { increment: n });
 
   const assigned = created.map((load) => ({
     subjectCode: load.subject.code,

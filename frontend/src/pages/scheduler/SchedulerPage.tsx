@@ -37,7 +37,7 @@ import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOver
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
 import { GeImportModal } from "../../components/scheduler/geImport/GeImportModal";
-import { FileUp } from "lucide-react";
+import { Copy, FileUp, MoreHorizontal, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
@@ -51,7 +51,11 @@ import {
   GRID_MIN_WIDTH_PX,
 } from "../../components/scheduler/scheduleGridConstants";
 import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
-import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
+import { BlockLegend } from "../../components/scheduler/SchedulerLegend";
+import { BlockColorPicker } from "../../components/scheduler/BlockColorPicker";
+import { DropdownMenu } from "../../components/ui/dropdownMenu";
+import { useSchedulePalette } from "../../context/SchedulePaletteContext";
+import { ResetScheduleDialog } from "../../components/scheduler/ResetScheduleDialog";
 import { facultyRoleSuffix } from "../../components/scheduler/facultyGroups";
 
 type ViewMode = "class" | "faculty";
@@ -151,24 +155,6 @@ function slotConflictsWithLoads(
   return !isIntervalFree(dayOfWeek, start, end, classLoads, facultyLoads, roomLoads);
 }
 
-function SchedulePaletteSelect() {
-  const { paletteId, palettes, setPaletteId } = useSchedulePalette();
-  return (
-    <Select.Root value={paletteId} onValueChange={(v) => setPaletteId(v as SchedulePaletteId)}>
-      <Select.Trigger aria-label="Block color palette" className="w-[120px]">
-        <Select.Value />
-      </Select.Trigger>
-      <Select.Content>
-        {palettes.map((p) => (
-          <Select.Item key={p.id} value={p.id}>
-            {p.label}
-          </Select.Item>
-        ))}
-      </Select.Content>
-    </Select.Root>
-  );
-}
-
 /** Match 2xl breakpoint (1536px). */
 function useIs2xl(): boolean {
   const [is2xl, setIs2xl] = useState(() =>
@@ -218,6 +204,7 @@ function SchedulerLayout({
 
 export function SchedulerPage() {
   const navigate = useNavigate();
+  const { palette: schedulePalette } = useSchedulePalette();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
   const [semester, setSemester] = useState(1);
@@ -260,6 +247,7 @@ export function SchedulerPage() {
   const [slotAvailability, setSlotAvailability] = useState<{ roomIds: string[]; facultyIds: string[] } | null>(null);
   const [autoScheduling, setAutoScheduling] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const user = useAppSelector((s) => s.auth.user);
   const [copySourceAcademicYearId, setCopySourceAcademicYearId] = useState("");
@@ -408,8 +396,6 @@ export function SchedulerPage() {
 
   const handleResetSchedule = async () => {
     if (!academicYearId || !studentClassId) return;
-    const confirmed = window.confirm("This will remove all loads for this class in the selected academic year and semester. Continue?");
-    if (!confirmed) return;
     setResetting(true);
     try {
       await apiClient.post("/faculty-loads/reset", {
@@ -419,6 +405,7 @@ export function SchedulerPage() {
       });
       await Promise.all([refreshLoads(), refreshRoomLoads()]);
       toast.success("Schedule reset for this class");
+      setResetDialogOpen(false);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, "Reset failed"));
     } finally {
@@ -1167,9 +1154,9 @@ export function SchedulerPage() {
   return (
     <div className="flex flex-col min-h-[55vh] h-auto overflow-y-auto">
       <h1 className="text-2xl font-semibold text-foreground mb-4 shrink-0">Scheduler</h1>
-      <div className="mb-4 flex flex-col gap-3 shrink-0 w-full 2xl:flex-row 2xl:items-end 2xl:justify-between">
-        {/* Filters group */}
-        <div className="flex flex-wrap items-end justify-center gap-3 2xl:justify-start">
+      <section aria-label="Scheduler toolbar" className="mb-4 flex shrink-0 flex-col gap-3.5 rounded-xl border border-border bg-surface p-4">
+        {/* Row 1: what is being scheduled, and how auto-schedule behaves */}
+        <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[160px]">
             <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
             <Select.Root value={academicYearId || "__none__"} onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}>
@@ -1242,14 +1229,10 @@ export function SchedulerPage() {
               />
             </div>
           )}
-        </div>
-
-        {/* Actions group */}
-        <div className="flex flex-wrap items-end gap-2 w-full justify-center 2xl:w-auto 2xl:justify-end">
           {viewMode === "class" && academicYearId && studentClassId && (
-            <>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-xs font-medium text-foreground-muted shrink-0">Rules:</span>
+            <div className="ml-auto flex flex-wrap items-end gap-3">
+              <div className="min-w-[180px]">
+                <label className="mb-1 block text-sm font-medium text-foreground">Rules</label>
                 <Select.Root
                   value={selectedRuleSetIdForRun}
                   onValueChange={(v) => {
@@ -1261,7 +1244,7 @@ export function SchedulerPage() {
                     setSelectedRuleSetIdForRun(v);
                   }}
                 >
-                  <Select.Trigger aria-label="Rule set for this run" className="w-[140px] sm:w-[160px]">
+                  <Select.Trigger aria-label="Rule set for this run" className="w-full sm:w-[200px]">
                     <Select.Value />
                   </Select.Trigger>
                   <Select.Content>
@@ -1281,105 +1264,94 @@ export function SchedulerPage() {
               </div>
               <Button
                 type="button"
-                variant="secondary"
+                variant="accent"
                 onClick={handleAutoSchedule}
                 disabled={autoScheduling}
-                className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
+                className={`flex items-center gap-1.5 px-3 text-sm ${schedulePalette.accent}`}
                 title="Auto-schedule remaining subjects for this class"
               >
-                <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center">
-                  {/* clock icon */}
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <circle cx="12" cy="12" r="7" />
-                    <path d="M12 9v4l2 2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <span className="hidden sm:inline">
-                  {autoScheduling ? "Auto-scheduling…" : "Auto-schedule"}
-                </span>
+                <Sparkles size={16} aria-hidden />
+                <span>{autoScheduling ? "Auto-scheduling…" : "Auto-schedule"}</span>
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleOpenCopyDialog}
-                disabled={previousAcademicYears.length === 0 || copyLoading}
-                className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
-                title="Copy schedule from a previous term"
-              >
-                <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center">
-                  {/* copy icon */}
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <rect x="9" y="9" width="11" height="11" rx="1.5" />
-                    <rect x="4" y="4" width="11" height="11" rx="1.5" />
-                  </svg>
-                </span>
-                <span className="hidden sm:inline">
-                  {copyLoading ? "Copying…" : "Copy previous"}
-                </span>
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                onClick={handleResetSchedule}
-                disabled={resetting}
-                className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
-                title="Remove all loads for this class in the selected term"
-              >
-                <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center">
-                  {/* reset icon */}
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path
-                      d="M4 4v6h6M20 20v-6h-6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M6.5 17.5A7 7 0 0 0 18 12M17.5 6.5A7 7 0 0 0 6 12"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-                <span className="hidden sm:inline">
-                  {resetting ? "Resetting…" : "Reset"}
-                </span>
-              </Button>
-            </>
+            </div>
           )}
-          {academicYearId && (
-            <Button
-              type="button"
-              onClick={() => setAddModalOpen(true)}
-              className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
-              title="Add a new faculty load"
-            >
-              <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center">
-                {/* plus icon */}
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span className="hidden sm:inline">Add load</span>
-            </Button>
-          )}
-          {academicYearId && (
+        </div>
+
+        {/* Row 2: adding to the schedule, and the less common actions */}
+        {academicYearId && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3.5">
+            <div className="min-w-0 flex-1 truncate text-sm text-foreground-muted">
+              {viewMode === "class" && studentClassId && (
+                <>Scheduling <strong className="font-semibold text-foreground">{studentClasses.find((c) => c.id === studentClassId)?.name}</strong></>
+              )}
+            </div>
             <Button
               type="button"
               variant="secondary"
               onClick={() => setGeImportOpen(true)}
-              className="flex items-center gap-1.5 px-2 sm:px-3 text-xs sm:text-sm"
+              className="flex items-center gap-1.5 px-3 text-sm"
               title="Import a GE course offering sheet into a class"
             >
               <FileUp size={16} aria-hidden />
               <span className="hidden sm:inline">Import GE</span>
             </Button>
-          )}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-foreground-muted">Block colors</span>
-            <SchedulePaletteSelect />
+            {viewMode === "class" && studentClassId && (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <Button type="button" variant="secondary" className="flex items-center gap-1.5 px-3 text-sm" aria-label="More actions">
+                    <MoreHorizontal size={16} aria-hidden />
+                    <span className="hidden sm:inline">More</span>
+                  </Button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" className="w-72 p-1.5">
+                  <DropdownMenu.Item
+                    disabled={previousAcademicYears.length === 0 || copyLoading}
+                    onSelect={handleOpenCopyDialog}
+                    className="items-start gap-2.5 p-2.5"
+                  >
+                    <Copy size={16} className="mt-0.5 shrink-0 text-foreground-muted" aria-hidden />
+                    <span>
+                      <span className="block font-medium">{copyLoading ? "Copying…" : "Copy previous"}</span>
+                      <span className="block text-xs text-foreground-muted">Copy this class&apos;s schedule from a previous term</span>
+                    </span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="my-1.5 h-px bg-border" />
+                  <DropdownMenu.Item
+                    disabled={resetting}
+                    onSelect={() => setResetDialogOpen(true)}
+                    className="items-start gap-2.5 p-2.5 text-danger focus:bg-danger-muted focus:text-danger-hover"
+                  >
+                    <RotateCcw size={16} className="mt-0.5 shrink-0" aria-hidden />
+                    <span>
+                      <span className="block font-medium">{resetting ? "Resetting…" : "Reset"}</span>
+                      <span className="block text-xs opacity-80">Remove all loads of this class in the selected term</span>
+                    </span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            )}
+            <Button
+              type="button"
+              onClick={() => setAddModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 text-sm"
+              title="Add a new faculty load"
+            >
+              <Plus size={16} aria-hidden />
+              <span className="hidden sm:inline">Add load</span>
+            </Button>
           </div>
-        </div>
-      </div>
+        )}
+      </section>
+
+      <ResetScheduleDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        onConfirm={() => void handleResetSchedule()}
+        busy={resetting}
+        className={studentClasses.find((c) => c.id === studentClassId)?.name}
+        termLabel={`${academicYears.find((y) => y.id === academicYearId)?.name ?? ""}, ${semester === 1 ? "1st Sem" : semester === 2 ? "2nd Sem" : "Mid Year"}`}
+        loadCount={viewMode === "class" && loads.length > 0 ? loads.length : undefined}
+      />
 
       <DndContext
         sensors={sensors}
@@ -1403,9 +1375,13 @@ export function SchedulerPage() {
           )}
           renderMain={() => (
             <>
-            <div className="shrink-0 mb-2">
-              {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground mb-2">Class schedule</h2>}
-              {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground mb-2">Faculty schedule</h2>}
+            <div className="shrink-0 mb-2 flex items-center justify-between gap-2">
+              {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground">Class schedule</h2>}
+              {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground">Faculty schedule</h2>}
+              <div className="flex items-center gap-1">
+                <BlockColorPicker />
+                <BlockLegend />
+              </div>
             </div>
             <div className="flex flex-col overflow-hidden w-full min-w-0 overflow-x-auto min-h-[22rem]">
               {loading ? (

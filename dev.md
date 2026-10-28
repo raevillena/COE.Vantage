@@ -1255,6 +1255,15 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - API: subjects create and update take `lecUnits` and `labUnits`, or the older `units` + `isLab` (all lecture or all laboratory); `resolveSubjectUnits` computes the stored fields. The curriculum apply-import also accepts `lecUnits` and `labUnits` per row.
 - Frontend: `utils/subjectUnits.ts` (`lecUnitsOf`, `labUnitsOf`, `weeklyHours`, `unitsLabel`, `componentTag`) falls back to units + isLab for records without the split. Subjects form and list, the curriculum review and viewer tables, and the scheduler subject tree (required hours, "Lec/Lab" tag) use it. Blocks are not typed: a subject's hours are split over blocks freely.
 
+### 53. Notification bell (v0.4.1)
+
+- Table `Notification` (userId, type, title, body, link, groupKey, count, readAt, updatedAt) and `User.lastSeenVersion` (migration `20260611000000_notifications`). Routes `/notifications` (list with unread count, `read-all`, `seen-version`, `:id/read`, `DELETE :id`), every role, rows are always the caller's own.
+- Sending: `notifyUsers` / `notifyScheduleChange` in `modules/notifications/notificationService.ts`. Best effort (errors are logged, never thrown) and called with `void` after the action. `exceptUserId` keeps people from being told about their own action. A `groupKey` folds events into the open unread row for 15 minutes (`count`, title as a function of the count). Read rows older than 90 days are deleted when their owner lists.
+- Hooks: load create/update/delete in `facultyLoadController` (it knows the actor), auto-assign (per faculty, `increment`), request create/approve/reject, feedback create/update, `setCurrentTerm`, `saveCollegeSet`, deloading replace, `maxUnits` change in `updateUser`. Not hooked: GE import blocks (faculty are off-system text), copy schedule, reset.
+- Releases need no rows: the bell compares `CHANGELOG` with `lastSeenVersion` (a user who never looked sees only the latest). Opening it shows the release notes and stores the version.
+- Frontend: `components/layout/NotificationBell.tsx` in the app bar (Radix dropdown, polls every 60 s and on tab focus); `ChangelogDialog` can be controlled (`open`, `onOpenChange`, `showTrigger`).
+- Instant updates would need a push channel. With 2 backend replicas: Server-Sent Events plus Postgres LISTEN/NOTIFY so every replica hears every event, and `proxy_buffering off` with a long read timeout on the nginx API proxy.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

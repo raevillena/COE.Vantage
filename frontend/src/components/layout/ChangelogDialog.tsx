@@ -14,17 +14,19 @@ function formatDate(iso: string): string {
 }
 
 /** "What's new" link that opens the release notes. Works signed out (login / reset pages). */
-export function ChangelogDialog({ currentVersion }: { currentVersion: string }) {
+export function ChangelogDialog({ currentVersion, open, onOpenChange, showTrigger = true }: { currentVersion: string; open?: boolean; onOpenChange?: (open: boolean) => void; showTrigger?: boolean }) {
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 focus:ring-offset-surface-muted"
-        >
-          What&apos;s new
-        </button>
-      </Dialog.Trigger>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      {showTrigger && (
+        <Dialog.Trigger asChild>
+          <button
+            type="button"
+            className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 focus:ring-offset-surface-muted"
+          >
+            What&apos;s new
+          </button>
+        </Dialog.Trigger>
+      )}
       <Dialog.Content
         className="!max-w-lg max-h-[85vh] overflow-y-auto"
         title="What's new"

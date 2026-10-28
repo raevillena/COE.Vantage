@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound } from "../../utils/errors.js";
+import { allUserIds, notifyUsers } from "../notifications/notificationService.js";
 import type { CreateAcademicYearBody, SetCurrentTermBody, UpdateAcademicYearBody } from "./academicYearSchemas.js";
 
 /** Ensure only one academic year is active: set all non-deleted to false then optionally set the given id to true. */
@@ -66,7 +67,17 @@ export async function setCurrentTerm(body: SetCurrentTermBody) {
   const y = await prisma.academicYear.findUnique({ where: { id: body.academicYearId } });
   if (!y || y.isDeleted) throw notFound("Academic year not found");
   await ensureSingleActive(y.id);
-  return prisma.academicYear.update({ where: { id: y.id }, data: { currentSemester: body.semester } });
+  const updated = await prisma.academicYear.update({ where: { id: y.id }, data: { currentSemester: body.semester } });
+  void allUserIds().then((ids) =>
+    notifyUsers(ids, {
+      type: "TERM",
+      title: "The current term changed",
+      body: `${y.name}, ${["", "1st semester", "2nd semester", "Mid year"][body.semester] ?? "semester " + body.semester}`,
+      link: "/dashboard",
+      groupKey: "term",
+    })
+  );
+  return updated;
 }
 
 export async function softDeleteAcademicYear(id: string) {

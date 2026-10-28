@@ -74,7 +74,7 @@ router.get("/:id", validateParams(idParamsSchema), async (req: Request, res: Res
 });
 
 router.patch("/:id", admin, validateParams(idParamsSchema), validate(updateFeedbackSchema), async (req: Request, res: Response) => {
-  res.json(await updateFeedback(req.params.id, req.body as UpdateFeedbackBody));
+  res.json(await updateFeedback(req.params.id, req.body as UpdateFeedbackBody, req.user!.id));
 });
 
 router.delete("/:id/images", admin, validateParams(idParamsSchema), async (req: Request, res: Response) => {

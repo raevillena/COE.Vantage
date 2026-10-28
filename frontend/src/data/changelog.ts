@@ -15,6 +15,25 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.4.1",
+    date: "2026-10-28",
+    title: "Notification bell and scheduler tidy-up",
+    changes: [
+      { kind: "new", text: "A notification bell in the top bar. It shows an unread count and lists the changes that concern you, newest first. Click one to open the page it is about, or use Mark all read." },
+      { kind: "new", text: "You are told when a teaching block is assigned to you, changed or removed, when your deloading or maximum units change, and when the current term changes." },
+      { kind: "new", text: "Chairmen are told when another department asks for one of their faculty and when their own request is approved or rejected, and when the college secretary updates the GE sheet." },
+      { kind: "new", text: "Feedback: admins are told about new feedback, and the author is told when an admin changes the status or adds a note." },
+      { kind: "new", text: "New releases appear in the bell with a link to what is new, until you have looked at them." },
+      { kind: "improved", text: "Many changes in a row, such as auto-assign or several repeat days, fold into one notification with a count. You are never notified about your own action. The bell refreshes every minute." },
+      { kind: "improved", text: "The scheduler toolbar is tidier: filters with Rules and Auto-schedule on the first row, and Import GE, More (Copy previous, Reset) and Add load on the second. It keeps the same two-row layout on every screen size." },
+      { kind: "new", text: "A Legend button in the curriculum pane explains the subject status colours, and one in the schedule panel explains the block markers (laboratory-only, awaiting approval, conflict, selected, Split, closed room)." },
+      { kind: "improved", text: "Block colors moved next to the schedule Legend. It shows the current palette, opens on hover to show every palette, and the Auto-schedule button takes its colour from the chosen palette." },
+      { kind: "improved", text: "Reset now opens a dialog that names the class and term, and its confirm button unlocks after a 3 second countdown." },
+      { kind: "improved", text: "The schedule grid has a faint line at every hour." },
+      { kind: "improved", text: "The registrar card on the Reports page is called Department Workload for chairmen." },
+    ],
+  },
+  {
     version: "v0.4.0",
     date: "2026-10-28",
     title: "Lecture and laboratory units",

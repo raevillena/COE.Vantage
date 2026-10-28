@@ -1,6 +1,6 @@
 import * as React from "react";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "dangerOutline";
+type ButtonVariant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "dangerOutline";
 type ButtonSize = "default" | "sm" | "xs";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,6 +11,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-primary text-primary-foreground hover:bg-primary-hover focus:ring-focus-ring",
+  // colours come from the caller (the schedule palette accent), passed in className
+  accent: "",
   secondary: "border border-border bg-surface text-foreground hover:bg-surface-hover focus:ring-focus-ring",
   ghost: "text-foreground hover:bg-surface-hover focus:ring-focus-ring",
   danger: "bg-danger text-white hover:bg-danger-hover focus:ring-danger",

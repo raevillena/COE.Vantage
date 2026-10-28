@@ -3,6 +3,7 @@ import { useDraggable } from "@dnd-kit/core";
 import type { Curriculum, Subject, FacultyLoad } from "../../types/api";
 import { apiClient } from "../../api/apiClient";
 import { componentTag, weeklyHours } from "../../utils/subjectUnits";
+import { SubjectStatusLegend } from "./SchedulerLegend";
 import type { SubjectDragItem } from "./schedulerTypes";
 
 interface SubjectItemProps {
@@ -166,10 +167,13 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
     const semesterLabel = semester != null ? SEMESTER_LABELS[semester] ?? `Sem ${semester}` : null;
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h2 className="text-sm font-semibold text-foreground mb-2 px-1">
-          Subjects · {selectedCurriculum.name} ({formatYearLabel(yearLevel)}
-          {semesterLabel ? ` · ${semesterLabel}` : ""})
-        </h2>
+        <div className="mb-2 flex items-start justify-between gap-2 px-1">
+          <h2 className="text-sm font-semibold text-foreground">
+            Subjects · {selectedCurriculum.name} ({formatYearLabel(yearLevel)}
+            {semesterLabel ? ` · ${semesterLabel}` : ""})
+          </h2>
+          <SubjectStatusLegend />
+        </div>
         <div className="flex-1 overflow-y-auto space-y-2">
           <div className="rounded border border-border bg-surface-muted/50 overflow-hidden">
             <button
@@ -223,7 +227,10 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
   // Default: original multi-curriculum tree with Ungrouped.
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h2 className="text-sm font-semibold text-foreground mb-2 px-1">Curriculum</h2>
+      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+        <h2 className="text-sm font-semibold text-foreground">Curriculum</h2>
+        <SubjectStatusLegend />
+      </div>
       <div className="flex-1 overflow-y-auto space-y-1">
         {curricula.map((c) => {
           const subs = byCurriculum.get(c.id) ?? [];

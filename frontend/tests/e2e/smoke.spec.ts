@@ -23,6 +23,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.4.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.4.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.9" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.8" })).toBeVisible();
@@ -786,6 +787,54 @@ test.describe("current term", () => {
   });
 });
 
+test.describe("scheduler legend", () => {
+  test("the curriculum pane explains the subject status colours and the schedule panel explains the block markers", async ({ page }) => {
+    await login(page, "chairman@coe.vantage");
+    await page.goto("/scheduler");
+    const legends = page.getByRole("button", { name: "Legend" });
+    await expect(legends).toHaveCount(2);
+
+    await legends.first().click();
+    let menu = page.getByRole("menu");
+    for (const text of ["Not scheduled yet", "Partly scheduled", "Fully scheduled", "Over-scheduled"]) await expect(menu.getByText(text)).toBeVisible();
+    await expect(menu.getByText("Dashed border: laboratory-only subject")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await legends.nth(1).click();
+    menu = page.getByRole("menu");
+    for (const text of ["Dashed border: laboratory-only subject", "Amber outline: awaiting approval", "Red: conflict with another block", "Class split between instructors"]) await expect(menu.getByText(text)).toBeVisible();
+    await expect(menu.getByText("Not scheduled yet")).toHaveCount(0);
+  });
+});
+
+test.describe("reset schedule", () => {
+  test("a reset asks in a dialog and the confirm button unlocks after a 3 second countdown", async ({ page }) => {
+    await login(page, "chairman@coe.vantage");
+    await page.goto("/scheduler");
+    await page.getByLabel("Student class").click();
+    await page.getByRole("option").nth(1).click();
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: /Reset/ }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Reset schedule?" });
+    await expect(dialog).toBeVisible();
+    const confirm = dialog.getByRole("button", { name: /^Reset schedule/ });
+    await expect(confirm).toBeDisabled();
+    await expect(confirm).toHaveText(/\(\d\)/);
+    await expect(confirm).toBeEnabled({ timeout: 5000 });
+    await expect(confirm).toHaveText("Reset schedule");
+
+    // cancelling leaves everything alone, and reopening starts the countdown again
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: /Reset/ }).click();
+    await expect(page.getByRole("dialog").getByRole("button", { name: /^Reset schedule \(/ })).toBeDisabled();
+    await page.keyboard.press("Escape");
+  });
+});
+
 test.describe("scheduler time inputs", () => {
   test("warns when the end time is before the start (12 AM instead of 12 PM) and the time picker follows dark mode", async ({ page }) => {
     await login_(page, "chairman@coe.vantage");
@@ -1131,6 +1180,117 @@ test.describe("splitting a repeated subject", () => {
     } finally {
       for (const l of await loadsOf()) if (l.subject.code === "CE101") await request.delete(`${API}/faculty-loads/${l.id}`, { headers });
     }
+  });
+});
+
+test.describe("notifications", () => {
+  type N = { id: string; type: string; title: string; body: string | null; count: number; readAt: string | null };
+  type Inbox = { items: N[]; unread: number; lastSeenVersion: string | null };
+
+  async function token(request: import("@playwright/test").APIRequestContext, email: string) {
+    return ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+  }
+
+  test("a teacher is told about changes to their schedule, once per burst, and only they can read or clear it", async ({ request }) => {
+    const chair = { Authorization: `Bearer ${await token(request, "chairman@coe.vantage")}` };
+    const get = async <T,>(path: string, headers = chair) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string }>("/academic-years/active");
+    const users = await get<{ id: string; name: string; email: string }[]>("/users?role=FACULTY");
+    const teacher = users.find((u) => u.email === "faculty2@coe.vantage");
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subjects = await get<{ id: string; code: string }[]>("/subjects");
+    const subject = subjects.find((x) => x.code === "CE101");
+    const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
+    test.skip(!teacher || !cls || !subject || !room, "needs the seeded CE data");
+
+    const mine = { Authorization: `Bearer ${await token(request, teacher!.email)}` };
+    // start clean: earlier tests may have left an unread schedule notification that new ones would fold into
+    await request.post(`${API}/notifications/read-all`, { headers: mine });
+    const before = await get<Inbox>("/notifications", mine);
+    const made: string[] = [];
+    const add = async (day: number) => {
+      const r = await request.post(`${API}/faculty-loads`, {
+        headers: chair,
+        data: { subjectId: subject!.id, studentClassId: cls!.id, facultyId: teacher!.id, roomId: room!.id, dayOfWeek: day, startTime: "17:00", endTime: "18:00", semester: 1, academicYearId: ay.id },
+      });
+      if (r.status() === 201) made.push(((await r.json()) as { id: string }).id);
+      return r.status();
+    };
+    try {
+      const first = await add(6);
+      test.skip(first !== 201, "needs a free Saturday 5 PM slot");
+      await add(5);
+
+      const inbox = await get<Inbox>("/notifications", mine);
+      expect(inbox.unread).toBeGreaterThan(before.unread);
+      const schedule = inbox.items.find((n) => n.type === "SCHEDULE" && !n.readAt)!;
+      expect(schedule.body).toContain("CE101");
+      // two assignments in a row fold into one notification with a count
+      expect(schedule.count).toBeGreaterThanOrEqual(2);
+      expect(schedule.title).toMatch(/updates\)/);
+
+      // the person who made the change is not told about their own action
+      const chairInbox = await get<Inbox>("/notifications");
+      expect(chairInbox.items.some((n) => n.id === schedule.id)).toBe(false);
+
+      // another user can neither mark nor remove it
+      await request.post(`${API}/notifications/${schedule.id}/read`, { headers: chair });
+      await request.delete(`${API}/notifications/${schedule.id}`, { headers: chair });
+      expect((await get<Inbox>("/notifications", mine)).items.find((n) => n.id === schedule.id)?.readAt).toBeNull();
+
+      await request.post(`${API}/notifications/${schedule.id}/read`, { headers: mine });
+      const after = await get<Inbox>("/notifications", mine);
+      expect(after.items.find((n) => n.id === schedule.id)?.readAt).not.toBeNull();
+      expect(after.unread).toBe(inbox.unread - 1);
+
+      // removing a block tells them again, and "read all" clears the count
+      await request.delete(`${API}/faculty-loads/${made[0]}`, { headers: chair });
+      made.shift();
+      expect((await get<Inbox>("/notifications", mine)).unread).toBeGreaterThan(0);
+      await request.post(`${API}/notifications/read-all`, { headers: mine });
+      expect((await get<Inbox>("/notifications", mine)).unread).toBe(0);
+    } finally {
+      for (const id of made) await request.delete(`${API}/faculty-loads/${id}`, { headers: chair });
+    }
+  });
+
+  test("feedback tells the admins, and the author hears about the admin's answer", async ({ request }) => {
+    const admin = { Authorization: `Bearer ${await token(request, "admin@coe.vantage")}` };
+    const author = { Authorization: `Bearer ${await token(request, "faculty1@coe.vantage")}` };
+    const get = async <T,>(path: string, headers: Record<string, string>) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const created = await request.post(`${API}/feedback`, {
+      headers: author,
+      multipart: { page: "Dashboard", type: "IDEA", title: "Bell e2e idea", description: "Notification test" },
+    });
+    expect(created.status()).toBe(201);
+    const id = ((await created.json()) as { id: string }).id;
+    try {
+      const adminInbox = await get<Inbox>("/notifications", admin);
+      expect(adminInbox.items.some((n) => n.type === "FEEDBACK" && !n.readAt)).toBe(true);
+
+      await request.patch(`${API}/feedback/${id}`, { headers: admin, data: { status: "PLANNED", adminNote: "Next release" } });
+      const inbox = await get<Inbox>("/notifications", author);
+      const told = inbox.items.find((n) => n.type === "FEEDBACK" && n.body?.includes("Bell e2e idea"));
+      expect(told?.body).toContain("Next release");
+    } finally {
+      await request.delete(`${API}/feedback/${id}`, { headers: admin });
+    }
+  });
+
+  test("the bell shows the unread count and the new release, and marking all read clears it", async ({ page, request }) => {
+    const mine = { Authorization: `Bearer ${await token(request, "faculty1@coe.vantage")}` };
+    // pretend this user has not seen the latest release
+    await request.post(`${API}/notifications/seen-version`, { headers: mine, data: { version: "v0.1.0" } });
+    await login(page, "faculty1@coe.vantage");
+    const badge = page.getByTestId("notification-badge");
+    await expect(badge).toBeVisible();
+    await page.getByRole("button", { name: /^Notifications/ }).click();
+    await expect(page.getByText(/is out:/)).toBeVisible();
+    await page.getByRole("button", { name: "Mark all read" }).click();
+    await expect(badge).toHaveCount(0);
+    // opening the release item shows the release notes
+    await page.keyboard.press("Escape");
+    expect((await (await request.get(`${API}/notifications`, { headers: mine })).json() as Inbox).lastSeenVersion).not.toBe("v0.1.0");
   });
 });
 

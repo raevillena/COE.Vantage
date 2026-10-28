@@ -24,9 +24,11 @@ export interface SchedulePalette {
   description: string;
   /** Tailwind utility classes used for subject backgrounds, one per distinct subject. */
   colors: string[];
+  /** Solid button colours (background, hover, text, focus ring) in a hue of this palette. Written out in full so Tailwind finds them. */
+  accent: string;
 }
 
-const ALL_PALETTES: SchedulePalette[] = [
+const RAW_PALETTES: Omit<SchedulePalette, "accent">[] = [
   {
     id: "balanced",
     label: "Balanced",
@@ -333,6 +335,20 @@ const ALL_PALETTES: SchedulePalette[] = [
     ],
   },
 ];
+
+/** One accent per palette family; a light palette and its dark twin share it. Desaturated (and a little transparent in dark mode) so the button stays calm next to the primary one. */
+const ACCENTS: Record<string, string> = {
+  balanced: "bg-violet-700 saturate-[.6] text-white hover:bg-violet-800 focus:ring-violet-500 dark:bg-violet-600/70 dark:saturate-100 dark:hover:bg-violet-600/90",
+  soft: "bg-rose-700 saturate-[.6] text-white hover:bg-rose-800 focus:ring-rose-500 dark:bg-rose-600/70 dark:saturate-100 dark:hover:bg-rose-600/90",
+  vivid: "bg-fuchsia-700 saturate-[.6] text-white hover:bg-fuchsia-800 focus:ring-fuchsia-500 dark:bg-fuchsia-600/70 dark:saturate-100 dark:hover:bg-fuchsia-600/90",
+  cool: "bg-indigo-700 saturate-[.6] text-white hover:bg-indigo-800 focus:ring-indigo-500 dark:bg-indigo-600/70 dark:saturate-100 dark:hover:bg-indigo-600/90",
+  warm: "bg-orange-700 saturate-[.6] text-white hover:bg-orange-800 focus:ring-orange-500 dark:bg-orange-600/70 dark:saturate-100 dark:hover:bg-orange-600/90",
+  earth: "bg-amber-700 saturate-[.6] text-white hover:bg-amber-800 focus:ring-amber-500 dark:bg-amber-600/70 dark:saturate-100 dark:hover:bg-amber-600/90",
+  ocean: "bg-blue-700 saturate-[.6] text-white hover:bg-blue-800 focus:ring-blue-500 dark:bg-blue-600/70 dark:saturate-100 dark:hover:bg-blue-600/90",
+  forest: "bg-emerald-700 saturate-[.6] text-white hover:bg-emerald-800 focus:ring-emerald-500 dark:bg-emerald-600/70 dark:saturate-100 dark:hover:bg-emerald-600/90",
+};
+
+const ALL_PALETTES: SchedulePalette[] = RAW_PALETTES.map((p) => ({ ...p, accent: ACCENTS[p.id.replace(/Dark$/, "")] ?? ACCENTS.balanced }));
 
 const DEFAULT_PALETTE_ID: SchedulePaletteId = "balanced";
 

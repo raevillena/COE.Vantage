@@ -66,3 +66,7 @@ College secretary
  - GE subjects menu page: the college secretary adds the whole GE sheet (file or clipboard) per academic year and semester; chairmen import from it in the scheduler (default) or use a custom paste as before. done (v0.3.8, needs migration 20260608000000_ge_offering_sets)
  - the college secretary creates and edits academic years and selects the current term like the admin (deleting stays with the admin). done (v0.3.8)
  - the college secretary has the Scheduling rules page, college-wide like the admin. done (v0.3.8)
+
+Notifications
+ - bell in the top bar with unread count: schedule changes for the teacher, deloading and max units, current term, cross-department requests and their answers, college GE sheet, feedback (new to admins, answers to the author), and new releases. Bursts fold into one item; polls every minute. done (v0.4.1, needs migration 20260611000000_notifications)
+ - open: instant updates (no polling) would need a push channel; with 2 backend replicas that means Server-Sent Events plus Postgres LISTEN/NOTIFY, and proxy buffering off for the stream.

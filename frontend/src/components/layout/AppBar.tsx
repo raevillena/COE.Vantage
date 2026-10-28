@@ -5,6 +5,7 @@ import { apiClient } from "../../api/apiClient";
 import { Avatar } from "../ui/avatar";
 import { DropdownMenu } from "../ui/dropdownMenu";
 import { useTheme } from "../../context/ThemeContext";
+import { NotificationBell } from "./NotificationBell";
 interface AppBarProps {
   pageTitle: string;
   onMenuClick?: () => void;
@@ -122,6 +123,7 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
           </span>
           <span>{themeLabel}</span>
         </button>
+        <NotificationBell />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button

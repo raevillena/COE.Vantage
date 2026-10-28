@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound } from "../../utils/errors.js";
+import { notifyUsers, userIdsWithRole } from "../notifications/notificationService.js";
 import type { CreateFeedbackBody, ListFeedbackQuery, PurgeQuery, UpdateFeedbackBody } from "./feedbackSchemas.js";
 
 export const MAX_IMAGES = 5;
@@ -70,10 +71,18 @@ export async function createFeedback(userId: string, body: CreateFeedbackBody, f
     data: { userId, ...body, images: { create: images } },
     select: { id: true },
   });
+  void notifyUsers(await userIdsWithRole("ADMIN"), {
+    type: "FEEDBACK",
+    title: (n) => (n === 1 ? "New feedback" : `${n} new feedback items`),
+    body: body.title,
+    link: "/feedback",
+    groupKey: "feedback-new",
+  }, { exceptUserId: userId });
   return getFeedback(created.id);
 }
 
-export async function updateFeedback(id: string, body: UpdateFeedbackBody) {
+export async function updateFeedback(id: string, body: UpdateFeedbackBody, actorId?: string) {
+  const before = await prisma.feedback.findUnique({ where: { id }, select: { userId: true, title: true, status: true, adminNote: true } });
   const data: Prisma.FeedbackUpdateInput = {};
   if (body.status) data.status = body.status;
   if (body.adminNote !== undefined) data.adminNote = body.adminNote?.trim() ? body.adminNote.trim() : null;
@@ -82,6 +91,20 @@ export async function updateFeedback(id: string, body: UpdateFeedbackBody) {
     await prisma.feedback.update({ where: { id }, data });
   } catch {
     throw notFound("Feedback not found");
+  }
+  if (before) {
+    const statusChanged = body.status !== undefined && body.status !== before.status;
+    const note = body.adminNote !== undefined ? (body.adminNote?.trim() || null) : before.adminNote;
+    const noteChanged = body.adminNote !== undefined && note !== before.adminNote;
+    if (statusChanged || noteChanged) {
+      const label = statusChanged ? `is now ${String(body.status).toLowerCase().replace(/_/g, " ")}` : "has a new note";
+      void notifyUsers([before.userId], {
+        type: "FEEDBACK",
+        title: "Your feedback was updated",
+        body: `"${before.title}" ${label}${noteChanged && note ? `: ${note}` : ""}`,
+        link: "/feedback",
+      }, { exceptUserId: actorId });
+    }
   }
   return getFeedback(id);
 }

@@ -2,6 +2,7 @@ import { prisma } from "../../prisma/client.js";
 import { badRequest, forbidden, notFound } from "../../utils/errors.js";
 import { loadDeloadings, round2 } from "../../utils/deloading.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { notifyUsers } from "../notifications/notificationService.js";
 import type { CopyDeloadingsBody, PutDeloadingsBody } from "./deloadingSchemas.js";
 
 export interface DeloadingCaller {
@@ -59,6 +60,13 @@ export async function replaceDeloadings(userId: string, body: PutDeloadingsBody,
   });
   const map = await loadDeloadings(body.academicYearId, body.semester, [userId]);
   const d = map.get(userId) ?? { total: 0, items: [] };
+  void notifyUsers([userId], {
+    type: "DELOADING",
+    title: "Your deloading was updated",
+    body: d.items.length === 0 ? "No deloading for this term" : `${d.total} ${d.total === 1 ? "unit" : "units"} of deloading this term`,
+    link: "/dashboard",
+    groupKey: "deloading",
+  }, { exceptUserId: caller.id });
   return { userId, total: d.total, items: d.items };
 }
 
