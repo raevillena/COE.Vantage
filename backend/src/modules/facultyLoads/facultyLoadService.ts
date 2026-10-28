@@ -289,8 +289,35 @@ export async function getFacultyLoadById(id: string) {
 }
 
 /** Preview conflicts without persisting. */
+/**
+ * A split needs a different instructor than the block it splits, for the same subject and class and term.
+ * Returns that block, or throws.
+ */
+async function assertValidSplitSource(
+  body: { splitOfLoadId: string; facultyId?: string | null; facultyDisplayName?: string | null; subjectId: string; studentClassId: string; semester: number; academicYearId: string }
+) {
+  const source = await prisma.facultyLoad.findUnique({ where: { id: body.splitOfLoadId } });
+  if (!source || source.subjectId !== body.subjectId || source.studentClassId !== body.studentClassId || source.semester !== body.semester || source.academicYearId !== body.academicYearId) {
+    throw badRequest("The block to split was not found for this subject and class");
+  }
+  const sameInstructor = body.facultyId
+    ? source.facultyId === body.facultyId
+    : !source.facultyId && (source.facultyDisplayName ?? "").trim().toLowerCase() === (body.facultyDisplayName ?? "").trim().toLowerCase();
+  if (sameInstructor) throw badRequest("A split needs a different instructor than the original block");
+  return source;
+}
+
 export async function previewFacultyLoad(body: PreviewFacultyLoadBody) {
-  return checkConflicts(body);
+  let isSplit = false;
+  if (body.splitOfLoadId) {
+    try {
+      await assertValidSplitSource({ ...body, splitOfLoadId: body.splitOfLoadId });
+      isSplit = true;
+    } catch {
+      isSplit = false; // an invalid split is checked as an ordinary block
+    }
+  }
+  return checkConflicts({ ...body, isSplit });
 }
 
 export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: CallerContext) {
@@ -323,6 +350,9 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
 
   const trimmedRoomDisplay = body.roomDisplayName?.trim() || null;
   const trimmedFacultyDisplay = body.facultyDisplayName?.trim() || null;
+  const splitSource = body.splitOfLoadId
+    ? await assertValidSplitSource({ ...body, splitOfLoadId: body.splitOfLoadId, facultyId: effectiveFacultyId, facultyDisplayName: trimmedFacultyDisplay })
+    : null;
   if (body.excludeLoadId) {
     await assertValidCoInstructorExclude(body.excludeLoadId, {
       facultyId: effectiveFacultyId,
@@ -352,8 +382,9 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
     semester: body.semester,
     academicYearId: body.academicYearId,
     excludeLoadId: body.excludeLoadId,
+    splitOfLoadId: body.splitOfLoadId,
   };
-  const conflicts = await checkConflicts(payload);
+  const conflicts = await checkConflicts({ ...payload, isSplit: Boolean(splitSource) });
   assertNoConflicts(conflicts);
 
   const data = normalizeFacultyLoadData({
@@ -368,11 +399,26 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
     endTime: body.endTime,
     semester: body.semester,
     academicYearId: body.academicYearId,
+    isSplit: Boolean(splitSource),
   });
 
   return prisma.$transaction(async (tx) => {
-    const conflictsAgain = await checkConflicts(payload, tx);
+    const conflictsAgain = await checkConflicts({ ...payload, isSplit: Boolean(splitSource) }, tx);
     assertNoConflicts(conflictsAgain);
+    if (splitSource) {
+      // The original instructor's blocks of this subject (all its repeat days) carry the label too.
+      await tx.facultyLoad.updateMany({
+        where: {
+          studentClassId: splitSource.studentClassId,
+          subjectId: splitSource.subjectId,
+          academicYearId: splitSource.academicYearId,
+          semester: splitSource.semester,
+          facultyId: splitSource.facultyId,
+          facultyDisplayName: splitSource.facultyDisplayName,
+        },
+        data: { isSplit: true },
+      });
+    }
     return tx.facultyLoad.create({
       data,
       include: {
@@ -445,7 +491,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
     excludeLoadId: id,
   };
 
-  const conflicts = await checkConflicts(payload);
+  const conflicts = await checkConflicts({ ...payload, isSplit: existing.isSplit });
   assertNoConflicts(conflicts);
 
   const updateData = {
@@ -464,7 +510,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
   const data = Object.fromEntries(Object.entries(updateData).filter(([, v]) => v !== undefined));
 
   return prisma.$transaction(async (tx) => {
-    const conflictsAgain = await checkConflicts(payload, tx);
+    const conflictsAgain = await checkConflicts({ ...payload, isSplit: existing.isSplit }, tx);
     assertNoConflicts(conflictsAgain);
     return tx.facultyLoad.update({
       where: { id },
@@ -489,6 +535,17 @@ export async function deleteFacultyLoad(id: string, caller?: CallerContext) {
   if (caller) await assertStudentClassInDepartment(load.studentClassId, caller);
   if (caller) await assertLoadNotLocked(load, caller);
   await prisma.facultyLoad.delete({ where: { id } });
+  if (load.isSplit) {
+    // A split needs at least two instructors; when only one is left the label goes away.
+    const rest = await prisma.facultyLoad.findMany({
+      where: { studentClassId: load.studentClassId, subjectId: load.subjectId, academicYearId: load.academicYearId, semester: load.semester, isSplit: true },
+      select: { id: true, facultyId: true, facultyDisplayName: true },
+    });
+    const instructors = new Set(rest.map((l) => l.facultyId ?? `name:${(l.facultyDisplayName ?? "").trim().toLowerCase()}`));
+    if (instructors.size < 2 && rest.length > 0) {
+      await prisma.facultyLoad.updateMany({ where: { id: { in: rest.map((l) => l.id) } }, data: { isSplit: false } });
+    }
+  }
 }
 
 export async function resetForClass(
@@ -569,7 +626,7 @@ export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, c
         academicYearId: targetAcademicYearId,
       };
 
-      const conflicts = await checkConflicts(payload, tx);
+      const conflicts = await checkConflicts({ ...payload, isSplit: load.isSplit }, tx);
       const reasons: string[] = [];
       if (conflicts.facultyConflict) reasons.push("Faculty has another class at this time");
       if (conflicts.roomConflict) reasons.push("Room is already in use at this time");
@@ -613,6 +670,7 @@ export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, c
           endTime: load.endTime,
           semester: targetSemester,
           academicYearId: targetAcademicYearId,
+          isSplit: load.isSplit,
         },
       });
 

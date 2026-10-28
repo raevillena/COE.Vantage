@@ -45,6 +45,8 @@ export const createFacultyLoadSchema = z.object({
       academicYearId: z.string().uuid(),
       /** Same-slot co-instructor: ignore this load in conflict checks; validated in createFacultyLoad. */
       excludeLoadId: z.string().uuid().optional(),
+      /** Split: the saved block (same subject and class) whose class this one shares with a different instructor. */
+      splitOfLoadId: z.string().uuid().optional(),
     })
     .and(facultyFields)
     .and(roomFields),
@@ -81,6 +83,7 @@ export const previewFacultyLoadSchema = z.object({
     semester: z.number().int().min(1).max(2),
     academicYearId: z.string().uuid(),
     excludeLoadId: z.string().uuid().optional(),
+    splitOfLoadId: z.string().uuid().optional(),
   }),
 });
 

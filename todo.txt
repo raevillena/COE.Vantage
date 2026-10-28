@@ -29,6 +29,7 @@ Schedules page
  - faculty view of Room availability: only the rooms the faculty member uses. done (v0.3.7)
 
 Scheduler page
+ - team teaching (same subject, room and time, different instructor) stays as is; Split Class needs a different instructor, may use another time, must not clash with other subjects and is labelled Split. done (v0.3.9, needs migration 20260609000000_load_split)
  - import GE subjects from a file or the clipboard (Import GE button in the toolbar): match by course code, drag the rest onto the class subjects, resolve time conflicts, then add. done (v0.3.7, no migration)
  - assignment panel: the time picker does not invert in dark mode; warn when the end time is before the start (12 AM typed for 12 PM). done (v0.3.7)
  - in dragging overlapping schedules, instead of throwing error when selecting rooms, only show available that doesn't conflict. done

@@ -41,6 +41,7 @@ export async function findScheduleConflicts(scopeDeptId: string | null, academic
       roomId: true,
       studentClassId: true,
       subjectId: true,
+      isSplit: true,
       dayOfWeek: true,
       startTime: true,
       endTime: true,
@@ -65,6 +66,8 @@ export async function findScheduleConflicts(scopeDeptId: string | null, academic
   });
   const sameEvent = (a: L, b: L) =>
     a.subjectId === b.subjectId && a.studentClassId === b.studentClassId && a.startTime === b.startTime && a.endTime === b.endTime;
+  // Blocks of one split (same subject and class, labelled split) share the class between instructors, possibly at other times.
+  const sameSplit = (a: L, b: L) => a.isSplit && b.isSplit && a.subjectId === b.subjectId && a.studentClassId === b.studentClassId;
   const overlaps = (a: L, b: L) =>
     timeToMinutes(a.startTime) < timeToMinutes(b.endTime) && timeToMinutes(b.startTime) < timeToMinutes(a.endTime);
 
@@ -74,7 +77,7 @@ export async function findScheduleConflicts(scopeDeptId: string | null, academic
     keyOf: (l: L) => string | null,
     entityName: (l: L) => string,
     inScope: (l: L) => boolean,
-    skipSameEvent: boolean
+    skip?: (a: L, b: L) => boolean
   ) => {
     const groups = new Map<string, L[]>();
     for (const l of loads) {
@@ -92,7 +95,7 @@ export async function findScheduleConflicts(scopeDeptId: string | null, academic
           const a = group[i];
           const b = group[j];
           if (timeToMinutes(b.startTime) >= timeToMinutes(a.endTime)) break; // sorted: nothing later can overlap a
-          if (!overlaps(a, b) || (skipSameEvent && sameEvent(a, b))) continue;
+          if (!overlaps(a, b) || skip?.(a, b)) continue;
           if (!inScope(a)) continue;
           conflicts.push({
             id: `${type}|${a.id}|${b.id}`,
@@ -108,9 +111,9 @@ export async function findScheduleConflicts(scopeDeptId: string | null, academic
   };
 
   const inDept = (deptId: string | null | undefined) => !scopeDeptId || deptId === scopeDeptId;
-  check("faculty", (l) => l.facultyId, (l) => l.faculty?.name ?? "—", (l) => inDept(l.faculty?.departmentId), false);
-  check("room", (l) => l.roomId, (l) => l.room?.name ?? "—", (l) => inDept(l.room?.departmentId), true);
-  check("class", (l) => l.studentClassId, (l) => l.studentClass.name, (l) => inDept(l.studentClass.curriculum.departmentId), true);
+  check("faculty", (l) => l.facultyId, (l) => l.faculty?.name ?? "—", (l) => inDept(l.faculty?.departmentId));
+  check("room", (l) => l.roomId, (l) => l.room?.name ?? "—", (l) => inDept(l.room?.departmentId), sameEvent);
+  check("class", (l) => l.studentClassId, (l) => l.studentClass.name, (l) => inDept(l.studentClass.curriculum.departmentId), (a, b) => sameEvent(a, b) || sameSplit(a, b));
 
   return conflicts;
 }

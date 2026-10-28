@@ -307,6 +307,7 @@ model FacultyLoad {
   endTime             String   // "HH:mm"
   semester            Int      // 1 or 2
   academicYearId      String
+  isSplit             Boolean  @default(false) // the class is split between instructors for this subject (see facultyLoadService)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

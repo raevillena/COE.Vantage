@@ -23,6 +23,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.3.9" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.8" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.7" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.6" })).toBeVisible();
@@ -1101,21 +1102,121 @@ test.describe("splitting a repeated subject", () => {
       const afterSplit = await loadsOf();
       expect(afterSplit.filter((l) => l.facultyId === coFaculty!.id && l.subject.code === "CE101").map((l) => l.dayOfWeek).sort()).toEqual([1, 3, 5]);
 
-      // another session: same faculty and room come along and the day is free for the class
+      // Split Class: same day, time and room, a different instructor is required, and both blocks are labelled
       await page.getByText(/D\. Santos/).first().click({ force: true });
       await page.getByRole("button", { name: "Split Class" }).click();
-      await expect(page.getByText("Dr. Maria Santos").first()).toBeVisible();
-      const busyDays = new Set(afterSplit.filter((l) => l.startTime === slot).map((l) => l.dayOfWeek));
-      const dayLabel = ((await page.getByLabel("Day of week").first().textContent()) ?? "").replace(/[^A-Za-z]/g, "");
-      expect(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayLabel) + 1).not.toBe(0);
-      expect(busyDays.has(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayLabel) + 1)).toBe(false);
+      await expect(page.getByRole("note").filter({ hasText: "Split Class." })).toBeVisible();
+      await expect(page.getByLabel("Day of week").first()).toContainText("Mon");
+      await expect(page.locator('input[type="time"]').first()).toHaveValue(slot);
+
+      const save = page.getByRole("button", { name: /^Save/ });
+      await page.getByText("Select faculty").first().click();
+      await page.getByRole("option", { name: /Santos/ }).first().click();
+      await expect(page.getByText(/same instructor as the original/)).toBeVisible();
+      await expect(save).toBeDisabled();
+
+      await page.locator("label", { hasText: /^Faculty$/ }).first().locator("xpath=following-sibling::*[1]").click();
+      await page.getByRole("option", { name: /Calaro/ }).first().click();
+      await expect(page.getByText(/same instructor as the original/)).toHaveCount(0);
       await expect(page.getByText("No conflicts. You can save.")).toBeVisible();
-      await page.getByRole("button", { name: /^Save/ }).click();
+      await save.click();
       await expect(page.getByText(/Load added|1 block added/).first()).toBeVisible();
       const afterSession = await loadsOf();
       expect(afterSession.filter((l) => l.subject.code === "CE101").length).toBe(afterSplit.filter((l) => l.subject.code === "CE101").length + 1);
+      const labelled = afterSession.filter((l) => l.subject.code === "CE101" && (l as unknown as { isSplit: boolean }).isSplit);
+      // the splitting instructor's block and the original instructor's blocks (all repeat days) carry the label
+      expect(labelled.length).toBeGreaterThanOrEqual(2);
+      await expect(page.getByText("Split", { exact: true }).first()).toBeVisible();
     } finally {
       for (const l of await loadsOf()) if (l.subject.code === "CE101") await request.delete(`${API}/faculty-loads/${l.id}`, { headers });
     }
+  });
+});
+
+test.describe("split rules", () => {
+  test("a split needs a different instructor, may use another time, still cannot clash with other subjects, and loses its label when undone", async ({ request }) => {
+    const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const headers = { Authorization: `Bearer ${token}` };
+    const get = async <T,>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string }>("/academic-years/active");
+    const users = await get<{ id: string; name: string }[]>("/users?role=FACULTY");
+    const [fa, fb, fc] = ["Maria Santos", "Revilla", "Calaro"].map((n) => users.find((u) => u.name.includes(n)));
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subjects = await get<{ id: string; code: string }[]>("/subjects");
+    const [s1, s2] = [subjects.find((s) => s.code === "CE101"), subjects.find((s) => s.code === "CE401")];
+    const rooms = await get<{ id: string; name: string }[]>("/rooms");
+    const [r1, r2] = [rooms.find((r) => r.name === "CE-201"), rooms.find((r) => r.name !== "CE-201")];
+    test.skip(!fa || !fb || !fc || !cls || !s1 || !s2 || !r1 || !r2, "needs the seeded CE data");
+    const base = { studentClassId: cls!.id, semester: 1, academicYearId: ay.id };
+    const created: string[] = [];
+    const add = async (data: Record<string, unknown>) => {
+      const r = await request.post(`${API}/faculty-loads`, { headers, data: { ...base, ...data } });
+      if (r.status() === 201) created.push(((await r.json()) as { id: string }).id);
+      return r;
+    };
+    try {
+      const original = await add({ subjectId: s1!.id, facultyId: fa!.id, roomId: r1!.id, dayOfWeek: 2, startTime: "16:00", endTime: "17:00" });
+      test.skip(original.status() !== 201, "needs a free Tuesday 4 PM slot");
+      const originalId = ((await original.json()) as { id: string }).id;
+      const split = (over: Record<string, unknown>) => ({ subjectId: s1!.id, dayOfWeek: 2, startTime: "16:00", endTime: "17:00", splitOfLoadId: originalId, ...over });
+
+      // same instructor: refused. Team teaching and split with another instructor in the same room and time: fine
+      expect((await add(split({ facultyId: fa!.id, roomId: r2!.id }))).status()).toBe(400);
+      expect((await add(split({ facultyId: fb!.id, roomId: r1!.id }))).status()).toBe(201);
+      // another time, overlapping its sibling: fine in another room (the split shares the class), not in the same room
+      expect((await add(split({ facultyId: fc!.id, roomId: r2!.id, startTime: "16:30", endTime: "17:30" }))).status()).toBe(201);
+      expect((await add(split({ facultyId: fc!.id, roomId: r1!.id, startTime: "16:30", endTime: "17:30" }))).status()).toBe(400);
+      // a different subject at that time is still a clash for the class, split or not
+      expect((await add(split({ subjectId: s2!.id, facultyId: fc!.id, roomId: r2!.id, startTime: "16:15", endTime: "16:45" }))).status()).toBe(400);
+
+      const flags = async () => (await get<{ id: string; isSplit: boolean }[]>(`/faculty-loads?studentClassId=${cls!.id}&academicYearId=${ay.id}&semester=1`)).filter((l) => created.includes(l.id));
+      expect((await flags()).every((l) => l.isSplit)).toBe(true);
+      // undo the splits: with one instructor left the label goes
+      for (const id of created.slice(1)) await request.delete(`${API}/faculty-loads/${id}`, { headers });
+      created.splice(1);
+      expect((await flags()).every((l) => !l.isSplit)).toBe(true);
+    } finally {
+      for (const id of created) await request.delete(`${API}/faculty-loads/${id}`, { headers });
+    }
+  });
+});
+
+test.describe("assignment panel day and time", () => {
+  test("after picking a faculty the day and times can still be changed", async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 1500 });
+    await login_(page, "chairman@coe.vantage");
+    await page.goto("/scheduler");
+    await page.getByText("Select class").first().click();
+    await page.getByRole("option", { name: "BS CE 4A" }).click();
+    await page.waitForTimeout(800);
+
+    // drag a subject out of the tree onto the grid: a new assignment starts in the panel
+    const card = page.getByText("CE401").first();
+    const box = (await card.boundingBox())!;
+    const [tx, ty] = [706, 469];
+    await page.mouse.move(box.x + 20, box.y + 8);
+    await page.mouse.down();
+    for (let i = 1; i <= 20; i += 1) {
+      await page.mouse.move(box.x + 20 + ((tx - box.x - 20) * i) / 20, box.y + 8 + ((ty - box.y - 8) * i) / 20);
+      await page.waitForTimeout(25);
+    }
+    await page.mouse.up();
+    const day = page.getByLabel("Day of week").first();
+    await expect(day).toContainText("Mon");
+
+    // picking the faculty makes the scheduler suggest a slot; that must not lock the form
+    await page.getByText("Select faculty").first().click();
+    await page.getByRole("option", { name: /Santos/ }).first().click();
+    await page.waitForTimeout(1500);
+
+    await day.click();
+    await page.getByRole("option", { name: "Wed" }).click();
+    await page.waitForTimeout(1500);
+    await expect(day).toContainText("Wed");
+    const start = page.locator('input[type="time"]').first();
+    await start.fill("14:00");
+    await page.waitForTimeout(1000);
+    await expect(start).toHaveValue("14:00");
+    await expect(day).toContainText("Wed");
   });
 });

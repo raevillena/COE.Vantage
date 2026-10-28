@@ -2,6 +2,15 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.3.9 - 2026-10-28
+
+Split Class
+
+- **Improved:** Split Class now needs a different instructor than the block it splits. It opens at the same day, time and room, and the time can be changed. It still cannot clash with other subjects.
+- **New:** Blocks of a split class are labelled Split in every schedule view.
+- **Improved:** Splitting works with repeat days, and the dashboard conflict count no longer counts the blocks of one split as a class conflict.
+- **Fixed:** In the scheduler's Assignment panel, the day and times can be changed after picking a faculty. They used to stay on the suggested slot, usually Monday.
+
 ## v0.3.8 - 2026-10-27
 
 College GE schedule

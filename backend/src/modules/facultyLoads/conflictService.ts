@@ -53,10 +53,10 @@ export interface ConflictResult {
 /** Run all conflict checks for a proposed faculty load (create or update). Pass tx when inside a transaction.
  * When facultyId is null (off-system faculty), faculty conflict is skipped. When roomId is null (off-system room), room/capacity/lab checks are skipped. */
 export async function checkConflicts(
-  payload: PreviewFacultyLoadBody,
+  payload: PreviewFacultyLoadBody & { isSplit?: boolean },
   tx?: Prisma.TransactionClient
 ): Promise<ConflictResult> {
-  const { facultyId, subjectId, studentClassId, roomId, dayOfWeek, startTime, endTime, semester, academicYearId, excludeLoadId } = payload;
+  const { facultyId, subjectId, studentClassId, roomId, dayOfWeek, startTime, endTime, semester, academicYearId, excludeLoadId, splitOfLoadId } = payload;
   const db = tx ?? prisma;
   const hasFaculty = facultyId != null && facultyId !== "";
   const hasRoom = roomId != null && roomId !== "";
@@ -127,9 +127,14 @@ export async function checkConflicts(
           endTime: l.endTime,
         })
     );
+  // A split shares the class with its sibling blocks of the same subject (another instructor, possibly at another
+  // time), so those are not a clash for the students. Everything else, including other subjects, still is.
+  const isSplitSibling = (l: { id: string; subjectId: string; isSplit: boolean }) =>
+    Boolean(payload.isSplit) && l.subjectId === subjectId && (l.isSplit || l.id === splitOfLoadId);
   const studentConflict = facultyLoadsForClass.some(
     (l) =>
       timeOverlaps(l.startTime, l.endTime, startTime, endTime) &&
+      !isSplitSibling(l) &&
       !isTeamTeachingPeer(proposedSlot, {
         subjectId: l.subjectId,
         studentClassId: l.studentClassId,

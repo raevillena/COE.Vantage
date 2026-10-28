@@ -69,6 +69,10 @@ interface PendingAssignment {
   facultyDisplayName?: string;
   roomId?: string;
   roomDisplayName?: string;
+  /** Split Class: the saved block being split and its instructor, who must not be chosen again. */
+  splitOfLoadId?: string;
+  splitFromFacultyId?: string | null;
+  splitFromFacultyName?: string;
 }
 
 interface MoveConflictState {
@@ -985,30 +989,29 @@ export function SchedulerPage() {
 
   const handleAddAnotherSessionFromEdit = useCallback(() => {
     if (!editingLoad) return;
-    // A second session is another meeting of the subject, so it starts on the first day where the class is free
-    // at the same time (never on top of a saved block), with the same faculty and room ready to confirm.
-    const sameClass = loads.filter((l) => l.studentClassId === editingLoad.studentClassId);
-    const busy = (day: number) =>
-      sameClass.some((l) => l.dayOfWeek === day && l.startTime < editingLoad.endTime && l.endTime > editingLoad.startTime);
-    const order = [1, 2, 3, 4, 5, 6].map((_, i) => ((editingLoad.dayOfWeek - 1 + 1 + i) % 6) + 1);
-    const freeDay = order.find((d) => !busy(d));
+    // Split Class: the same subject and class shared with a different instructor. It starts at the same day and
+    // time (the usual case) in the same room, with no instructor chosen, and stays linked to the block it splits.
     setPendingAssignment({
       subjectId: editingLoad.subjectId,
       subjectCode: editingLoad.subject?.code,
       subjectName: editingLoad.subject?.name,
       studentClassId: editingLoad.studentClassId,
-      ...(freeDay ? { dayOfWeek: freeDay, startTime: editingLoad.startTime, endTime: editingLoad.endTime } : {}),
-      ...(editingLoad.facultyId ? { facultyId: editingLoad.facultyId } : editingLoad.facultyDisplayName ? { facultyDisplayName: editingLoad.facultyDisplayName } : {}),
+      dayOfWeek: editingLoad.dayOfWeek,
+      startTime: editingLoad.startTime,
+      endTime: editingLoad.endTime,
       ...(editingLoad.roomId ? { roomId: editingLoad.roomId } : editingLoad.roomDisplayName ? { roomDisplayName: editingLoad.roomDisplayName } : {}),
+      splitOfLoadId: editingLoad.id,
+      splitFromFacultyId: editingLoad.facultyId,
+      splitFromFacultyName: editingLoad.faculty?.name ?? editingLoad.facultyDisplayName ?? "the original instructor",
     });
-    setPendingAssignmentDragged(false);
+    setPendingAssignmentDragged(true);
     setEditingLoadId(null);
-    setOverlayFacultyId(viewMode === "faculty" ? selectedFacultyId : "");
-    setOverlayRoomId("");
+    setOverlayFacultyId("");
+    setOverlayRoomId(editingLoad.roomId ?? "");
     if (viewMode === "faculty" && editingLoad.studentClassId) {
       setOverlayClassId(editingLoad.studentClassId);
     }
-  }, [editingLoad, loads, viewMode, selectedFacultyId]);
+  }, [editingLoad, viewMode]);
 
   useEffect(() => {
     if (!overlayFacultyId || !academicYearId) {
@@ -1641,6 +1644,17 @@ export function SchedulerPage() {
                   }}
                   roomAvailabilityMap={roomAvailabilityMap}
                   onAddAnotherSession={handleAddAnotherSessionFromEdit}
+                  splitOfLoadId={pendingAssignment?.splitOfLoadId}
+                  splitFromFaculty={
+                    pendingAssignment?.splitOfLoadId
+                      ? { id: pendingAssignment.splitFromFacultyId ?? null, name: pendingAssignment.splitFromFacultyName ?? "the original instructor" }
+                      : undefined
+                  }
+                  onTimeChange={(time) => {
+                    // The form moved the block: keep the grid block with it and stop auto-suggesting a slot.
+                    setPendingAssignment((prev) => (prev ? { ...prev, ...time } : prev));
+                    setPendingAssignmentDragged(true);
+                  }}
                   onSaved={() => {
                     refreshLoads();
                     refreshRoomLoads();

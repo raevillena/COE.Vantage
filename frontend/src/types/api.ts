@@ -131,6 +131,8 @@ export interface FacultyLoad {
   /** True when this block is a pending cross-department request (not yet approved). */
   pendingApproval?: boolean;
   locked?: boolean;
+  /** The class is split between different instructors for this subject. */
+  isSplit?: boolean;
 }
 
 /** Cross-department assignment request (chairman-to-chairman). */

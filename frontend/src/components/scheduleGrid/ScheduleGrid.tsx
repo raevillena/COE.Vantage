@@ -246,7 +246,7 @@ function ScheduleBlock({
   const facultyName = load.faculty?.name ?? load.facultyDisplayName ?? "";
   const facultyShort = formatFacultyShortName(facultyName);
   const roomName = load.room?.name ?? load.roomDisplayName ?? "";
-  const titleParts = [load.subject?.code ?? "—", load.subject?.name, roomName, facultyShort, timeTooltip].filter(Boolean);
+  const titleParts = [load.subject?.code ?? "—", load.subject?.name, load.isSplit ? "Split" : "", roomName, facultyShort, timeTooltip].filter(Boolean);
 
   return (
     <div
@@ -262,6 +262,7 @@ function ScheduleBlock({
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
+        {load.isSplit && <span className="ml-1 rounded bg-black/10 px-1 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/20" title="The class is split between instructors">Split</span>}
         {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
         {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
       </div>

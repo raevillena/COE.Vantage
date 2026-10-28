@@ -89,6 +89,11 @@ interface AssignmentFormProps {
   roomAvailabilityMap?: Record<string, boolean>;
   /** While editing a saved load: start a new pending assignment with the same subject & class (user picks another time). */
   onAddAnotherSession?: () => void;
+  /** Split Class: the saved block this assignment splits. It needs a different instructor; the time may differ. */
+  splitOfLoadId?: string;
+  splitFromFaculty?: { id: string | null; name: string };
+  /** New assignment only: the form changed the day or time, so the pending block on the grid follows. */
+  onTimeChange?: (time: { dayOfWeek: number; startTime: string; endTime: string }) => void;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -110,6 +115,9 @@ export function AssignmentForm({
   lockStudentClass = false,
   roomAvailabilityMap,
   onAddAnotherSession,
+  splitOfLoadId,
+  splitFromFaculty,
+  onTimeChange,
   onSaved,
   onCancel,
 }: AssignmentFormProps) {
@@ -194,16 +202,20 @@ export function AssignmentForm({
   useEffect(() => {
     if (editingLoadId) return;
     if (!liveTime) return;
-    if (liveTime.dayOfWeek != null && liveTime.dayOfWeek !== dayOfWeek) {
-      setDayOfWeek(liveTime.dayOfWeek);
-    }
-    if (liveTime.startTime && liveTime.startTime !== startTime) {
-      setStartTime(liveTime.startTime);
-    }
-    if (liveTime.endTime && liveTime.endTime !== endTime) {
-      setEndTime(liveTime.endTime);
-    }
-  }, [editingLoadId, liveTime?.dayOfWeek, liveTime?.startTime, liveTime?.endTime, dayOfWeek, startTime, endTime]);
+    // Only a change of the pending block (dragged, resized or suggested) moves the form. The form's own edits are
+    // not in the dependencies: they are sent to the block through onTimeChange instead, so they are never undone.
+    if (liveTime.dayOfWeek != null) setDayOfWeek(liveTime.dayOfWeek);
+    if (liveTime.startTime) setStartTime(liveTime.startTime);
+    if (liveTime.endTime) setEndTime(liveTime.endTime);
+  }, [editingLoadId, liveTime?.dayOfWeek, liveTime?.startTime, liveTime?.endTime]);
+
+  /** Day or time edited in the form; for a new assignment the pending block on the grid follows. */
+  const changeTime = (patch: Partial<{ dayOfWeek: number; startTime: string; endTime: string }>) => {
+    if (patch.dayOfWeek !== undefined) setDayOfWeek(patch.dayOfWeek);
+    if (patch.startTime !== undefined) setStartTime(patch.startTime);
+    if (patch.endTime !== undefined) setEndTime(patch.endTime);
+    if (!editingLoadId) onTimeChange?.({ dayOfWeek, startTime, endTime, ...patch });
+  };
 
   useEffect(() => {
     apiClient
@@ -258,6 +270,7 @@ export function AssignmentForm({
       semester,
       academicYearId,
       ...(editingLoadId ? { excludeLoadId: editingLoadId } : {}),
+      ...(splitOfLoadId && !editingLoadId ? { splitOfLoadId } : {}),
     };
     apiClient
       .post<ConflictPreview>("/faculty-loads/preview", body)
@@ -273,7 +286,7 @@ export function AssignmentForm({
     return () => {
       cancelled = true;
     };
-  }, [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId]);
+  }, [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, dayOfWeek, startTime, endTime, academicYearId, semester, editingLoadId, splitOfLoadId]);
 
   /** Live conflict check for co-instructor (same slot, different faculty; excludeLoadId = row being edited). */
   useEffect(() => {
@@ -364,6 +377,7 @@ export function AssignmentForm({
         semester,
         academicYearId,
         ...(editingLoadId ? { excludeLoadId: editingLoadId } : {}),
+        ...(splitOfLoadId && !editingLoadId ? { splitOfLoadId } : {}),
       };
       const { data } = await apiClient.post<ConflictPreview>("/faculty-loads/preview", body);
       setPreview(data);
@@ -387,6 +401,7 @@ export function AssignmentForm({
     endTime,
     semester,
     academicYearId,
+    ...(splitOfLoadId && !editingLoadId ? { splitOfLoadId } : {}),
   });
 
   const repeat = useRepeatDays({
@@ -401,6 +416,15 @@ export function AssignmentForm({
     bodyForDay,
     recheckKey: [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, startTime, endTime, academicYearId, semester].join("|"),
   });
+
+  /** A split needs a different instructor than the block it splits. */
+  const sameAsSplitSource = Boolean(
+    splitOfLoadId &&
+      splitFromFaculty &&
+      (isOthersFaculty
+        ? splitFromFaculty.id == null && (facultyDisplayName ?? "").trim().toLowerCase() === splitFromFaculty.name.trim().toLowerCase() && (facultyDisplayName ?? "").trim() !== ""
+        : facultyId && splitFromFaculty.id === facultyId)
+  );
 
   const hasConflict =
     preview &&
@@ -446,6 +470,7 @@ export function AssignmentForm({
       endTime,
       semester,
       academicYearId,
+      ...(splitOfLoadId && !editingLoadId ? { splitOfLoadId } : {}),
     };
     try {
       if (editingLoadId) {
@@ -566,6 +591,12 @@ export function AssignmentForm({
 
   return (
     <div className="flex flex-col min-h-0 flex-1 gap-3">
+      {splitOfLoadId && !editingLoadId && (
+        <div className="rounded border border-primary/40 bg-primary-muted px-3 py-2 text-sm text-foreground" role="note">
+          <strong>Split Class.</strong> Choose a different instructor than {splitFromFaculty?.name ?? "the original"}. The time is usually the same but can differ; it still cannot clash with other subjects. Both blocks are labelled Split.
+          {sameAsSplitSource && <p className="mt-1 text-danger">This is the same instructor as the original block. Pick someone else.</p>}
+        </div>
+      )}
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
         <Select.Root
@@ -705,7 +736,7 @@ export function AssignmentForm({
       </div>
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Day</label>
-        <Select.Root value={String(dayOfWeek)} onValueChange={(v) => setDayOfWeek(Number(v))}>
+        <Select.Root value={String(dayOfWeek)} onValueChange={(v) => changeTime({ dayOfWeek: Number(v) })}>
           <Select.Trigger aria-label="Day of week" className="w-full">
             <Select.Value />
           </Select.Trigger>
@@ -722,21 +753,21 @@ export function AssignmentForm({
         <input
           type="time"
           value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
+          onChange={(e) => changeTime({ startTime: e.target.value })}
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
         <input
           type="time"
           value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
+          onChange={(e) => changeTime({ endTime: e.target.value })}
           className="flex-1 rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
         />
       </div>
-      <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={setEndTime} />
+      <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={(t) => changeTime({ endTime: t })} />
       {repeat.picker}
       {isEditingSavedLoad && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
-          <span className="text-xs font-medium text-foreground-muted shrink-0">Team / split</span>
+          <span className="text-xs font-medium text-foreground-muted shrink-0">Team teaching / split</span>
           <Button
             type="button"
             variant="secondary"
@@ -813,7 +844,7 @@ export function AssignmentForm({
         <Button
           type="button"
           onClick={handleSave}
-          disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked}
+          disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked || sameAsSplitSource}
         >
           {loading ? "…" : editingLoadId ? (repeat.changeCount > 0 ? `Update (${repeat.changeCount} day change${repeat.changeCount === 1 ? "" : "s"})` : "Update") : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
         </Button>

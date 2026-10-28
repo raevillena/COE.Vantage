@@ -15,6 +15,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.3.9",
+    date: "2026-10-28",
+    title: "Split Class",
+    changes: [
+      { kind: "improved", text: "Split Class now needs a different instructor than the block it splits. It opens at the same day, time and room, and the time can be changed. It still cannot clash with other subjects." },
+      { kind: "new", text: "Blocks of a split class are labelled Split in every schedule view." },
+      { kind: "improved", text: "Splitting works with repeat days, and the dashboard conflict count no longer counts the blocks of one split as a class conflict." },
+      { kind: "fixed", text: "In the scheduler's Assignment panel, the day and times can be changed after picking a faculty. They used to stay on the suggested slot, usually Monday." },
+    ],
+  },
+  {
     version: "v0.3.8",
     date: "2026-10-27",
     title: "College GE schedule",

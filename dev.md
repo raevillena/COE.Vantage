@@ -1235,6 +1235,19 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Academic years: `POST /academic-years` and `PATCH /academic-years/:id` also allow COLLEGE_SECRETARY (create, rename, set active). Trash, restore and permanent delete stay ADMIN. The page hides selection and trash for the college secretary.
 - Scheduling rules: the routes allow COLLEGE_SECRETARY and the service treats it like ADMIN (`isCollegeWide`): sees all rule sets, creates global ones, sets and removes assignments. Page `/admin/scheduling-rules` (title now "Scheduling rules") and a sidebar link for the college secretary.
 
+### 50. Assignment panel day and time lock (fix, v0.3.9)
+
+- Cause: picking a faculty makes the scheduler suggest a free slot and write it into the pending block (`pendingAssignment` gets a day and times), which becomes `liveTime` for the form. The form's sync effect listed its own `dayOfWeek`, `startTime` and `endTime` as dependencies, so any edit made in the form was compared with the pending block and undone, and the day stayed on the suggestion (usually Monday) until the block was saved and edited.
+- Fix: the effect now depends only on `liveTime`, so only a change of the block on the grid (drag, resize, suggestion) moves the form. Edits made in the form go to the block through the new `onTimeChange` prop (day select, time inputs and the end-time quick fix), which also marks the block as placed so the scheduler stops suggesting slots. Covered by the "assignment panel day and time" e2e test.
+
+### 51. Split Class vs team teaching (v0.3.9)
+
+- **Team teaching** (co-instructor): another instructor for the same subject, class, day and exact time, same room allowed; unchanged, not labelled.
+- **Split Class** (the button on a saved block): the class is shared with a **different instructor**. It opens at the same day, time and room with no instructor chosen and a note; the time may be changed. A block is a split when it is created with `splitOfLoadId` (the block it splits); the API refuses the same instructor (400, `assertValidSplitSource`), requires the same subject, class and term, sets `FacultyLoad.isSplit` (migration `20260609000000_load_split`) on the new block and on the original instructor's blocks of that subject (all repeat days).
+- Conflicts: faculty and room conflicts apply as always (a split in the same room at an overlapping but different time is refused). The student-class check ignores overlaps with the sibling blocks of the same subject (`isSplit` or the split source), nothing else: another subject at that time is still a clash. Updating a split keeps the rule (`existing.isSplit`); the dashboard conflict scan skips pairs of split blocks of one subject and class.
+- The label: grid blocks show a "Split" tag (all schedule views) and the tooltip; `copyClassSchedule` carries the flag. Deleting blocks until only one instructor is left clears the label.
+- Repeat days work with a split: every ticked day is created with the same `splitOfLoadId`.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED
