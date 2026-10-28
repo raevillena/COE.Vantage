@@ -167,7 +167,7 @@ export async function getPrioritizedSubjects(facultyId: string, term: { academic
     orderBy: { priority: "asc" },
     include: {
       subject: {
-        select: { id: true, code: true, name: true, units: true, isLab: true },
+        select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true },
       },
     },
   });

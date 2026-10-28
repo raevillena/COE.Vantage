@@ -11,6 +11,7 @@ import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
+import { labUnitsOf, lecUnitsOf, unitsLabel, weeklyHours } from "../../utils/subjectUnits";
 import {
   PrioritizedFacultyModal,
   type FacultyWithDepartment,
@@ -29,8 +30,8 @@ export function SubjectsPage() {
   const [form, setForm] = useState({
     name: "",
     code: "",
-    units: 3,
-    isLab: false,
+    lecUnits: 3,
+    labUnits: 0,
     yearLevel: "",
     curriculumId: "",
     departmentId: "",
@@ -122,7 +123,7 @@ export function SubjectsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", code: "", units: 3, isLab: false, yearLevel: "", curriculumId: "", departmentId: "" });
+    setForm({ name: "", code: "", lecUnits: 3, labUnits: 0, yearLevel: "", curriculumId: "", departmentId: "" });
     setModalOpen(true);
   };
 
@@ -131,8 +132,8 @@ export function SubjectsPage() {
     setForm({
       name: s.name,
       code: s.code,
-      units: s.units,
-      isLab: s.isLab,
+      lecUnits: lecUnitsOf(s),
+      labUnits: labUnitsOf(s),
       yearLevel: s.yearLevel != null ? String(s.yearLevel) : "",
       curriculumId: s.curriculumId ?? "",
       departmentId: s.departmentId ?? "",
@@ -147,7 +148,7 @@ export function SubjectsPage() {
       toast.error("Name is required");
       return;
     }
-    if (form.units < 0) {
+    if (form.lecUnits < 0 || form.labUnits < 0) {
       toast.error("Units cannot be negative");
       return;
     }
@@ -161,8 +162,8 @@ export function SubjectsPage() {
       const payload = {
         ...(codeWhenCreating !== undefined && { code: codeWhenCreating }),
         name: nameTrimmed,
-        units: form.units,
-        isLab: form.isLab,
+        lecUnits: form.lecUnits,
+        labUnits: form.labUnits,
         yearLevel: form.yearLevel ? Number(form.yearLevel) : null,
         curriculumId: form.curriculumId || null,
         departmentId: form.departmentId || null,
@@ -402,7 +403,7 @@ export function SubjectsPage() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Lab</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Hrs/week</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Year level</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Rooms</th>
                 {!readOnly && (<th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>)}
@@ -425,8 +426,8 @@ export function SubjectsPage() {
                   <td className="px-4 py-2 text-foreground-muted">
                     {s.curriculum?.department?.name ?? s.department?.name ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-foreground-muted">{s.units}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{s.isLab ? "Yes" : "No"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{unitsLabel(s)}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{weeklyHours(s)}</td>
                   <td className="px-4 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
                   <td
                     className="px-4 py-2 text-foreground-muted"
@@ -495,11 +496,19 @@ export function SubjectsPage() {
               </div>
             )}
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <input type="number" min={0} placeholder="Units" value={form.units} onChange={(e) => setForm((f) => ({ ...f, units: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.isLab} onChange={(e) => setForm((f) => ({ ...f, isLab: e.target.checked }))} className="rounded border-border-strong focus:ring-focus-ring" />
-              <span>Lab subject</span>
-            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="subject-lec-units" className="mb-1 block text-sm font-medium text-foreground">Lecture units</label>
+                <input id="subject-lec-units" type="number" min={0} value={form.lecUnits} onChange={(e) => setForm((f) => ({ ...f, lecUnits: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              </div>
+              <div>
+                <label htmlFor="subject-lab-units" className="mb-1 block text-sm font-medium text-foreground">Laboratory units</label>
+                <input id="subject-lab-units" type="number" min={0} value={form.labUnits} onChange={(e) => setForm((f) => ({ ...f, labUnits: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              </div>
+            </div>
+            <p className="text-[11px] text-foreground-muted">
+              Total {form.lecUnits + form.labUnits} {form.lecUnits + form.labUnits === 1 ? "unit" : "units"}. Needs {form.lecUnits + form.labUnits * 3} hrs/week of blocks and counts {form.lecUnits + form.labUnits * 3} units of faculty load (a laboratory unit is 3 hours). A laboratory-only subject must use a laboratory room.
+            </p>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Year level (within curriculum)</label>
               <input

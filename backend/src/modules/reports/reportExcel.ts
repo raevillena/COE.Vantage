@@ -282,7 +282,7 @@ export async function loadFacultyWorkloadsForExcel(
       startTime: true,
       endTime: true,
       roomDisplayName: true,
-      subject: { select: { code: true, name: true, units: true, isLab: true } },
+      subject: { select: { code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
       studentClass: { select: { name: true, studentCount: true } },
       room: { select: { name: true } },
       faculty: {
@@ -432,7 +432,7 @@ export async function buildFacultyWorkloadWorkbook(
       let actual = 0;
       for (const meetings of courses) {
         const { subject, studentClass } = meetings[0];
-        const credited = creditedLoadUnits(subject.units, subject.isLab);
+        const credited = creditedLoadUnits(subject);
         units += subject.units;
         actual += credited;
         const joined = joinSegments(buildMeetingSegments(meetings));

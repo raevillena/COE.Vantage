@@ -23,6 +23,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.4.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.9" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.8" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.7" })).toBeVisible();
@@ -1130,6 +1131,53 @@ test.describe("splitting a repeated subject", () => {
     } finally {
       for (const l of await loadsOf()) if (l.subject.code === "CE101") await request.delete(`${API}/faculty-loads/${l.id}`, { headers });
     }
+  });
+});
+
+test.describe("subject components", () => {
+  test("a subject has lecture and laboratory units; hours and load follow lec + 3 x lab, and the older units + isLab form still works", async ({ request }) => {
+    const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const headers = { Authorization: `Bearer ${token}` };
+    type S = { id: string; units: number; lecUnits: number; labUnits: number; isLab: boolean };
+    const made: string[] = [];
+    const stamp = Date.now();
+    try {
+      const mixed = (await (await request.post(`${API}/subjects`, { headers, data: { code: `MIX${stamp}`, name: "Mixed e2e", lecUnits: 3, labUnits: 1 } })).json()) as S;
+      made.push(mixed.id);
+      // 3 lec + 1 lab: 4 units, not a lab-room-only subject
+      expect([mixed.units, mixed.lecUnits, mixed.labUnits, mixed.isLab]).toEqual([4, 3, 1, false]);
+
+      // the older form: units + isLab sends everything to one component
+      const legacyLab = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LAB${stamp}`, name: "Lab e2e", units: 2, isLab: true } })).json()) as S;
+      made.push(legacyLab.id);
+      expect([legacyLab.units, legacyLab.lecUnits, legacyLab.labUnits, legacyLab.isLab]).toEqual([2, 0, 2, true]);
+      const legacyLec = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LEC${stamp}`, name: "Lec e2e", units: 3 } })).json()) as S;
+      made.push(legacyLec.id);
+      expect([legacyLec.units, legacyLec.lecUnits, legacyLec.labUnits, legacyLec.isLab]).toEqual([3, 3, 0, false]);
+
+      // editing a lecture subject into 2 lec + 1 lab changes the total, and adding lecture units to a lab subject frees the room rule
+      const edited = (await (await request.patch(`${API}/subjects/${legacyLec.id}`, { headers, data: { lecUnits: 2, labUnits: 1 } })).json()) as S;
+      expect([edited.units, edited.lecUnits, edited.labUnits, edited.isLab]).toEqual([3, 2, 1, false]);
+      const freed = (await (await request.patch(`${API}/subjects/${legacyLab.id}`, { headers, data: { lecUnits: 1 } })).json()) as S;
+      expect([freed.units, freed.lecUnits, freed.labUnits, freed.isLab]).toEqual([3, 1, 2, false]);
+
+      // no unit information at all is refused
+      expect((await request.post(`${API}/subjects`, { headers, data: { code: `NON${stamp}`, name: "No units" } })).status()).toBe(400);
+    } finally {
+      for (const id of made) await request.delete(`${API}/subjects/${id}`, { headers });
+    }
+  });
+
+  test("the Subjects form edits lecture and laboratory units and explains the hours", async ({ page }) => {
+    await login(page, "admin@coe.vantage");
+    await page.goto("/subjects");
+    await page.getByRole("button", { name: "Add Subject" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Lecture units").fill("3");
+    await dialog.getByLabel("Laboratory units").fill("1");
+    await expect(dialog.getByText(/Total 4 units\. Needs 6 hrs\/week of blocks and counts 6 units of faculty load/)).toBeVisible();
+    await dialog.getByLabel("Lecture units").fill("0");
+    await expect(dialog.getByText(/Total 1 unit\. Needs 3 hrs\/week/)).toBeVisible();
   });
 });
 

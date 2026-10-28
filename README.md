@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.3.9-197fa1)
+![Version](https://img.shields.io/badge/version-v0.4.0-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -133,6 +133,7 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.4.0** | Subjects with lecture and laboratory units (3 lec + 1 lab = 6 hours a week) |
 | **v0.3.9** | Split Class with a different instructor and a Split label, Assignment panel day and time fix |
 | **v0.3.8** | College GE schedule managed by the college secretary and used by Import GE, secretary rights for academic years and scheduling rules |
 | **v0.3.7** | Import GE schedules, current term default, faculty-only views, deloading and assignments in the workload Excel |

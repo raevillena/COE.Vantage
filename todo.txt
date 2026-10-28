@@ -43,6 +43,7 @@ Scheduler page
  - currently, when you add 1 block of schedule you only select 1 day. i want to add option to repeat the schedule on another day. so i want to be able to tick other days given that when i tick, it checks if there is no conflict in schedule. done (v0.3.4)
 
 Subjects page
+ - a subject is one entity with lecture units and laboratory units (e.g. 3 lec + 1 lab = 4 units = 6 hours of blocks = 6 units of faculty load). Editable in the Subjects form and the curriculum import review; existing lab subjects become all lab units, the rest all lecture units. done (v0.4.0, needs migration 20260610000000_subject_components)
  - currently, the subjects are listed as everything. i want to show them based on curriculum. done (curriculum filter). done
  - when loading the subjects i want the latest added curriculum to be the filter and not all. done (v0.3.4)
  - there are subjects that cannot be randomly assigned to any room. so i want to be able to set the subjects a possible room to use only to be used when using auto assign. subjects that are no room assigned can stay as randomly assigned in available rooms your department own or other open rooms. done (v0.3.4, needs migration 20260604000000_subject_rooms)

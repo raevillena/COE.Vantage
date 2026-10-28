@@ -1,7 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
-import { creditedLoadUnits } from "../../utils/workload.js";
+import { creditedLoadUnits, type SubjectComponents } from "../../utils/workload.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 
@@ -91,7 +91,7 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
     where,
     include: {
       faculty: { select: { id: true, name: true, email: true } },
-      subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
+      subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
       studentClass: {
         select: { id: true, name: true, yearLevel: true, studentCount: true, curriculum: { select: { departmentId: true } } },
       },
@@ -131,7 +131,7 @@ export async function getLoadedUnitsByFaculty(
       facultyId: { not: null },
       ...(departmentId ? { faculty: { departmentId } } : {}),
     },
-    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true } } },
+    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
   });
   const seen = new Set<string>();
   const totals: Record<string, number> = {};
@@ -140,7 +140,7 @@ export async function getLoadedUnitsByFaculty(
     const key = `${l.facultyId}|${l.subjectId}|${l.studentClassId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + creditedLoadUnits(l.subject?.units ?? 0, l.subject?.isLab ?? false);
+    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + creditedLoadUnits(l.subject);
   }
   return totals;
 }
@@ -212,10 +212,10 @@ async function getFacultyUnitsWith(
 ): Promise<{ current: number; total: number }> {
   const loads = await prisma.facultyLoad.findMany({
     where: { facultyId, academicYearId, semester, ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}) },
-    select: { subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true } } },
+    select: { subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
   });
   const pairs = new Map<string, number>();
-  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, creditedLoadUnits(l.subject?.units ?? 0, l.subject?.isLab ?? false));
+  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, creditedLoadUnits(l.subject));
   const current = [...pairs.values()].reduce((s, u) => s + u, 0);
   const total = pairs.has(`${candidate.subjectId}|${candidate.studentClassId}`) ? current : current + candidate.units;
   return { current, total };
@@ -278,7 +278,7 @@ export async function getFacultyLoadById(id: string) {
     where: { id },
     include: {
       faculty: { select: { id: true, name: true, email: true } },
-      subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
+      subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
       studentClass: { select: { id: true, name: true, yearLevel: true, studentCount: true } },
       room: { select: { id: true, name: true, capacity: true, isLab: true } },
       academicYear: { select: { id: true, name: true } },
@@ -329,7 +329,7 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
   const effectiveFacultyId = body.facultyId?.trim() || null;
   if (effectiveFacultyId) {
     const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true, isLab: true } }),
+      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true, isLab: true, lecUnits: true, labUnits: true } }),
       prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
@@ -338,11 +338,11 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
       const { current, total } = await getFacultyUnitsWith(effectiveFacultyId, body.academicYearId, body.semester, {
         subjectId: body.subjectId,
         studentClassId: body.studentClassId,
-        units: creditedLoadUnits(subject.units, subject.isLab),
+        units: creditedLoadUnits(subject),
       });
       if (total > cap) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
+          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject)}.`
         );
       }
     }
@@ -423,7 +423,7 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
       data,
       include: {
         faculty: { select: { id: true, name: true, email: true } },
-        subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
+        subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
         studentClass: { select: { id: true, name: true, yearLevel: true, studentCount: true } },
         room: { select: { id: true, name: true, capacity: true, isLab: true } },
         academicYear: { select: { id: true, name: true } },
@@ -455,7 +455,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
   }
   if (facultyId) {
     const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true, isLab: true } }),
+      prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true, isLab: true, lecUnits: true, labUnits: true } }),
       prisma.user.findUnique({ where: { id: facultyId }, select: { maxUnits: true, name: true } }),
     ]);
     if (subject && user?.maxUnits != null) {
@@ -465,12 +465,12 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
         facultyId,
         existing.academicYearId,
         existing.semester,
-        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: creditedLoadUnits(subject.units, subject.isLab) },
+        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: creditedLoadUnits(subject) },
         id
       );
       if (total > cap) {
         throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject.units, subject.isLab)}.`
+          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject)}.`
         );
       }
     }
@@ -517,7 +517,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
       data,
       include: {
         faculty: { select: { id: true, name: true, email: true } },
-        subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
+        subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
         studentClass: { select: { id: true, name: true, yearLevel: true, studentCount: true } },
         room: { select: { id: true, name: true, capacity: true, isLab: true } },
         academicYear: { select: { id: true, name: true } },
@@ -718,9 +718,9 @@ function addInterval(map: Map<string, Interval[]>, key: string, interval: Interv
   map.get(key)!.push(interval);
 }
 
-export function requiredMinutesForSubject(units: number, isLab: boolean): number {
-  // Lectures: 1 unit = 1 hour/week. Labs: 1 unit = 3 hours/week.
-  return isLab ? units * 3 * 60 : units * 60;
+export function requiredMinutesForSubject(s: SubjectComponents): number {
+  // Lecture: 1 unit = 1 hour/week. Laboratory: 1 unit = 3 hours/week.
+  return creditedLoadUnits(s) * 60;
 }
 
 export async function autoAssignForClass(
@@ -786,7 +786,7 @@ export async function autoAssignForClass(
 
   const requiredBySubject = new Map<string, number>();
   for (const s of subjects) {
-    requiredBySubject.set(s.id, requiredMinutesForSubject(s.units, s.isLab));
+    requiredBySubject.set(s.id, requiredMinutesForSubject(s));
   }
 
   const scheduledBySubject = new Map<string, number>();
@@ -821,7 +821,7 @@ export async function autoAssignForClass(
     const cap = effectiveMaxUnits(f.maxUnits, deloadByUser.get(f.id)?.total ?? 0);
     if (cap != null) capByFaculty.set(f.id, cap);
   }
-  const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, creditedLoadUnits(s.units, s.isLab)]));
+  const subjectUnitsMap = new Map<string, number>(subjects.map((s) => [s.id, creditedLoadUnits(s)]));
   const currentUnitsByFaculty = new Map<string, number>(
     Object.entries(await getLoadedUnitsByFaculty(academicYearId, semester))
   );
@@ -1020,7 +1020,7 @@ export async function autoAssignForClass(
       continue;
     }
     const poolToUse = facultyPool.filter(
-      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + creditedLoadUnits(s.units, s.isLab) <= (capByFaculty.get(f.id) ?? Infinity)
+      (f) => (currentUnitsByFaculty.get(f.id) ?? 0) + creditedLoadUnits(s) <= (capByFaculty.get(f.id) ?? Infinity)
     );
     if (poolToUse.length === 0) {
       skippedSummary.push({ subjectCode: s.code, subjectName: s.name, reason: "All faculty for this subject are at their max units" });
@@ -1031,7 +1031,7 @@ export async function autoAssignForClass(
       const d = (facultyMinutes.get(a.id) ?? 0) - (facultyMinutes.get(b.id) ?? 0);
       return d !== 0 ? d : (byPriority.get(a.id) ?? 999) - (byPriority.get(b.id) ?? 999);
     })[0].id;
-    currentUnitsByFaculty.set(chosenFacultyId, (currentUnitsByFaculty.get(chosenFacultyId) ?? 0) + creditedLoadUnits(s.units, s.isLab));
+    currentUnitsByFaculty.set(chosenFacultyId, (currentUnitsByFaculty.get(chosenFacultyId) ?? 0) + creditedLoadUnits(s));
 
     // Choose a room: capacity >= class size, lab vs non-lab, smallest total minutes.
     const classSize = studentClass.studentCount;
@@ -1177,7 +1177,7 @@ export async function autoAssignForClass(
         data,
         include: {
           faculty: { select: { id: true, name: true, email: true } },
-          subject: { select: { id: true, code: true, name: true, units: true, isLab: true } },
+          subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
           studentClass: { select: { id: true, name: true, yearLevel: true, studentCount: true } },
           room: { select: { id: true, name: true, capacity: true, isLab: true } },
           academicYear: { select: { id: true, name: true } },

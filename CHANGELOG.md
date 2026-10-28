@@ -2,6 +2,16 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.4.0 - 2026-10-28
+
+Lecture and laboratory units
+
+- **New:** Subjects now have lecture units and laboratory units. A subject such as 3 lec + 1 lab is one subject of 4 units that needs 6 hours of blocks a week and counts 6 units of faculty load (a laboratory unit is 3 hours).
+- **New:** The Subjects form has Lecture units and Laboratory units fields with a live summary of the weekly hours. The list shows units such as 4 (3 lec + 1 lab) and the hours per week.
+- **Improved:** The curriculum import review table has Lec and Lab columns in place of Units and the Lab tick box. The checklist still fills the units in one column by default, so edit the split where a subject has both.
+- **Improved:** Existing subjects keep their numbers: a subject ticked as lab becomes all laboratory units, and every other subject becomes all lecture units.
+- **Improved:** Only a laboratory-only subject must use a laboratory room. A subject with lecture units can use any room.
+
 ## v0.3.9 - 2026-10-28
 
 Split Class

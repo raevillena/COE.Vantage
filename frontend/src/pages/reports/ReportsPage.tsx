@@ -284,7 +284,7 @@ export function ReportsPage() {
           <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-1.5">
 <h2 className="font-medium text-foreground">
-              College Workload</h2>
+              {role === "CHAIRMAN" ? "Department Workload" : "College Workload"}</h2>
 <HelpTip>Registrar-format Excel forms for the selected academic year and semester: class schedules and the Summary of Faculty Workload. Actual load credits laboratory units at three times their value; regular load is the faculty member's maximum units, and overload is the excess. Chairmen receive their own department only.</HelpTip>
 </div>
             <div className="flex flex-wrap gap-2">

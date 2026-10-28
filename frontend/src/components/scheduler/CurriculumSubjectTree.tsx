@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { Curriculum, Subject, FacultyLoad } from "../../types/api";
 import { apiClient } from "../../api/apiClient";
+import { componentTag, weeklyHours } from "../../utils/subjectUnits";
 import type { SubjectDragItem } from "./schedulerTypes";
 
 interface SubjectItemProps {
@@ -45,7 +46,7 @@ function DraggableSubject({ subject, status = "none", label }: SubjectItemProps)
         {subject.name}
         {label ? <span className="text-[11px] text-foreground-muted/80"> · {label}</span> : null}
       </span>
-      {subject.isLab && <span className="text-xs text-foreground-muted shrink-0">(Lab)</span>}
+      {componentTag(subject) && <span className="text-xs text-foreground-muted shrink-0">({componentTag(subject)})</span>}
     </div>
   );
 }
@@ -124,8 +125,8 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
   }, [classLoads]);
 
   const getStatusForSubject = (s: Subject): { status: "none" | "partial" | "full" | "over"; label: string } => {
-    // Lectures: 1 unit = 1 hr/week; Labs: 1 unit = 3 hrs/week.
-    const required = (s.isLab ? s.units * 3 : s.units) * 60;
+    // Lecture: 1 unit = 1 hr/week; laboratory: 1 unit = 3 hrs/week.
+    const required = weeklyHours(s) * 60;
     const scheduled = minutesBySubject.get(s.id) ?? 0;
     if (required <= 0) {
       return { status: "none", label: "0 hrs" };

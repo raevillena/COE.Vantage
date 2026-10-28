@@ -43,7 +43,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
     curriculumIds.length
       ? prisma.subject.findMany({
           where: { isDeleted: false, curriculumId: { in: curriculumIds }, OR: [{ semester: null }, { semester }] },
-          select: { id: true, code: true, name: true, units: true, isLab: true, yearLevel: true, curriculumId: true },
+          select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, curriculumId: true },
         })
       : [],
     classIds.length
@@ -71,7 +71,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
   for (const cls of classes) {
     for (const s of subjects) {
       if (s.curriculumId !== cls.curriculumId || s.yearLevel !== cls.yearLevel) continue;
-      const required = requiredMinutesForSubject(s.units, s.isLab);
+      const required = requiredMinutesForSubject(s);
       if (required <= 0) continue;
       entries.push({
         classId: cls.id,
@@ -158,7 +158,7 @@ export async function loadRoomUtilization(scopeDeptId: string | null, academicYe
 export async function creditedUnitsByFaculty(academicYearId: string, semester: number, departmentId: string | null) {
   const loads = await prisma.facultyLoad.findMany({
     where: { academicYearId, semester, facultyId: { not: null }, ...(departmentId ? { faculty: { departmentId } } : {}) },
-    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true } } },
+    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
   });
   const seen = new Set<string>();
   const totals = new Map<string, number>();
@@ -167,7 +167,7 @@ export async function creditedUnitsByFaculty(academicYearId: string, semester: n
     const key = `${l.facultyId}|${l.subjectId}|${l.studentClassId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    totals.set(l.facultyId, (totals.get(l.facultyId) ?? 0) + creditedLoadUnits(l.subject?.units ?? 0, l.subject?.isLab ?? false));
+    totals.set(l.facultyId, (totals.get(l.facultyId) ?? 0) + creditedLoadUnits(l.subject));
   }
   return totals;
 }

@@ -24,7 +24,7 @@ export async function classSubjects(studentClassId: string, academicYearId: stri
   const [subjects, loads] = await Promise.all([
     prisma.subject.findMany({
       where: { isDeleted: false, curriculumId: cls.curriculumId, yearLevel: cls.yearLevel, OR: [{ semester: null }, { semester }] },
-      select: { id: true, code: true, name: true, units: true, isLab: true },
+      select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true },
       orderBy: { code: "asc" },
     }),
     prisma.facultyLoad.findMany({ where: { studentClassId, academicYearId, semester }, select: { subjectId: true, dayOfWeek: true, startTime: true, endTime: true } }),
@@ -35,7 +35,7 @@ export async function classSubjects(studentClassId: string, academicYearId: stri
     subjects: subjects.map((s) => ({
       ...s,
       codeKey: codeKey(s.code),
-      requiredMinutes: requiredMinutesForSubject(s.units, s.isLab),
+      requiredMinutes: requiredMinutesForSubject(s),
       scheduledMinutes: scheduled.get(s.id) ?? 0,
     })),
   };
@@ -215,7 +215,7 @@ export async function previewImport(body: ImportBody, caller: CallerContext, tx?
   }
   const subjectsOut: SubjectResult[] = [...importMinutes.keys()].map((id) => {
     const s = subjectById.get(id)!;
-    return { subjectId: id, code: s.code, requiredMinutes: requiredMinutesForSubject(s.units, s.isLab), existingMinutes: existing.get(id) ?? 0, importMinutes: importMinutes.get(id) ?? 0 };
+    return { subjectId: id, code: s.code, requiredMinutes: requiredMinutesForSubject(s), existingMinutes: existing.get(id) ?? 0, importMinutes: importMinutes.get(id) ?? 0 };
   });
 
   const blocks = [...results.values()].map((r) => ({ ...r, blocking: [...new Set(r.blocking)], warnings: [...new Set(r.warnings)] }));

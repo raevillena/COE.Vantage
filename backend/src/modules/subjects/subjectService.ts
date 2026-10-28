@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden, conflict } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { resolveSubjectUnits } from "../../utils/workload.js";
 import type { CreateSubjectBody, UpdateSubjectBody } from "./subjectSchemas.js";
 
 /** Caller context: CHAIRMAN sees only subjects in their department's curricula (or unassigned with their department). */
@@ -40,7 +41,7 @@ export async function listSubjectsByCurriculumId(curriculumId: string) {
   return prisma.subject.findMany({
     where: { curriculumId, isDeleted: false },
     orderBy: [{ yearLevel: "asc" }, { semester: "asc" }, { code: "asc" }],
-    select: { id: true, code: true, name: true, units: true, isLab: true, yearLevel: true, semester: true },
+    select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, semester: true },
   });
 }
 
@@ -69,12 +70,13 @@ export async function createSubject(body: CreateSubjectBody) {
     const d = await prisma.department.findUnique({ where: { id: body.departmentId } });
     if (!d) throw badRequest("Department not found");
   }
+  const unitFields = resolveSubjectUnits(body);
+  if (!unitFields) throw badRequest("Lecture and/or laboratory units are required");
   return prisma.subject.create({
     data: {
       code: body.code,
       name: body.name,
-      units: body.units,
-      isLab: body.isLab,
+      ...unitFields,
       yearLevel: body.yearLevel ?? undefined,
       semester: body.semester ?? undefined,
       curriculumId: body.curriculumId ?? undefined,
@@ -111,13 +113,13 @@ export async function updateSubject(id: string, body: UpdateSubjectBody) {
     });
     if (existing) throw conflict("A subject with this code already exists in this curriculum.");
   }
+  const unitFields = resolveSubjectUnits(body, s);
   return prisma.subject.update({
     where: { id },
     data: {
       code: body.code,
       name: body.name,
-      units: body.units,
-      isLab: body.isLab,
+      ...unitFields,
       // For updates we respect explicit null (to clear) and undefined (no change),
       // so do not coerce with ?? here.
       yearLevel: body.yearLevel,

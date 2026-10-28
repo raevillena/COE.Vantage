@@ -40,13 +40,20 @@ export interface ExtractedSubject {
   units: number;
   prerequisites?: string;
   isLab?: boolean;
+  /** Optional split of the units; when set they replace units + isLab. */
+  lecUnits?: number;
+  labUnits?: number;
 }
 
 export interface Subject {
   id: string;
   code: string;
   name: string;
+  /** Total units: lecUnits + labUnits. */
   units: number;
+  lecUnits?: number;
+  labUnits?: number;
+  /** Laboratory-only subject (no lecture units); the only kind that needs a laboratory room. */
   isLab: boolean;
   /** Recommended year level within its curriculum; nullable when not assigned. */
   yearLevel?: number | null;
@@ -124,7 +131,7 @@ export interface FacultyLoad {
   facultyDisplayName?: string | null;
   roomDisplayName?: string | null;
   faculty?: { id: string; name: string; email: string } | null;
-  subject?: { id: string; code: string; name: string; units: number; isLab: boolean };
+  subject?: { id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number };
   studentClass?: { id: string; name: string; yearLevel: number; studentCount: number };
   room?: { id: string; name: string; capacity: number; isLab: boolean } | null;
   academicYear?: { id: string; name: string };

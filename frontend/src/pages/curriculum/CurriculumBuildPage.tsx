@@ -36,6 +36,8 @@ interface SubjectForPool {
   name: string;
   units: number;
   isLab: boolean;
+  lecUnits?: number;
+  labUnits?: number;
   yearLevel: number | null;
   semester: number | null;
   curriculumId: string | null;
@@ -271,6 +273,8 @@ export function CurriculumBuildPage() {
         name: poolSubject.name,
         units: poolSubject.units,
         isLab: poolSubject.isLab,
+        lecUnits: poolSubject.lecUnits,
+        labUnits: poolSubject.labUnits,
         curriculumId,
         yearLevel: yearLevel ?? undefined,
         semester: semester ?? undefined,

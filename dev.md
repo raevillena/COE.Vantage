@@ -1248,6 +1248,13 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - The label: grid blocks show a "Split" tag (all schedule views) and the tooltip; `copyClassSchedule` carries the flag. Deleting blocks until only one instructor is left clears the label.
 - Repeat days work with a split: every ticked day is created with the same `splitOfLoadId`.
 
+### 52. Lecture and laboratory units (v0.4.0)
+
+- `Subject` has `lecUnits` and `labUnits` (migration `20260610000000_subject_components`, backfilled: `isLab` rows become all lab units, the rest all lecture units). `units` stays the total (the curriculum checklist figure) and `isLab` now means a **laboratory-only** subject (no lecture units), the only kind that needs a laboratory room, so the room rules, auto-assign room choice and lab-break logic are unchanged.
+- One formula: weekly hours of blocks = faculty load credit = `lecUnits + 3 * labUnits` (`creditedLoadUnits` in `utils/workload.ts`; `requiredMinutesForSubject` is that times 60). 3 lec + 1 lab = 6. Callers pass the subject (selects include `lecUnits` and `labUnits`): max-units cap, auto-assign, dashboard progress and projection, GE import, Excel workload report.
+- API: subjects create and update take `lecUnits` and `labUnits`, or the older `units` + `isLab` (all lecture or all laboratory); `resolveSubjectUnits` computes the stored fields. The curriculum apply-import also accepts `lecUnits` and `labUnits` per row.
+- Frontend: `utils/subjectUnits.ts` (`lecUnitsOf`, `labUnitsOf`, `weeklyHours`, `unitsLabel`, `componentTag`) falls back to units + isLab for records without the split. Subjects form and list, the curriculum review and viewer tables, and the scheduler subject tree (required hours, "Lec/Lab" tag) use it. Blocks are not typed: a subject's hours are split over blocks freely.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

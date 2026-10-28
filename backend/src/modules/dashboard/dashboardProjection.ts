@@ -39,7 +39,7 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
     }),
     prisma.subject.findMany({
       where: { id: { in: subjectIds } },
-      select: { id: true, units: true, isLab: true, departmentId: true },
+      select: { id: true, units: true, isLab: true, lecUnits: true, labUnits: true, departmentId: true },
     }),
     prisma.subjectFacultyPriority.findMany({
       where: { subjectId: { in: subjectIds }, academicYearId, semester },
@@ -104,7 +104,7 @@ export async function simulateProjection(scopeDeptId: string | null, academicYea
       rows.push({ ...base, outcome: "no-faculty" });
       continue;
     }
-    const credit = creditedLoadUnits(subject.units, subject.isLab);
+    const credit = creditedLoadUnits(subject);
     const needsUnits = e.scheduledMinutes === 0; // a partly scheduled subject already carries its units
     let chosenFaculty: string | null = null;
     if (needsUnits) {

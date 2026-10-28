@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma/client.js";
 import { notFound } from "../../utils/errors.js";
+import { resolveSubjectUnits } from "../../utils/workload.js";
 
 /** One extracted subject row (no id). Used when applying IUSIS/clipboard import. */
 export interface ExtractedSubject {
@@ -10,6 +11,8 @@ export interface ExtractedSubject {
   units: number;
   prerequisites?: string;
   isLab?: boolean;
+  lecUnits?: number;
+  labUnits?: number;
 }
 
 /**
@@ -45,8 +48,13 @@ export async function applyImport(
     const data = {
       code: sub.code.trim(),
       name: sub.name.trim(),
-      units: Math.max(0, Math.floor(Number(sub.units) || 0)),
-      isLab,
+      ...resolveSubjectUnits({
+        // the checklist has one units figure: all lecture, or all laboratory when the subject is a lab
+        units: Math.max(0, Math.floor(Number(sub.units) || 0)),
+        isLab,
+        lecUnits: sub.lecUnits,
+        labUnits: sub.labUnits,
+      })!,
       yearLevel,
       semester,
       curriculumId,
@@ -55,7 +63,7 @@ export async function applyImport(
       if (existing) {
         await prisma.subject.update({
           where: { id: existing.id },
-          data: { name: data.name, units: data.units, isLab: data.isLab, yearLevel: data.yearLevel, semester: data.semester },
+          data: { name: data.name, units: data.units, lecUnits: data.lecUnits, labUnits: data.labUnits, isLab: data.isLab, yearLevel: data.yearLevel, semester: data.semester },
         });
         updated++;
       } else {

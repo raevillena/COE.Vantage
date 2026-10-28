@@ -185,7 +185,7 @@ async function main() {
   const bsceSubjects: { id: string; code: string }[] = [];
   for (const s of bsceSubjectsData) {
     const created = await prisma.subject.create({
-      data: { ...s, curriculumId: currBsce.id, departmentId: deptCe.id },
+      data: { ...s, lecUnits: s.isLab ? 0 : s.units, labUnits: s.isLab ? s.units : 0, curriculumId: currBsce.id, departmentId: deptCe.id },
     });
     bsceSubjects.push(created);
   }
@@ -228,7 +228,7 @@ async function main() {
   const bseeSubjects: { id: string; code: string }[] = [];
   for (const s of bseeSubjectsData) {
     const created = await prisma.subject.create({
-      data: { ...s, curriculumId: currBsee.id, departmentId: deptEce.id },
+      data: { ...s, lecUnits: s.isLab ? 0 : s.units, labUnits: s.isLab ? s.units : 0, curriculumId: currBsee.id, departmentId: deptEce.id },
     });
     bseeSubjects.push(created);
   }

@@ -436,6 +436,8 @@ export function ScheduleGrid({
                 height: gridHeight,
                 gridColumn: dayOfWeek + 1,
                 gridTemplateColumns: `repeat(${numLanes}, 1fr)`,
+                // subtle line at every hour; neutral grey so it reads in light and dark themes
+                backgroundImage: `repeating-linear-gradient(to bottom, rgba(128,128,128,0.22) 0, rgba(128,128,128,0.22) 1px, transparent 1px, transparent ${SLOT_HEIGHT}px)`,
               }}
             >
               {lanes.map((laneGroups, laneIndex) => (

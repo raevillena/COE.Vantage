@@ -4,8 +4,11 @@ export const createSubjectSchema = z.object({
   body: z.object({
     code: z.string().min(1),
     name: z.string().min(1),
-    units: z.number().int().min(0),
-    isLab: z.boolean().optional().default(false),
+    /** Send lecUnits and labUnits, or the older units + isLab pair (all lecture, or all laboratory). */
+    units: z.number().int().min(0).optional(),
+    lecUnits: z.number().int().min(0).optional(),
+    labUnits: z.number().int().min(0).optional(),
+    isLab: z.boolean().optional(),
     yearLevel: z.number().int().min(1).optional().nullable(),
     semester: z.number().int().min(1).max(3).optional().nullable(),
     curriculumId: z.string().uuid().optional().nullable(),
@@ -18,6 +21,8 @@ export const updateSubjectSchema = z.object({
     code: z.string().min(1).optional(),
     name: z.string().min(1).optional(),
     units: z.number().int().min(0).optional(),
+    lecUnits: z.number().int().min(0).optional(),
+    labUnits: z.number().int().min(0).optional(),
     isLab: z.boolean().optional(),
     yearLevel: z.number().int().min(1).optional().nullable(),
     semester: z.number().int().min(1).max(3).optional().nullable(),

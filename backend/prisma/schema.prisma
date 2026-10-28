@@ -191,8 +191,10 @@ model Subject {
   id           String   @id @default(uuid())
   code         String
   name         String
-  units        Int
-  isLab        Boolean  @default(false)
+  units        Int      // total units: lecUnits + labUnits (the curriculum checklist figure)
+  lecUnits     Int      @default(0) // lecture units, 1 hour/week each
+  labUnits     Int      @default(0) // laboratory units, 3 hours/week each; faculty load credit = lecUnits + 3 * labUnits
+  isLab        Boolean  @default(false) // pure laboratory subject (no lecture units): needs a laboratory room
   yearLevel    Int?     // 1-5
   semester     Int?     // 1 = 1st sem, 2 = 2nd sem, 3 = mid year
   curriculumId String?

@@ -26,6 +26,9 @@ export const applyImportSchema = z.object({
         units: z.number().int().min(0),
         prerequisites: z.string().optional(),
         isLab: z.boolean().optional(),
+        /** Optional split of the units; when sent they replace units + isLab. */
+        lecUnits: z.number().int().min(0).optional(),
+        labUnits: z.number().int().min(0).optional(),
       })
     ),
   }),

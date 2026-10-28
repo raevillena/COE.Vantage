@@ -12,6 +12,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
 import { parseIusisCurriculumHtml } from "../../utils/parseIusisCurriculumHtml";
 import { parseIusisCurriculumClipboard } from "../../utils/parseIusisCurriculumClipboard";
+import { labUnitsOf, lecUnitsOf, unitsLabel, weeklyHours } from "../../utils/subjectUnits";
 import { HelpTip } from "../../components/ui/helpTip";
 
 export function CurriculumPage() {
@@ -31,7 +32,7 @@ export function CurriculumPage() {
 
   // Curriculum viewer (read-only subjects list)
   const [viewerCurriculum, setViewerCurriculum] = useState<Curriculum | null>(null);
-  const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>([]);
+  const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number; yearLevel: number | null; semester: number | null }[]>([]);
   const [viewerLoading, setViewerLoading] = useState(false);
 
   // Import: IUSIS HTML or clipboard text — shared two-phase flow
@@ -82,7 +83,7 @@ export function CurriculumPage() {
     setViewerSubjects([]);
     setViewerLoading(true);
     try {
-      const { data } = await apiClient.get<{ id: string; code: string; name: string; units: number; isLab: boolean; yearLevel: number | null; semester: number | null }[]>(
+      const { data } = await apiClient.get<{ id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number; yearLevel: number | null; semester: number | null }[]>(
         `/curriculum/${c.id}/subjects`
       );
       setViewerSubjects(data ?? []);
@@ -235,6 +236,15 @@ export function CurriculumPage() {
       const next = [...prev];
       const row = { ...next[index], [field]: value };
       next[index] = row;
+      return next;
+    });
+  };
+
+  /** Sets the lecture and laboratory units of a row; the total and the lab flag follow. */
+  const setRowUnits = (index: number, lecUnits: number, labUnits: number) => {
+    setExtractedRows((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], lecUnits, labUnits, units: lecUnits + labUnits, isLab: lecUnits === 0 && labUnits > 0 };
       return next;
     });
   };
@@ -439,7 +449,7 @@ export function CurriculumPage() {
                       <th className="px-3 py-2 text-left font-medium text-foreground">Code</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Name</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Units</th>
-                      <th className="px-3 py-2 text-left font-medium text-foreground">Lab</th>
+                      <th className="px-3 py-2 text-left font-medium text-foreground">Hrs/week</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -449,8 +459,8 @@ export function CurriculumPage() {
                         <td className="px-3 py-2 text-foreground-muted">{s.semester === 1 ? "1st Sem" : s.semester === 2 ? "2nd Sem" : s.semester === 3 ? "Mid Year" : "—"}</td>
                         <td className="px-3 py-2 text-foreground font-medium">{s.code}</td>
                         <td className="px-3 py-2 text-foreground">{s.name}</td>
-                        <td className="px-3 py-2 text-foreground-muted">{s.units}</td>
-                        <td className="px-3 py-2 text-foreground-muted">{s.isLab ? "Yes" : "—"}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{unitsLabel(s)}</td>
+                        <td className="px-3 py-2 text-foreground-muted">{weeklyHours(s)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -580,10 +590,10 @@ export function CurriculumPage() {
                       <tr>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Code</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Name</th>
-                        <th className="px-2 py-1.5 text-left font-medium text-foreground">Units</th>
+                        <th className="px-2 py-1.5 text-left font-medium text-foreground">Lec</th>
+                        <th className="px-2 py-1.5 text-left font-medium text-foreground">Lab</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Year</th>
                         <th className="px-2 py-1.5 text-left font-medium text-foreground">Semester</th>
-                        <th className="px-2 py-1.5 text-left font-medium text-foreground">Lab</th>
                         <th className="px-2 py-1.5 w-10" />
                       </tr>
                     </thead>
@@ -597,7 +607,10 @@ export function CurriculumPage() {
                             <input className="w-full rounded border border-border-strong px-2 py-1 bg-transparent" value={row.name} onChange={(e) => updateExtractedRow(i, "name", e.target.value)} />
                           </td>
                           <td className="px-2 py-1">
-                            <input type="number" min={0} className="w-16 rounded border border-border-strong px-2 py-1 bg-transparent" value={row.units} onChange={(e) => updateExtractedRow(i, "units", parseInt(e.target.value, 10) || 0)} />
+                            <input type="number" min={0} aria-label="Lecture units" className="w-16 rounded border border-border-strong px-2 py-1 bg-transparent" value={lecUnitsOf(row)} onChange={(e) => setRowUnits(i, Math.max(0, parseInt(e.target.value, 10) || 0), labUnitsOf(row))} />
+                          </td>
+                          <td className="px-2 py-1">
+                            <input type="number" min={0} aria-label="Laboratory units" className="w-16 rounded border border-border-strong px-2 py-1 bg-transparent" value={labUnitsOf(row)} onChange={(e) => setRowUnits(i, lecUnitsOf(row), Math.max(0, parseInt(e.target.value, 10) || 0))} />
                           </td>
                           <td className="px-2 py-1">
                             <select className="rounded border border-border-strong px-2 py-1 bg-transparent" value={row.yearLevel} onChange={(e) => updateExtractedRow(i, "yearLevel", parseInt(e.target.value, 10))}>
@@ -613,9 +626,6 @@ export function CurriculumPage() {
                               <option value={2}>2nd Sem</option>
                               <option value={3}>Mid Year</option>
                             </select>
-                          </td>
-                          <td className="px-2 py-1">
-                            <input type="checkbox" checked={row.isLab ?? false} onChange={(e) => updateExtractedRow(i, "isLab", e.target.checked)} />
                           </td>
                           <td className="px-2 py-1">
                             <button type="button" className="text-danger hover:underline" onClick={() => removeExtractedRow(i)} aria-label="Remove row">Remove</button>
