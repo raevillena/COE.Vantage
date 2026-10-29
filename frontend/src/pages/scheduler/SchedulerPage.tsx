@@ -53,6 +53,7 @@ import {
 import { LoadBlockPreview } from "../../components/scheduleGrid/ScheduleGrid";
 import { BlockLegend } from "../../components/scheduler/SchedulerLegend";
 import { BlockColorPicker } from "../../components/scheduler/BlockColorPicker";
+import { RawBlocksEditor } from "../../components/scheduler/RawBlocksEditor";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { useSchedulePalette } from "../../context/SchedulePaletteContext";
 import { ResetScheduleDialog } from "../../components/scheduler/ResetScheduleDialog";
@@ -221,6 +222,8 @@ export function SchedulerPage() {
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<SubjectDragItem | null>(null);
+  /** Size of the block being carried, so it looks the same under the pointer as it did on the grid. */
+  const [dragSize, setDragSize] = useState<{ width: number; height: number } | null>(null);
   const [activeDragLoad, setActiveDragLoad] = useState<FacultyLoad | null>(null);
   const [overSlotId, setOverSlotId] = useState<string | null>(null);
   const [pendingAssignment, setPendingAssignment] = useState<PendingAssignment | null>(null);
@@ -707,6 +710,9 @@ export function SchedulerPage() {
     } else if (data?.type === "load" && activeId.startsWith("main-load-")) {
       setActiveDragLoad(data.load);
       setActiveDragItem(null);
+      // the block as it sits on the grid, measured now, so the carried copy keeps its size
+      const rect = document.querySelector(`[data-draggable-block="${activeId}"]`)?.getBoundingClientRect();
+      setDragSize(rect ? { width: rect.width, height: rect.height } : null);
       // While dragging an existing load, show availability overlay for that load's faculty/room
       // so the user can see busy slots while moving it.
       setOverlayFacultyId(data.load.facultyId ?? "");
@@ -1155,9 +1161,16 @@ export function SchedulerPage() {
 
   const showGrid = academicYearId && (viewMode === "class" ? studentClassId : viewMode === "faculty" ? selectedFacultyId : false);
 
+  const SCHEDULE_HOUR_START_DEFAULT = 7;
   const SCHEDULE_HOUR_END_DEFAULT = 18;
   const SCHEDULE_HOUR_END_FULL = 21;
   const scheduleHourEnd = showLateHours ? SCHEDULE_HOUR_END_FULL : SCHEDULE_HOUR_END_DEFAULT;
+  // the grid starts at 7 AM, and reaches back to the earliest block (or the block being placed) when one is earlier
+  const earliestMinutes = Math.min(
+    ...[...displayLoads, ...roomLoads, ...overlayFacultyLoads].map((l) => timeToMinutes(l.startTime)),
+    pendingAssignment?.startTime ? timeToMinutes(pendingAssignment.startTime) : Infinity
+  );
+  const scheduleHourStart = Number.isFinite(earliestMinutes) ? Math.max(0, Math.min(SCHEDULE_HOUR_START_DEFAULT, Math.floor(earliestMinutes / 60))) : SCHEDULE_HOUR_START_DEFAULT;
 
   return (
     <div className="flex flex-col min-h-[55vh] h-auto overflow-y-auto">
@@ -1402,6 +1415,17 @@ export function SchedulerPage() {
               {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground">Faculty schedule</h2>}
               <div className="flex items-center gap-1">
                 <BlockColorPicker />
+                <RawBlocksEditor
+                  loads={loads}
+                  canEdit={user?.role === "CHAIRMAN" && !termLock && !!academicYearId}
+                  semester={semester}
+                  academicYearId={academicYearId ?? ""}
+                  onChanged={() => {
+                    refreshLoads();
+                    refreshRoomLoads();
+                    setEditingLoadId(null);
+                  }}
+                />
                 <BlockLegend />
               </div>
             </div>
@@ -1427,6 +1451,7 @@ export function SchedulerPage() {
                       loads={displayLoads}
                       wrapInScroll={false}
                       selectedLoadId={editingLoadId}
+                      hourStart={scheduleHourStart}
                       hourEnd={scheduleHourEnd}
                       draggableIdPrefix="main"
                       minWidth={is2xl ? 520 : undefined}
@@ -1452,7 +1477,9 @@ export function SchedulerPage() {
                     <ScheduleSlotOverlay
                       active={isDragging}
                       activeDragItem={activeDragItem}
+                      activeDragLoad={activeDragLoad}
                       overSlotId={overSlotId}
+                      hourStart={scheduleHourStart}
                       hourEnd={scheduleHourEnd}
                       pendingAssignment={(() => {
                         if (
@@ -1481,7 +1508,8 @@ export function SchedulerPage() {
                         facultyLoads={overlayFacultyLoads}
                         roomLoads={overlayRoomLoads}
                         classLoads={viewMode === "faculty" ? overlayClassLoads : []}
-                        hourEnd={scheduleHourEnd}
+                        hourStart={scheduleHourStart}
+                      hourEnd={scheduleHourEnd}
                       />
                       )}
                     {moveConflict && (
@@ -1750,7 +1778,8 @@ export function SchedulerPage() {
                           loads={roomLoads}
                           readOnly
                           wrapInScroll={false}
-                          hourEnd={scheduleHourEnd}
+                          hourStart={scheduleHourStart}
+                      hourEnd={scheduleHourEnd}
                           draggableIdPrefix="room"
                           fitWidth
                         />
@@ -1803,7 +1832,8 @@ export function SchedulerPage() {
                           loads={overlayFacultyLoads}
                           readOnly
                           wrapInScroll={false}
-                          hourEnd={scheduleHourEnd}
+                          hourStart={scheduleHourStart}
+                      hourEnd={scheduleHourEnd}
                           draggableIdPrefix="faculty-preview"
                           fitWidth
                         />
@@ -1857,16 +1887,15 @@ export function SchedulerPage() {
                 }
               }
               return (
-                <div className="pointer-events-none flex flex-col items-center gap-1">
+                <div className="pointer-events-none flex flex-col items-center gap-1" style={dragSize ? { width: dragSize.width } : undefined}>
                   <LoadBlockPreview
                     load={activeDragLoad}
                     subjectIds={[...new Set(loads.map((l) => l.subjectId))]}
-                    heightPx={Math.max(
-                      20,
-                      ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) *
-                        SLOT_HEIGHT -
-                        2
-                    )}
+                    heightPx={
+                      dragSize?.height ??
+                      Math.max(20, ((timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) / 60) * SLOT_HEIGHT - 2)
+                    }
+                    widthPx={dragSize?.width}
                     dropTimeLabel={dropTimeLabel}
                     timeRangeLabel={timeRangeLabel}
                   />

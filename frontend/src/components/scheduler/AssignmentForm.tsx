@@ -38,7 +38,8 @@ function getCompactHourRange(loads: FacultyLoad[]): { hourStart: number; hourEnd
     if (startH < minStart) minStart = startH;
     if (endH > maxEnd) maxEnd = endH;
   }
-  const hourStart = Math.max(7, minStart - 1);
+  // 7 AM at the earliest, unless a block starts before then (a mistyped time), which must stay visible
+  const hourStart = minStart < 7 ? minStart : Math.max(7, minStart - 1);
   const hourEnd = Math.min(21, maxEnd + 1);
   return { hourStart, hourEnd };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import * as Separator from "@radix-ui/react-separator";
 import {
   LayoutDashboard,
@@ -32,6 +32,7 @@ import type { College } from "../../types/api";
 import { getExperimentalFeaturesForUser } from "../../features/experimental/featureCatalog";
 import { setViewCollege, useViewCollege } from "../../utils/collegeView";
 import { collegeCode, collegeColor } from "../../utils/collegeColor";
+import { CountBadge } from "../ui/countBadge";
 import { CollegeSwitcher } from "./CollegeSwitcher";
 
 interface SidebarProps {
@@ -55,6 +56,8 @@ interface NavDef {
   show: boolean;
   /** Shows the number of requests waiting for this person. */
   requests?: boolean;
+  /** Shows the number of room requests waiting for this person. */
+  roomShare?: boolean;
 }
 
 interface NavGroupDef {
@@ -98,11 +101,37 @@ function RequestsNavItem({ onClose }: { onClose: () => void }) {
     >
       <Inbox size={iconSize} className={iconClass} aria-hidden />
       <span className="flex-1">Requests</span>
-      {pendingCount > 0 && (
-        <span className="min-w-[1.25rem] rounded-full bg-primary px-1.5 py-0.5 text-center text-xs font-medium text-primary-contrast">
-          {pendingCount > 99 ? "99+" : pendingCount}
-        </span>
-      )}
+      <CountBadge count={pendingCount} />
+    </NavLink>
+  );
+}
+
+function RoomShareNavItem({ onClose }: { onClose: () => void }) {
+  const [count, setCount] = useState(0);
+  const location = useLocation();
+
+  useEffect(() => {
+    const load = () =>
+      apiClient
+        .get<{ count: number }>("/room-share/requests/count")
+        .then(({ data }) => setCount(data?.count ?? 0))
+        .catch(() => setCount(0));
+    load();
+    // a decision made on the page refreshes the badge at once
+    window.addEventListener("room-share-changed", load);
+    return () => window.removeEventListener("room-share-changed", load);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
+
+  return (
+    <NavLink
+      to="/room-sharing"
+      className={({ isActive }) => `${navItemClass} ${isActive ? navItemActiveClass : ""} border-l-2 border-transparent`}
+      onClick={onClose}
+    >
+      <Share2 size={iconSize} className={iconClass} aria-hidden />
+      <span className="flex-1">Room sharing</span>
+      <CountBadge count={count} />
     </NavLink>
   );
 }
@@ -160,7 +189,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, show: !viewer },
         { to: "/scheduler", label: "Scheduler", icon: CalendarRange, show: is("CHAIRMAN") },
         { to: "/requests", label: "Requests", icon: Inbox, show: is("CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"), requests: true },
-        { to: "/room-sharing", label: "Room sharing", icon: Share2, show: is("CHAIRMAN", "DEAN", "COLLEGE_SECRETARY") },
+        { to: "/room-sharing", label: "Room sharing", icon: Share2, show: is("CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"), roomShare: true },
         { to: "/schedules/faculty", label: "Faculty schedule", icon: UserCircle, show: role !== "FACULTY" && unitHas("SCHEDULES") },
         { to: "/schedules/student-class", label: "Class schedule", icon: GraduationCap, show: unitHas("SCHEDULES") },
         { to: "/schedules/rooms", label: "Room availability", icon: DoorOpen, show: unitHas("SCHEDULES", "ROOMS") },
@@ -221,6 +250,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               {items.map((i) =>
                 i.requests ? (
                   <RequestsNavItem key={i.to} onClose={onClose} />
+                ) : i.roomShare ? (
+                  <RoomShareNavItem key={i.to} onClose={onClose} />
                 ) : (
                   <NavItem key={i.to} to={i.to} icon={i.icon} onClose={onClose}>
                     {i.label}

@@ -30,7 +30,16 @@ const SEM = ["", "1st Sem", "2nd Sem", "Mid Year"];
 const DAY = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // Prisma queries run when awaited, so the call is awaited inside the unscoped context
 const u = <T>(fn: () => PromiseLike<T>): Promise<T> => runUnscoped(async () => await fn());
-const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) => aStart < bEnd && aEnd > bStart;
+/** Where a notification about a request opens: the Requests tab, on the side the person works from, with the request open. */
+const shareLink = (id: string, side: "guest" | "host") => `/room-sharing?tab=requests&side=${side}&open=${id}`;
+const mins = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+const overlaps = (aStart: string, aEnd: string, bStart: string, bEnd: string) => mins(aStart) < mins(bEnd) && mins(aEnd) > mins(bStart);
+
+/** A block being drafted: the class and subject may still be missing, in which case only the room and time are checked. */
+export type PartialBlock = Omit<BlockInput, "studentClassId" | "subjectId"> & { studentClassId?: string | null; subjectId?: string | null };
 
 export interface BlockInput {
   roomId: string;
@@ -168,9 +177,9 @@ export async function listShareableRooms(caller: ShareCaller, q: { academicYearI
 // ---------------------------------------------------------------- drafts
 
 /** Everything wrong with a proposed block, or an empty list. `ignore` are drafts not to count (the ones being submitted together). */
-async function problemsOf(caller: ShareCaller, b: BlockInput, opts: { ignoreBlockIds?: string[]; forRequest?: boolean } = {}): Promise<string[]> {
+async function problemsOf(caller: ShareCaller, b: PartialBlock, opts: { ignoreBlockIds?: string[]; forRequest?: boolean } = {}): Promise<string[]> {
   const problems: string[] = [];
-  if (b.startTime >= b.endTime) return ["The end time must be after the start time."];
+  if (mins(b.startTime) >= mins(b.endTime)) return ["The end time must be after the start time."];
   const room = await u(() => prisma.room.findUnique({ where: { id: b.roomId } }));
   if (!room || room.isDeleted || !room.collegeId) return ["That room was not found."];
   if (room.collegeId === caller.collegeId) return ["That room belongs to your own college. Schedule it from the Scheduler."];
@@ -184,11 +193,18 @@ async function problemsOf(caller: ShareCaller, b: BlockInput, opts: { ignoreBloc
     return [e instanceof Error ? e.message : "Your college's semester is locked."];
   }
 
-  const c = await u(() =>
+  const full = Boolean(b.studentClassId && b.subjectId);
+  const roomLoads = full
+    ? []
+    : await u(() => prisma.facultyLoad.findMany({ where: { roomId: b.roomId, academicYearId: b.academicYearId, semester: b.semester, dayOfWeek: b.dayOfWeek }, select: { startTime: true, endTime: true } }));
+  if (roomLoads.some((l) => overlaps(l.startTime, l.endTime, b.startTime, b.endTime))) problems.push("The room is already booked at that time.");
+  const c = !full
+    ? { roomConflict: false, facultyConflict: false, studentConflict: false, capacityIssue: false, labRoomMismatch: false }
+    : await u(() =>
     checkConflicts({
       facultyId: b.facultyId ?? undefined,
-      subjectId: b.subjectId,
-      studentClassId: b.studentClassId,
+      subjectId: b.subjectId!,
+      studentClassId: b.studentClassId!,
       roomId: b.roomId,
       dayOfWeek: b.dayOfWeek,
       startTime: b.startTime,
@@ -212,14 +228,14 @@ async function problemsOf(caller: ShareCaller, b: BlockInput, opts: { ignoreBloc
         dayOfWeek: b.dayOfWeek,
         AND: [{ OR: [{ request: { status: { in: PENDING } } }, { requestId: null, guestCollegeId: caller.collegeId! }] }],
         id: { notIn: opts.ignoreBlockIds ?? [] },
-        OR: [{ roomId: b.roomId }, { studentClassId: b.studentClassId }, ...(b.facultyId ? [{ facultyId: b.facultyId }] : [])],
+        OR: [{ roomId: b.roomId }, ...(b.studentClassId ? [{ studentClassId: b.studentClassId }] : []), ...(b.facultyId ? [{ facultyId: b.facultyId }] : [])],
       },
     })
   );
   for (const h of held) {
     if (!overlaps(h.startTime, h.endTime, b.startTime, b.endTime)) continue;
     if (h.roomId === b.roomId) problems.push("The room is held by another draft or request.");
-    else if (h.studentClassId === b.studentClassId) problems.push("The class has another draft or request at that time.");
+    else if (b.studentClassId && h.studentClassId === b.studentClassId) problems.push("The class has another draft or request at that time.");
     else problems.push("The faculty member has another draft or request at that time.");
   }
   return [...new Set(problems)];
@@ -238,8 +254,9 @@ async function assertCanDraft(caller: ShareCaller, b: BlockInput) {
   }
 }
 
-export async function previewDraft(caller: ShareCaller, b: BlockInput) {
-  await assertCanDraft(caller, b);
+export async function previewDraft(caller: ShareCaller, b: PartialBlock) {
+  if (caller.role !== "CHAIRMAN" || !caller.collegeId) throw forbidden("Only a chairman drafts room requests.");
+  if (b.studentClassId && b.subjectId) await assertCanDraft(caller, b as BlockInput);
   const problems = await problemsOf(caller, b);
   return { ok: problems.length === 0, problems };
 }
@@ -356,7 +373,7 @@ export async function submitRequests(caller: ShareCaller, body: { draftIds: stri
         type: "ROOM_SHARE",
         title: "A room request needs your approval",
         body: `${guestName} asks for ${what} in your department's rooms.`,
-        link: "/room-sharing",
+        link: shareLink(request.id, "host"),
         groupKey: `room-share-${request.id}`,
       });
     }
@@ -364,14 +381,14 @@ export async function submitRequests(caller: ShareCaller, body: { draftIds: stri
       type: "ROOM_SHARE",
       title: "A room request was submitted for your rooms",
       body: `${guestName}: ${what}. The chairmen approve first, then the college secretary.`,
-      link: "/room-sharing",
+      link: shareLink(request.id, "host"),
       groupKey: `room-share-${request.id}-host`,
     });
     void notifyUsers(await peopleOf(caller.collegeId!, ["DEAN"]), {
       type: "ROOM_SHARE",
       title: "Your college submitted a room request",
       body: `${what} in ${names.get(first.hostCollegeId) ?? "another college"}.`,
-      link: "/room-sharing",
+      link: shareLink(request.id, "guest"),
       groupKey: `room-share-${request.id}-guest`,
     }, { exceptUserId: caller.id });
     await audit({
@@ -452,6 +469,13 @@ function actionsFor(caller: ShareCaller, r: { status: string; hostCollegeId: str
 export async function getRequest(caller: ShareCaller, id: string) {
   const request = await loadRequest(caller, id);
   const { blocks, ...rest } = request;
+  // what the rooms already hold, without this request's own blocks, so the new blocks can be seen in place
+  const roomIds = [...new Set(blocks.map((b) => b.roomId))];
+  const busy = await busyOf(roomIds, request.academicYearId, request.semester);
+  const roomBusy = roomIds.map((roomId) => ({
+    roomId,
+    busy: (busy.get(roomId) ?? []).filter((x) => !blocks.some((b) => b.roomId === roomId && b.dayOfWeek === x.dayOfWeek && b.startTime === x.startTime && b.endTime === x.endTime)),
+  }));
   const [rich, names, year] = await Promise.all([
     enrich(blocks),
     collegeNames([request.guestCollegeId, request.hostCollegeId]),
@@ -463,6 +487,7 @@ export async function getRequest(caller: ShareCaller, id: string) {
     hostCollegeName: names.get(request.hostCollegeId) ?? "",
     academicYearName: year?.name ?? "",
     blocks: rich,
+    roomBusy,
     actions: actionsFor(caller, request),
   };
 }
@@ -483,7 +508,7 @@ export async function decide(caller: ShareCaller, id: string, kind: "approve" | 
       ...(await peopleOf(request.guestCollegeId, ["COLLEGE_SECRETARY", "DEAN"])),
       ...request.blocks.map((b) => b.createdById),
     ];
-    void notifyUsers(people, { type: "ROOM_SHARE", title, body, link: "/room-sharing" }, { exceptUserId: caller.id });
+    void notifyUsers(people, { type: "ROOM_SHARE", title, body, link: shareLink(id, "guest") }, { exceptUserId: caller.id });
   };
 
   if (kind === "reject") {
@@ -495,7 +520,7 @@ export async function decide(caller: ShareCaller, id: string, kind: "approve" | 
       })
     );
     await tellGuest("Your room request was rejected", `${hostName}, ${term}: ${blocksN} ${blocksN === 1 ? "block" : "blocks"}.${cleanNotes ? ` ${cleanNotes}` : ""}`);
-    void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "A room request was rejected", body: `${guestName}, ${term}.`, link: "/room-sharing" }, { exceptUserId: caller.id });
+    void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "A room request was rejected", body: `${guestName}, ${term}.`, link: shareLink(id, "host") }, { exceptUserId: caller.id });
     await audit({ entityType: "ROOM_SHARE", entityId: id, entityLabel: `${guestName} → ${hostName}`, action: "UPDATE", summary: `Rejected the room request of ${guestName} (${term})${cleanNotes ? `: ${cleanNotes}` : ""}`, academicYearId: request.academicYearId, semester: request.semester, collegeId: request.hostCollegeId });
     return getRequest(caller, id);
   }
@@ -511,8 +536,8 @@ export async function decide(caller: ShareCaller, id: string, kind: "approve" | 
       })
     );
     if (state === "chairmen-done") {
-      void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY"]), { type: "ROOM_SHARE", title: "A room request is ready for your final approval", body: `${guestName}: ${blocksN} ${blocksN === 1 ? "block" : "blocks"} for ${term}. The chairmen approved.`, link: "/room-sharing" });
-      void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "The chairmen approved a room request", body: `${guestName}, ${term}. It waits for the college secretary.`, link: "/room-sharing" });
+      void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY"]), { type: "ROOM_SHARE", title: "A room request is ready for your final approval", body: `${guestName}: ${blocksN} ${blocksN === 1 ? "block" : "blocks"} for ${term}. The chairmen approved.`, link: shareLink(id, "host") });
+      void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "The chairmen approved a room request", body: `${guestName}, ${term}. It waits for the college secretary.`, link: shareLink(id, "host") });
     }
     await audit({ entityType: "ROOM_SHARE", entityId: id, entityLabel: `${guestName} → ${hostName}`, action: "UPDATE", summary: `Chairman approved the room request of ${guestName} (${term})`, academicYearId: request.academicYearId, semester: request.semester, collegeId: request.hostCollegeId });
     return getRequest(caller, id);
@@ -568,7 +593,7 @@ export async function decide(caller: ShareCaller, id: string, kind: "approve" | 
     })
   );
   await tellGuest("Your room request was approved", `${hostName}, ${term}: ${blocksN} ${blocksN === 1 ? "block is" : "blocks are"} now in your schedule.${cleanNotes ? ` ${cleanNotes}` : ""}`);
-  void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "A room request was approved", body: `${guestName} now uses your rooms: ${blocksN} ${blocksN === 1 ? "block" : "blocks"}, ${term}.`, link: "/room-sharing" }, { exceptUserId: caller.id });
+  void notifyUsers(await peopleOf(request.hostCollegeId, ["DEAN"]), { type: "ROOM_SHARE", title: "A room request was approved", body: `${guestName} now uses your rooms: ${blocksN} ${blocksN === 1 ? "block" : "blocks"}, ${term}.`, link: shareLink(id, "host") }, { exceptUserId: caller.id });
   const perFaculty = new Map<string, number>();
   for (const l of loads) if (l.facultyId) perFaculty.set(l.facultyId, (perFaculty.get(l.facultyId) ?? 0) + 1);
   for (const [facultyId, n] of perFaculty) void notifyScheduleChange(facultyId, "assigned", `${n} ${n === 1 ? "block" : "blocks"} in ${hostName}'s rooms`, { increment: n, exceptUserId: caller.id });
@@ -587,7 +612,7 @@ export async function cancelRequest(caller: ShareCaller, id: string) {
     })
   );
   const names = await collegeNames([request.guestCollegeId, request.hostCollegeId]);
-  void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY", "DEAN"]), { type: "ROOM_SHARE", title: "A room request was cancelled", body: `${names.get(request.guestCollegeId) ?? "A college"} withdrew its request.`, link: "/room-sharing" });
+  void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY", "DEAN"]), { type: "ROOM_SHARE", title: "A room request was cancelled", body: `${names.get(request.guestCollegeId) ?? "A college"} withdrew its request.`, link: shareLink(id, "host") });
   await audit({ entityType: "ROOM_SHARE", entityId: id, entityLabel: `${names.get(request.guestCollegeId)} → ${names.get(request.hostCollegeId)}`, action: "UPDATE", summary: "Cancelled a room request", academicYearId: request.academicYearId, semester: request.semester, collegeId: request.guestCollegeId });
 }
 
@@ -601,4 +626,16 @@ export async function assertNoGuestBookings(hostCollegeId: string, academicYearI
   ]);
   if (blocks > 0) throw badRequest(`Other colleges have ${blocks} ${blocks === 1 ? "block" : "blocks"} booked in your rooms this semester. They must be removed before you can unlock it.`);
   if (pending > 0) throw badRequest("Other colleges have room requests waiting for this semester. Reject or finish them before you unlock it.");
+}
+
+/** How many requests wait for this person: a chairman's department to approve, the secretary's final approval, a dean's to look at. */
+export async function waitingCount(caller: ShareCaller): Promise<number> {
+  if (!caller.collegeId) return 0;
+  const host = { hostCollegeId: caller.collegeId };
+  if (caller.role === "CHAIRMAN") {
+    return u(() => prisma.roomShareRequest.count({ where: { ...host, status: "PENDING_CHAIRMAN", approvals: { some: { departmentId: caller.departmentId ?? "none", status: "PENDING" } } } }));
+  }
+  if (caller.role === "COLLEGE_SECRETARY") return u(() => prisma.roomShareRequest.count({ where: { ...host, status: "PENDING_SECRETARY" } }));
+  if (caller.role === "DEAN") return u(() => prisma.roomShareRequest.count({ where: { ...host, status: { in: PENDING } } }));
+  return 0;
 }

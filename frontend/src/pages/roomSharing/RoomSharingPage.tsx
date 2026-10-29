@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
@@ -6,6 +7,7 @@ import type { AcademicYear, StudentClass, Subject } from "../../types/api";
 import { Button } from "../../components/ui/button";
 import { Dialog } from "../../components/ui/dialog";
 import { HelpTip } from "../../components/ui/helpTip";
+import { CountBadge } from "../../components/ui/countBadge";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
 
@@ -68,6 +70,7 @@ interface ShareRequest {
 }
 interface RequestDetail extends Omit<ShareRequest, "blockCount"> {
   blocks: Block[];
+  roomBusy: { roomId: string; busy: Busy[] }[];
   actions: { chairmanDecides: boolean; secretaryDecides: boolean; canCancel: boolean };
 }
 interface FacultyOption {
@@ -140,6 +143,66 @@ function WeekStrip({ busy }: { busy: Busy[] }) {
   );
 }
 
+/** A room's week as the approver will see it: what the room already holds in grey, the requested blocks highlighted. */
+function PlacementGrid({ busy, blocks, conflict = false }: { busy: Busy[]; blocks: Block[]; conflict?: boolean }) {
+  const HOUR = 24;
+  const hours = Array.from({ length: (DAY_END - DAY_START) / 60 }, (_, i) => DAY_START / 60 + i);
+  const place = (start: string, end: string) => ({
+    top: ((Math.max(minutes(start), DAY_START) - DAY_START) / 60) * HOUR,
+    height: Math.max(((Math.min(minutes(end), DAY_END) - Math.max(minutes(start), DAY_START)) / 60) * HOUR, 6),
+  });
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[34rem]">
+        <div className="flex pl-10">
+          {[1, 2, 3, 4, 5, 6].map((d) => (
+            <div key={d} className="flex-1 border-l border-border py-1 text-center text-xs font-medium text-foreground-muted">{DAYS[d]}</div>
+          ))}
+        </div>
+        <div className="relative flex" style={{ height: hours.length * HOUR }}>
+          <div className="w-10 shrink-0">
+            {hours.map((h) => (
+              <div key={h} className="text-right text-[10px] text-foreground-muted" style={{ height: HOUR }}>
+                <span className="relative -top-1.5 pr-1">{h}:00</span>
+              </div>
+            ))}
+          </div>
+          {[1, 2, 3, 4, 5, 6].map((d) => (
+            <div key={d} className="relative flex-1 border-l border-border">
+              {hours.map((h) => (
+                <div key={h} className="border-t border-border/60" style={{ height: HOUR }} />
+              ))}
+              {busy.filter((b) => b.dayOfWeek === d).map((b, i) => (
+                <div
+                  key={`b${i}`}
+                  className={`absolute inset-x-0.5 rounded-sm ${b.held ? "bg-warning/40" : "bg-foreground-muted/30"}`}
+                  style={place(b.startTime, b.endTime)}
+                  title={`${b.startTime}–${b.endTime}${b.held ? " (held by another request)" : " (already scheduled)"}`}
+                />
+              ))}
+              {blocks.filter((b) => b.dayOfWeek === d).map((b) => (
+                <div
+                  key={b.id}
+                  className={`absolute inset-x-0.5 overflow-hidden rounded-sm border px-1 text-[10px] leading-tight shadow ${conflict ? "border-danger bg-danger text-white" : "border-primary bg-primary text-primary-foreground"}`}
+                  style={place(b.startTime, b.endTime)}
+                  title={`${b.subjectCode} · ${b.className} · ${b.startTime}–${b.endTime}`}
+                >
+                  <span className="font-semibold">{b.subjectCode}</span> {b.className}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-foreground-muted">
+        <span className="mr-3"><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-primary align-middle" />Requested</span>
+        <span className="mr-3"><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-foreground-muted/30 align-middle" />Already scheduled</span>
+        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-warning/40 align-middle" />Held by another request</span>
+      </p>
+    </div>
+  );
+}
+
 function BlockLine({ b, showRoom = true }: { b: Block; showRoom?: boolean }) {
   return (
     <li className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-border py-1.5 text-sm last:border-b-0">
@@ -195,19 +258,38 @@ function DraftDialog({
   const body = {
     roomId: room.id,
     ...term,
-    studentClassId: classId,
-    subjectId,
+    studentClassId: classId || null,
+    subjectId: subjectId || null,
     facultyId: facultyId || null,
     dayOfWeek: day,
     startTime: clock(start),
     endTime: clock(end),
   };
-  const ready = Boolean(classId && subjectId && start && end);
+  const timesOk = Boolean(start && end && minutes(start) < minutes(end));
+  const ready = Boolean(classId && subjectId && timesOk);
+  const subject = subjects.find((x) => x.id === subjectId);
+  // the block as it would sit in the room, drawn on the week while the form is filled in
+  const draftBlock: Block[] = timesOk
+    ? [{
+        id: "draft",
+        roomId: room.id,
+        roomName: room.name,
+        roomDepartmentName: null,
+        className: cls?.name ?? "New block",
+        subjectCode: subject?.code ?? "New",
+        subjectName: subject?.name ?? "",
+        facultyName: faculty.find((f) => f.id === facultyId)?.name ?? null,
+        dayOfWeek: day,
+        startTime: start,
+        endTime: end,
+        semester: term.semester,
+      }]
+    : [];
 
   // check the block while the form changes, so the person sees why it will not fit before saving
   useEffect(() => {
-    if (!ready) {
-      setProblems([]);
+    if (!timesOk) {
+      setProblems(start && end ? ["The end time must be after the start time."] : []);
       return;
     }
     const handle = setTimeout(() => {
@@ -215,7 +297,7 @@ function DraftDialog({
         .post<{ problems: string[] }>("/room-share/drafts/preview", body)
         .then(({ data }) => setProblems(data.problems))
         .catch((err) => setProblems([getApiErrorMessage(err, "Could not check this block.")]));
-    }, 300);
+    }, 200);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId, subjectId, facultyId, day, start, end]);
@@ -236,8 +318,14 @@ function DraftDialog({
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content title={`Draft a block in ${room.name}`} description={`${room.collegeName} · ${room.departmentName}. Your college secretary submits the drafts as a request.`}>
-        <div className="mt-4 space-y-3">
+      <Dialog.Content
+        title={`Draft a block in ${room.name}`}
+        description={`${room.collegeName} · ${room.departmentName}. Your college secretary submits the drafts as a request.`}
+        className="max-h-[94vh] overflow-y-auto"
+        style={{ width: "96vw", maxWidth: "96vw" }}
+      >
+        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(18rem,24rem)_1fr]">
+        <div className="space-y-3">
           <label className="block text-sm">
             <span className="mb-1 block text-foreground-muted">Class</span>
             <select className={`${selectClass} w-full`} value={classId} onChange={(e) => { setClassId(e.target.value); setSubjectId(""); }}>
@@ -283,14 +371,24 @@ function DraftDialog({
               <input type="time" className={`${selectClass} w-full`} value={end} onChange={(e) => setEnd(e.target.value)} />
             </label>
           </div>
-          <WeekStrip busy={room.busy} />
-          {problems.length > 0 && (
+          {problems.length > 0 ? (
             <ul className="space-y-1 rounded border border-danger/40 bg-danger/10 p-2 text-sm text-danger" role="alert">
               {problems.map((p) => (
                 <li key={p}>{p}</li>
               ))}
             </ul>
-          )}
+          ) : timesOk ? (
+            <p className="rounded border border-success/40 bg-success/10 p-2 text-sm text-success" role="status">
+              {ready ? "No conflicts. You can add this block." : "This time is free in the room. Choose a class and subject to check the rest."}
+            </p>
+          ) : null}
+        </div>
+        <div>
+          <h3 className="mb-1 text-sm font-semibold text-foreground">{room.name} this week</h3>
+          <div className="max-h-[62vh] overflow-y-auto rounded border border-border p-3">
+            <PlacementGrid busy={room.busy} blocks={draftBlock} conflict={problems.length > 0} />
+          </div>
+        </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -319,6 +417,7 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
       if (kind === "cancel") await apiClient.post(`/room-share/requests/${id}/cancel`);
       else await apiClient.post(`/room-share/requests/${id}/${kind}`, { notes: notes.trim() || null });
       toast.success(kind === "approve" ? "Approved" : kind === "reject" ? "Rejected" : "Request cancelled");
+      window.dispatchEvent(new Event("room-share-changed"));
       onChanged();
       if (kind === "cancel") onClose();
       else load();
@@ -339,7 +438,7 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content title="Room request" className="max-w-3xl">
+      <Dialog.Content title="Room request" className="max-h-[94vh] overflow-y-auto" style={{ width: "96vw", maxWidth: "96vw" }}>
         {!detail ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : (
@@ -369,6 +468,18 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
                 </li>
               </ol>
               <p className="mt-1 text-xs text-foreground-muted">The dean sees this request and is notified; the dean does not approve it.</p>
+            </div>
+
+            <div>
+              <h3 className="mb-1 text-sm font-semibold text-foreground">Placement in the rooms</h3>
+              <div className="max-h-[65vh] space-y-5 overflow-y-auto rounded border border-border p-3" tabIndex={0} aria-label="Placement in the rooms">
+                {byRoom.map(([room, blocks]) => (
+                  <section key={room}>
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-foreground-muted">{room}{blocks[0].roomDepartmentName ? ` · ${blocks[0].roomDepartmentName}` : ""}</h4>
+                    <PlacementGrid busy={detail.roomBusy.find((r) => r.roomId === blocks[0].roomId)?.busy ?? []} blocks={blocks} />
+                  </section>
+                ))}
+              </div>
             </div>
 
             <div>
@@ -416,7 +527,9 @@ export function RoomSharingPage() {
   const user = useAppSelector((s) => s.auth.user);
   const isChairman = user?.role === "CHAIRMAN";
   const isSecretary = user?.role === "COLLEGE_SECRETARY";
-  const [tab, setTab] = useState<Tab>("rooms");
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(params.get("tab") === "requests" ? "requests" : params.get("tab") === "drafts" ? "drafts" : "rooms");
+  const [waiting, setWaiting] = useState(0);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [yearId, setYearId] = useState("");
   const [semester, setSemester] = useState(1);
@@ -425,11 +538,11 @@ export function RoomSharingPage() {
   const [rooms, setRooms] = useState<SharedRoom[] | null>(null);
   const [drafts, setDrafts] = useState<Block[] | null>(null);
   const [requests, setRequests] = useState<ShareRequest[] | null>(null);
-  const [side, setSide] = useState<"guest" | "host">("guest");
+  const [side, setSide] = useState<"guest" | "host">(params.get("side") === "host" ? "host" : "guest");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [drafting, setDrafting] = useState<SharedRoom | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(params.get("open"));
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -461,6 +574,15 @@ export function RoomSharingPage() {
     apiClient.get<ShareRequest[]>(`/room-share/requests?side=${side}`).then(({ data }) => setRequests(data)).catch(() => setRequests([]));
   }, [side]);
 
+  const loadWaiting = useCallback(() => {
+    apiClient.get<{ count: number }>("/room-share/requests/count").then(({ data }) => setWaiting(data?.count ?? 0)).catch(() => setWaiting(0));
+  }, []);
+  // a notification opens the page with ?tab=&side=&open=; once used it is cleared so a refresh does not reopen it
+  useEffect(() => {
+    if (params.get("open") || params.get("tab")) setParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(loadWaiting, [loadWaiting]);
   useEffect(loadRooms, [loadRooms]);
   useEffect(loadDrafts, [loadDrafts]);
   useEffect(loadRequests, [loadRequests]);
@@ -497,6 +619,7 @@ export function RoomSharingPage() {
       setSide("guest");
       setTab("requests");
       loadRequests();
+      window.dispatchEvent(new Event("room-share-changed"));
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Could not submit the request"));
     } finally {
@@ -513,10 +636,10 @@ export function RoomSharingPage() {
     return [...map];
   }, [drafts]);
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
+  const tabs: { key: Tab; label: string; count?: number; alert?: boolean }[] = [
     { key: "rooms", label: "Available rooms" },
     { key: "drafts", label: "Drafts", count: drafts?.length },
-    { key: "requests", label: "Requests" },
+    { key: "requests", label: "Requests", count: waiting, alert: true },
   ];
 
   return (
@@ -538,7 +661,7 @@ export function RoomSharingPage() {
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-focus-ring ${tab === t.key ? "border-primary text-primary" : "border-transparent text-foreground-muted hover:text-foreground"}`}
           >
             {t.label}
-            {t.count ? <span className="ml-1.5 rounded-full bg-primary-muted px-1.5 text-xs text-primary">{t.count}</span> : null}
+            {t.alert ? <span className="ml-1.5"><CountBadge count={t.count ?? 0} /></span> : t.count ? <span className="ml-1.5 rounded-full bg-primary-muted px-1.5 text-xs text-primary">{t.count}</span> : null}
           </button>
         ))}
       </div>
@@ -648,7 +771,10 @@ export function RoomSharingPage() {
         <div className="space-y-3">
           <div className="flex gap-2 text-sm">
             <Button size="sm" variant={side === "guest" ? "primary" : "secondary"} onClick={() => setSide("guest")}>Asked by us</Button>
-            <Button size="sm" variant={side === "host" ? "primary" : "secondary"} onClick={() => setSide("host")}>Asked of us</Button>
+            <Button size="sm" variant={side === "host" ? "primary" : "secondary"} onClick={() => setSide("host")}>
+              Asked of us
+              {waiting > 0 && <span className="ml-1.5"><CountBadge count={waiting} onPrimary={side === "host"} /></span>}
+            </Button>
           </div>
           {requests === null ? (
             <div className="flex justify-center py-10"><Spinner /></div>
@@ -686,7 +812,7 @@ export function RoomSharingPage() {
       )}
 
       {drafting && <DraftDialog room={drafting} term={{ academicYearId: yearId, semester }} onClose={() => setDrafting(null)} onAdded={() => { loadDrafts(); loadRooms(); }} />}
-      {openId && <RequestDialog id={openId} onClose={() => setOpenId(null)} onChanged={() => { loadRequests(); loadRooms(); }} />}
+      {openId && <RequestDialog id={openId} onClose={() => setOpenId(null)} onChanged={() => { loadRequests(); loadRooms(); loadWaiting(); }} />}
     </div>
   );
 }

@@ -20,6 +20,10 @@ const blockBody = z.object({
     endTime: time,
   }),
 });
+// while the form is filled in, the class and subject may still be empty
+const previewBody = z.object({
+  body: blockBody.shape.body.extend({ studentClassId: z.string().uuid().nullish(), subjectId: z.string().uuid().nullish() }),
+});
 const roomsQuery = z.object({
   query: z.object({
     academicYearId: z.string().uuid(),
@@ -51,7 +55,7 @@ router.get("/rooms", validateQuery(roomsQuery), async (req: Request, res: Respon
   res.json(await svc.listShareableRooms(who(req), q));
 });
 
-router.post("/drafts/preview", authorize("CHAIRMAN"), validate(blockBody), async (req: Request, res: Response) => {
+router.post("/drafts/preview", authorize("CHAIRMAN"), validate(previewBody), async (req: Request, res: Response) => {
   res.json(await svc.previewDraft(who(req), req.body));
 });
 router.post("/drafts", authorize("CHAIRMAN"), validate(blockBody), async (req: Request, res: Response) => {
@@ -71,6 +75,9 @@ router.post("/requests", authorize("COLLEGE_SECRETARY"), validate(submitBody), a
 router.get("/requests", validateQuery(sideQuery), async (req: Request, res: Response) => {
   const { side } = req.query as unknown as z.infer<typeof sideQuery>["query"];
   res.json(await svc.listRequests(who(req), side));
+});
+router.get("/requests/count", async (req: Request, res: Response) => {
+  res.json({ count: await svc.waitingCount(who(req)) });
 });
 router.get("/requests/:id", async (req: Request, res: Response) => {
   res.json(await svc.getRequest(who(req), String(req.params.id)));

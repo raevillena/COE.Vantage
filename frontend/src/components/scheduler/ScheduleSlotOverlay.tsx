@@ -52,7 +52,7 @@ function SlotCell({ dayOfWeek, hour, quarter, hourStart }: SlotCellProps) {
   const startTime = slotStartTime({ hour, quarter });
   const endTime = quarter < 3 ? slotStartTime({ hour, quarter: (quarter + 1) as SlotQuarter }) : hourToTimeString(hour + 1);
   const id = `slot-${dayOfWeek}-${hour}-${quarter}`;
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id,
     data: { dayOfWeek, startTime, endTime },
   });
@@ -60,7 +60,7 @@ function SlotCell({ dayOfWeek, hour, quarter, hourStart }: SlotCellProps) {
   return (
     <div
       ref={setNodeRef}
-      className={`absolute left-0 right-0 border border-transparent transition-colors ${isOver ? "bg-primary/10 ring-1 ring-primary" : ""}`}
+      className="absolute left-0 right-0 border border-transparent"
       style={{
         top,
         height: SLOT_QUARTER_HEIGHT,
@@ -84,6 +84,8 @@ interface ScheduleSlotOverlayProps {
   active?: boolean;
   /** Subject being dragged — when set with overSlotId, show a ghost in that slot. */
   activeDragItem?: SubjectDragItem | null;
+  /** A block already on the grid being moved — the ghost then has that block's length. */
+  activeDragLoad?: { startTime: string; endTime: string; subject?: { code: string } } | null;
   /** Droppable id of the slot under the cursor (e.g. "slot-1-8"). */
   overSlotId?: string | null;
   /** When set, show a temporary "pending" block in this slot while assignment form is open. */
@@ -104,6 +106,7 @@ interface ScheduleSlotOverlayProps {
 export function ScheduleSlotOverlay({
   active = false,
   activeDragItem = null,
+  activeDragLoad = null,
   overSlotId = null,
   pendingAssignment = null,
   onPendingMove,
@@ -117,7 +120,10 @@ export function ScheduleSlotOverlay({
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
   const quarters: SlotQuarter[] = [0, 1, 2, 3];
   const overSlot = overSlotId ? parseSlotId(overSlotId) : null;
-  const showGhost = active && activeDragItem && overSlot;
+  const showGhost = active && (activeDragItem || activeDragLoad) && overSlot;
+  // the ghost is as long as the block that would land there: the moved block's own length, a new subject's one hour
+  const ghostMinutes = activeDragLoad ? Math.max(15, timeToMinutes(activeDragLoad.endTime) - timeToMinutes(activeDragLoad.startTime)) : 60;
+  const ghostCode = activeDragLoad?.subject?.code ?? activeDragItem?.code ?? "";
 
   const pendingStartMinutes = pendingAssignment ? timeToMinutes(pendingAssignment.startTime) : NaN;
   const pendingEndMinutes = pendingAssignment ? timeToMinutes(pendingAssignment.endTime) : NaN;
@@ -162,11 +168,11 @@ export function ScheduleSlotOverlay({
             <div
               className="absolute left-0.5 right-0.5 rounded border-2 border-primary border-dashed bg-primary/15 pointer-events-none flex items-center justify-center px-1 py-0.5"
               style={{
-                top: (overSlot.hour - hourStart) * SLOT_HEIGHT + overSlot.quarter * SLOT_QUARTER_HEIGHT + 2,
-                height: SLOT_HEIGHT - 4,
+                top: (overSlot.hour - hourStart) * SLOT_HEIGHT + overSlot.quarter * SLOT_QUARTER_HEIGHT + 1,
+                height: ghostMinutes * (SLOT_HEIGHT / 60) - 2, // the same insets as a block on the grid
               }}
             >
-              <span className="text-xs font-medium truncate text-foreground">{activeDragItem.code}</span>
+              <span className="text-xs font-medium truncate text-foreground">{ghostCode}</span>
             </div>
           )}
           {/* Pending: temporary block after drop while assignment form is open */}

@@ -91,3 +91,10 @@ College switcher and unit viewers
 Room sharing between colleges
  - a college that locked a semester opens its rooms to the others; chairmen draft blocks, the college secretary submits, the room's chairman approves, then the host college secretary approves last; deans view and are notified; unlock is blocked while other colleges are booked. done (v0.7.0, needs migration 20260618000000_room_sharing)
  - open: no partial approval (whole request only); no way yet for the host to remove one guest block after approval besides the guest college deleting it.
+
+Room request badges and the raw blocks list
+ - count badges (sidebar Requests and Room sharing, the Requests tab) share one CountBadge; room-sharing notifications open the request; opening a request shows each room's week with the requested blocks in place. Scheduler: a Code button lists the view's blocks with exact times (edit or remove, odd hours marked); the grid starts earlier than 7 AM when a block does. done (v0.7.1, no migration)
+ - open: the time picker still accepts early times; only the Code list and the grid now surface them.
+
+Wider room requests and smoother scheduler dragging
+ - room request and drafting windows are wide; drafting shows the room's week with the block in place and checks day and time at once (no class needed first); room-share times compare as minutes (was text). Scheduler: block text wraps when it fits, a carried block keeps its size, the snap preview matches the block. done (v0.7.3, no migration)

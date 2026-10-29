@@ -15,6 +15,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.7.3",
+    date: "2026-10-29",
+    title: "Wider room requests and smoother scheduler dragging",
+    changes: [
+      { kind: "improved", text: "The room request window is much wider, so each room's week can be read at a glance." },
+      { kind: "new", text: "Drafting a block for another college's room shows a wide preview of the room's week with your block placed in it, turning red when it does not fit." },
+      { kind: "improved", text: "Day and time are checked for conflicts straight away while drafting, before a class or subject is chosen." },
+      { kind: "fixed", text: "Room request times were compared as text, so a time like 7:30 could be judged later than 10:00. They are now compared as times." },
+      { kind: "improved", text: "Scheduler blocks wrap their text onto new lines when the whole text fits in the block, and are cut with an ellipsis otherwise." },
+      { kind: "fixed", text: "A block carried with the mouse keeps the same size and look as on the grid instead of growing." },
+      { kind: "improved", text: "The snap preview shown while dragging is as large as the block being moved." },
+    ],
+  },
+  {
+    version: "v0.7.1",
+    date: "2026-10-29",
+    title: "Room request badges and the raw blocks list",
+    changes: [
+      { kind: "new", text: "Room sharing shows a badge with the number of requests waiting for you, in the sidebar and on the Requests tab, and its notifications open the request directly. Opening a request shows a week grid of each room with the requested blocks placed among what the room already holds." },
+      { kind: "new", text: "Scheduler: a Code button beside Block colors lists the blocks in the view with their exact day and times, so a mistyped block (for example at 5 AM) can be corrected or removed; blocks outside 7 AM to 9 PM are marked and can be removed together. The schedule grid now starts earlier than 7 AM when a block does, so such blocks are no longer hidden." },
+      { kind: "improved", text: "Count badges look the same everywhere, and their number no longer disappears on hover." },
+    ],
+  },
+  {
     version: "v0.7.0",
     date: "2026-10-29",
     title: "Room sharing between colleges",

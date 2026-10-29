@@ -25,6 +25,8 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.7.3" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.1" })).toBeVisible();
@@ -2328,6 +2330,13 @@ test.describe("room sharing", () => {
       expect((await drafts(chairG, overlap)).status()).toBe(409);
       expect((await lockCall(false)).status()).toBe(400);
 
+      // the badges: the room's chairman and the dean are waiting, the secretary is not yet
+      const waiting = async (h: Record<string, string>) => ((await (await request.get(`${API}/room-share/requests/count`, { headers: h })).json()) as { count: number }).count;
+      expect([await waiting(chairH), await waiting(secH!), await waiting(deanH), await waiting(chairG)]).toEqual([1, 0, 1, 0]);
+      // the approver can see where the new block lands: the room's week, without the request's own block
+      const placed = (await (await request.get(`${API}/room-share/requests/${req.id}`, { headers: chairH })).json()) as { roomBusy: { roomId: string; busy: unknown[] }[] };
+      expect(placed.roomBusy.find((r) => r.roomId === made.room)?.busy).toEqual([]);
+
       // the dean only views; the secretary cannot go before the chairman; the guest cannot approve
       const detail = (await (await request.get(`${API}/room-share/requests/${req.id}`, { headers: deanH })).json()) as { blocks: unknown[]; actions: { chairmanDecides: boolean; secretaryDecides: boolean } };
       expect(detail.blocks.length).toBe(1);
@@ -2336,6 +2345,7 @@ test.describe("room sharing", () => {
 
       expect((await post<{ status: string }>(`/room-share/requests/${req.id}/approve`, {}, chairH, 200)).status).toBe("PENDING_SECRETARY");
       expect((await request.post(`${API}/room-share/requests/${req.id}/approve`, { headers: chairH, data: {} })).status()).toBe(403);
+      expect([await waiting(chairH), await waiting(secH!)]).toEqual([0, 1]);
       expect((await post<{ status: string }>(`/room-share/requests/${req.id}/approve`, {}, secH, 200)).status).toBe("APPROVED");
 
       // the block is in the guest's schedule, in the host's room, and the host sees it too but cannot remove it
@@ -2350,6 +2360,13 @@ test.describe("room sharing", () => {
       expect((await request.delete(`${API}/faculty-loads/${mine[0].id}`, { headers: chairH })).ok()).toBe(false);
       expect((await drafts(chairG, overlap)).status()).toBe(409);
       expect((await lockCall(false)).status()).toBe(400);
+
+      // the day and time are checked at once, before a class or subject is chosen
+      const quick = async (startTime: string, endTime: string) =>
+        ((await (await request.post(`${API}/room-share/drafts/preview`, { headers: chairG, data: { roomId: made.room, academicYearId: ay.id, semester: SEM, dayOfWeek: 1, startTime, endTime } })).json()) as { ok: boolean; problems: string[] });
+      expect((await quick("7:30", "8:30")).ok).toBe(false);
+      expect((await quick("10:00", "11:00")).ok).toBe(true);
+      expect((await quick("9:00", "8:00")).ok).toBe(false);
 
       // the owner college can remove its own block again
       const del = await request.delete(`${API}/faculty-loads/${mine[0].id}`, { headers: chairG });
@@ -2387,5 +2404,44 @@ test.describe("room sharing", () => {
     await page.goto("/about");
     await expect(page.getByText("Room sharing: once a college locks a semester")).toBeVisible();
     await page.context().close();
+  });
+});
+
+test.describe("scheduler: raw blocks", () => {
+  test("a block before 7 AM keeps the grid reaching back to it and can be removed from the Code list", async ({ page, request }) => {
+    const login = await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await login.json()) as { accessToken: string }).accessToken}` };
+    const get = async <T>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string }>("/academic-years/active");
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
+    test.skip(!cls || !subject, "needs the seeded CE data");
+    const made = await request.post(`${API}/faculty-loads`, {
+      headers,
+      data: { subjectId: subject!.id, studentClassId: cls!.id, facultyDisplayName: "Raw Probe", roomDisplayName: "Probe", dayOfWeek: 6, startTime: "5:00", endTime: "6:00", semester: 1, academicYearId: ay.id },
+    });
+    expect(made.ok(), await made.text()).toBeTruthy();
+    const id = ((await made.json()) as { id: string }).id;
+    try {
+      await login_(page, "chairman@coe.vantage");
+      await page.goto("/scheduler");
+      await page.getByRole("combobox", { name: /Student Class|class/i }).first().click();
+      await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+
+      // the grid reaches back to 5 AM
+      await expect(page.getByText("5:00 AM", { exact: true }).first()).toBeVisible();
+
+      await page.getByRole("button", { name: "Edit blocks as a list" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText("odd hour").first()).toBeVisible();
+      const row = dialog.getByRole("row").filter({ hasText: "Raw Probe" });
+      await row.getByRole("button", { name: "Remove" }).click();
+      await row.getByRole("button", { name: "Remove?" }).click();
+      await expect(dialog.getByRole("row").filter({ hasText: "Raw Probe" })).toHaveCount(0);
+      const left = await get<{ id: string }[]>(`/faculty-loads?studentClassId=${cls!.id}&academicYearId=${ay.id}&semester=1`);
+      expect(left.some((l) => l.id === id)).toBe(false);
+    } finally {
+      await request.delete(`${API}/faculty-loads/${id}`, { headers });
+    }
   });
 });

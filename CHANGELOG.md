@@ -2,6 +2,26 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.7.3 - 2026-10-29
+
+Wider room requests and smoother scheduler dragging
+
+- **Improved:** The room request window is much wider, so each room's week can be read at a glance.
+- **New:** Drafting a block for another college's room shows a wide preview of the room's week with your block placed in it, turning red when it does not fit.
+- **Improved:** Day and time are checked for conflicts straight away while drafting, before a class or subject is chosen.
+- **Fixed:** Room request times were compared as text, so a time like 7:30 could be judged later than 10:00. They are now compared as times.
+- **Improved:** Scheduler blocks wrap their text onto new lines when the whole text fits in the block, and are cut with an ellipsis otherwise.
+- **Fixed:** A block carried with the mouse keeps the same size and look as on the grid instead of growing.
+- **Improved:** The snap preview shown while dragging is as large as the block being moved.
+
+## v0.7.1 - 2026-10-29
+
+Room request badges and the raw blocks list
+
+- **New:** Room sharing shows a badge with the number of requests waiting for you, in the sidebar and on the Requests tab, and its notifications open the request directly. Opening a request shows a week grid of each room with the requested blocks placed among what the room already holds.
+- **New:** Scheduler: a Code button beside Block colors lists the blocks in the view with their exact day and times, so a mistyped block (for example at 5 AM) can be corrected or removed; blocks outside 7 AM to 9 PM are marked and can be removed together. The schedule grid now starts earlier than 7 AM when a block does, so such blocks are no longer hidden.
+- **Improved:** Count badges look the same everywhere, and their number no longer disappears on hover.
+
 ## v0.7.0 - 2026-10-29
 
 Room sharing between colleges

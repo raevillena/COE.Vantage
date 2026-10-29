@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { FacultyLoad } from "../../types/api";
 import { useSchedulePalette } from "../../context/SchedulePaletteContext";
@@ -191,6 +191,28 @@ function ScheduleBlock({
 
   const [resizePreviewEndMinutes, setResizePreviewEndMinutes] = useState<number | null>(null);
 
+  // The text wraps onto new lines when the whole of it fits inside the block; otherwise each line is cut with an ellipsis.
+  // Measured on the real element (it depends on the block's width and height), so it follows resizes of the grid and block.
+  const blockEl = useRef<HTMLDivElement | null>(null);
+  const linesEl = useRef<HTMLDivElement | null>(null);
+  const fitText = useCallback(() => {
+    const el = blockEl.current;
+    const lines = linesEl.current;
+    if (!el || !lines) return;
+    el.dataset.wrap = "1";
+    const handle = el.querySelector("[data-resize-handle]") ? 12 : 0;
+    const fits = lines.offsetHeight <= el.clientHeight - 4 - handle;
+    el.dataset.wrap = fits ? "1" : "0";
+  }, []);
+  useLayoutEffect(() => {
+    fitText();
+    const el = blockEl.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fitText);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+
   const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -250,24 +272,30 @@ function ScheduleBlock({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        blockEl.current = node;
+      }}
       {...(onLoadMove && !pending && !locked ? { ...attributes, ...listeners } : {})}
       role={onLoadClick && !pending ? "button" : undefined}
       tabIndex={onLoadClick && !pending ? 0 : undefined}
       onClick={onLoadClick && !pending ? (e) => { if (!(e.target as HTMLElement).closest("[data-resize-handle]")) onLoadClick(load); } : undefined}
       onKeyDown={onLoadClick && !pending ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
+      data-draggable-block={draggableId}
       title={titleParts.join(" · ") + (pending ? " · Awaiting chairman approval" : "")}
-      className={`${positionClass} rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending && !locked ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      className={`${positionClass} group/blk rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending && !locked ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={positionStyle ?? undefined}
     >
-      <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
+      <div ref={linesEl}>
+      <div className="font-medium truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words min-w-0 text-gray-900 dark:text-gray-100">
         {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
         {load.isSplit && <span className="ml-1 rounded bg-black/10 px-1 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/20" title="The class is split between instructors">Split</span>}
         {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
         {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
       </div>
-      <div className="truncate min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
+      <div className="truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {pending ? "Cross-dept · " : ""}{[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
+      </div>
       </div>
         {onLoadResize && !pending && !locked && height >= 24 && !embeddedInTeamSlot && (
         <div
@@ -297,6 +325,7 @@ export function LoadBlockPreview({
   load,
   subjectIds,
   heightPx,
+  widthPx,
   dropTimeLabel,
   timeRangeLabel,
   className = "",
@@ -304,6 +333,8 @@ export function LoadBlockPreview({
   load: FacultyLoad;
   subjectIds: string[];
   heightPx: number;
+  /** The width of the block being carried, so it keeps its size under the pointer. */
+  widthPx?: number;
   /** When dragging over a slot, show this beside the name (e.g. "Drop at 9:15 AM"). */
   dropTimeLabel?: string | null;
   /** When dragging over a slot, show this as the time range on line 2 (e.g. "9:15 AM – 10:15 AM"). */
@@ -317,8 +348,8 @@ export function LoadBlockPreview({
   return (
     <div
       aria-hidden
-      className={`rounded px-1 py-0.5 text-xs overflow-hidden box-border min-w-[100px] ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} shadow-xl ${className}`}
-      style={{ height: Math.max(20, heightPx) }}
+      className={`rounded px-1 py-0.5 text-xs overflow-hidden box-border ${widthPx ? "" : "min-w-[100px]"} ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} shadow-xl ${className}`}
+      style={{ height: Math.max(20, heightPx), ...(widthPx ? { width: widthPx } : {}) }}
     >
       <div className="font-medium truncate min-w-0 text-gray-900 dark:text-gray-100">
         {line1}
