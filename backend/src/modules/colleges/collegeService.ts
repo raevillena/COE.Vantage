@@ -4,12 +4,13 @@ import { currentActor, runUnscoped } from "../../utils/auditContext.js";
 
 /** Colleges the signed-in person may see: all of them for the admin and president, their own for everyone else. */
 export async function listColleges() {
-  const mine = currentActor()?.collegeId;
+  const actor = currentActor();
+  const mine = actor?.collegeId;
   return prisma.college.findMany({
-    where: { isDeleted: false, ...(mine ? { id: mine } : {}) },
+    where: { isDeleted: false, ...(mine ? { id: mine } : actor?.allowedCollegeIds ? { id: { in: actor.allowedCollegeIds } } : {}) },
     orderBy: { name: "asc" },
-    select: { id: true, universityId: true, name: true, code: true, currentAcademicYearId: true, currentSemester: true },
-  });
+    select: { id: true, universityId: true, name: true, code: true, currentAcademicYearId: true, currentSemester: true, image: { select: { updatedAt: true } } },
+  }).then((rows) => rows.map(({ image, ...c }) => ({ ...c, imageVersion: image?.updatedAt.getTime() ?? null })));
 }
 
 export async function createCollege(body: { name: string; code?: string | null }) {
@@ -38,6 +39,31 @@ export async function deleteCollege(id: string) {
   await prisma.college.update({ where: { id }, data: { isDeleted: true, deletedAt: new Date() } });
 }
 
+export async function setCollegeImage(id: string, image: { mimeType: string; size: number; data: Buffer }) {
+  const c = await prisma.college.findUnique({ where: { id } });
+  if (!c || c.isDeleted) throw notFound("College not found");
+  const row = await prisma.collegeImage.upsert({ where: { collegeId: id }, create: { collegeId: id, ...image }, update: image, select: { updatedAt: true } });
+  return { imageVersion: row.updatedAt.getTime(), name: c.name };
+}
+
+export async function removeCollegeImage(id: string) {
+  const c = await prisma.college.findUnique({ where: { id } });
+  if (!c || c.isDeleted) throw notFound("College not found");
+  await prisma.collegeImage.deleteMany({ where: { collegeId: id } });
+  return { name: c.name };
+}
+
+/** A college's card picture. A person inside a college sees their own college's; the admin and president see any. */
+export async function getCollegeImage(id: string) {
+  const actor = currentActor();
+  const mine = actor?.collegeId;
+  if (mine && mine !== id) throw notFound("College not found");
+  if (actor?.allowedCollegeIds && !actor.allowedCollegeIds.includes(id)) throw notFound("College not found");
+  const image = await prisma.collegeImage.findUnique({ where: { collegeId: id } });
+  if (!image) throw notFound("No picture");
+  return image;
+}
+
 export async function getUniversity() {
   const u = await prisma.university.findFirst({ orderBy: { createdAt: "asc" } });
   if (!u) throw notFound("There is no university yet");
@@ -52,9 +78,10 @@ export async function updateUniversity(body: { name?: string; code?: string | nu
 /** The president's and admin's view: every college with its size, its own current term, and what it has locked. */
 export async function universityOverview() {
   return runUnscoped(async () => {
+    const allowed = currentActor()?.allowedCollegeIds;
     const [university, colleges, years] = await Promise.all([
       getUniversity(),
-      prisma.college.findMany({ where: { isDeleted: false }, orderBy: { name: "asc" } }),
+      prisma.college.findMany({ where: { isDeleted: false, ...(allowed ? { id: { in: allowed } } : {}) }, orderBy: { name: "asc" }, include: { image: { select: { updatedAt: true } } } }),
       prisma.academicYear.findMany({ where: { isDeleted: false }, select: { id: true, name: true } }),
     ]);
     const count = async (model: "department" | "user" | "studentClass" | "room" | "subject" | "curriculum") => {
@@ -85,6 +112,7 @@ export async function universityOverview() {
           id: c.id,
           name: c.name,
           code: c.code,
+          imageVersion: c.image?.updatedAt.getTime() ?? null,
           currentTerm: term,
           departments: departments.get(c.id) ?? 0,
           users: users.get(c.id) ?? 0,

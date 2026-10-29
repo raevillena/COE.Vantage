@@ -17,11 +17,12 @@ export async function listUsers(query: ListUsersQuery, onlyId?: string) {
     where.role = query.role;
   }
   if (query.departmentId) where.departmentId = query.departmentId;
-  return prisma.user.findMany({
+  const rows = await prisma.user.findMany({
     where,
-    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } }, avatar: { select: { updatedAt: true } }, unitColleges: true, unitAreas: true },
     orderBy: { name: "asc" },
   });
+  return rows.map(({ avatar, ...u }) => ({ ...u, avatarVersion: avatar?.updatedAt.getTime() ?? null }));
 }
 
 export async function listAssignableFaculty(callerDepartmentId: string | null) {
@@ -61,6 +62,14 @@ export async function getUserById(id: string) {
   return rest;
 }
 
+/** A unit viewer needs at least one college, and every college must exist. */
+async function assertUnitGrants(colleges: string[] | undefined, areas: string[] | undefined) {
+  if (!colleges || colleges.length === 0) throw badRequest("Choose at least one college this viewer may see.");
+  if (!areas || areas.length === 0) throw badRequest("Choose at least one area this viewer may see.");
+  const found = await prisma.college.count({ where: { id: { in: colleges }, isDeleted: false } });
+  if (found !== new Set(colleges).size) throw badRequest("One of the colleges was not found.");
+}
+
 export async function createUser(body: CreateUserBody) {
   const existing = await prisma.user.findFirst({ where: { email: body.email, isDeleted: false } });
   if (existing) throw badRequest("Email already registered");
@@ -68,8 +77,9 @@ export async function createUser(body: CreateUserBody) {
   if (body.departmentId && (!dept || dept.isDeleted)) throw badRequest("Department not found");
   // The admin and the president belong to no college. Everyone else belongs to the one asked for, their department's,
   // or the creator's (the stamp in collegeScope.ts fills that in when this stays undefined).
-  const spans = body.role === "ADMIN" || body.role === "PRESIDENT";
+  const spans = body.role === "ADMIN" || body.role === "PRESIDENT" || body.role === "UNIT";
   const mine = currentActor()?.collegeId;
+  if (body.role === "UNIT") await assertUnitGrants(body.unitColleges, body.unitAreas);
   if (mine && body.collegeId && body.collegeId !== mine) throw forbidden("You can only add people to your own college.");
   const collegeId = spans ? null : body.collegeId ?? dept?.collegeId ?? undefined;
   if (collegeId && dept?.collegeId && dept.collegeId !== collegeId) throw badRequest("That department belongs to another college.");
@@ -81,6 +91,7 @@ export async function createUser(body: CreateUserBody) {
       name: body.name,
       role: body.role,
       collegeId,
+      ...(body.role === "UNIT" ? { unitColleges: body.unitColleges ?? [], unitAreas: body.unitAreas ?? [] } : {}),
       departmentId: body.departmentId ?? undefined,
       status: body.status ?? undefined,
       maxUnits: body.maxUnits ?? undefined,
@@ -119,7 +130,9 @@ export async function updateUser(
   }
   // only the admin moves people between colleges; the admin and president role means no college
   const movesCollege = body.collegeId !== undefined && (!caller || caller.role === "ADMIN");
-  const spans = body.role === "ADMIN" || body.role === "PRESIDENT";
+  const spans = body.role === "ADMIN" || body.role === "PRESIDENT" || body.role === "UNIT";
+  const becomesUnit = (body.role ?? user.role) === "UNIT";
+  if (becomesUnit && (body.unitColleges !== undefined || body.role === "UNIT")) await assertUnitGrants(body.unitColleges ?? user.unitColleges, body.unitAreas ?? user.unitAreas);
   const updated = await prisma.user.update({
     where: { id },
     data: {
@@ -127,6 +140,8 @@ export async function updateUser(
       name: body.name,
       role: body.role,
       ...(spans ? { collegeId: null } : movesCollege ? { collegeId: body.collegeId } : {}),
+      // the grants belong to the unit role only
+      ...(becomesUnit ? { ...(body.unitColleges !== undefined ? { unitColleges: body.unitColleges } : {}), ...(body.unitAreas !== undefined ? { unitAreas: body.unitAreas } : {}) } : body.role ? { unitColleges: [], unitAreas: [] } : {}),
       departmentId: body.departmentId ?? undefined,
       ...(body.status !== undefined && { status: body.status }),
       ...(body.maxUnits !== undefined && { maxUnits: body.maxUnits }),

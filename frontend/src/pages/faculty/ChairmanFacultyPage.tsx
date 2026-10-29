@@ -16,6 +16,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { useAppSelector } from "../../store/hooks";
 import { HistoryButton } from "../../components/audit/HistoryButton";
+import { UserAvatar } from "../../components/ui/userAvatar";
 import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
 
 /** Subject row from GET /users/:id/prioritized-subjects (possible subjects to teach). */
@@ -35,7 +36,7 @@ export function ChairmanFacultyPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const user = useAppSelector((s) => s.auth.user);
   // the dean views the faculty of the whole college and changes nothing
-  const viewerOnly = user?.role === "DEAN";
+  const viewerOnly = user?.role === "DEAN" || user?.role === "UNIT";
   const [ownDepartment, setOwnDepartment] = useState<{ id: string; name: string } | null>(null);
   const [facultyForm, setFacultyForm] = useState<{ id: string | null; initial: UserFormValues } | null>(null);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -155,6 +156,8 @@ export function ChairmanFacultyPage() {
         role: u.role,
         departmentId: u.departmentId ?? "",
         collegeId: u.collegeId ?? "",
+        unitColleges: [],
+        unitAreas: [],
         status: u.status ?? "",
         maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
       },
@@ -438,6 +441,9 @@ export function ChairmanFacultyPage() {
               {filteredList.map((u) => (
                 <tr key={u.id}>
                   <td className="px-4 py-2 text-foreground">
+                    <div className="flex items-center gap-2.5">
+                      <UserAvatar id={u.id} name={u.name} version={u.avatarVersion} className="!h-8 !w-8" />
+                      <span className="min-w-0">
                     {u.name}
                     {(u.role === "DEAN" || u.role === "COLLEGE_SECRETARY") && (
                       <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-xs text-foreground-muted">{ROLE_LABEL[u.role]}</span>
@@ -447,6 +453,8 @@ export function ChairmanFacultyPage() {
                         Chairman{u.id === user?.id ? " (you)" : ""}
                       </span>
                     )}
+                                        </span>
+                    </div>
                   </td>
                   {viewerOnly && <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>}
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>

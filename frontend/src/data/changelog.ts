@@ -15,6 +15,39 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.7.0",
+    date: "2026-10-29",
+    title: "Room sharing between colleges",
+    changes: [
+      { kind: "new", text: "Room sharing between colleges. When a college locks a semester, its rooms open to other colleges for their free time. Chairmen of the asking college draft blocks from an available-rooms view, their college secretary submits them as a request, the chairman of each room's department approves first, then the host college secretary gives the final approval. Deans view the requests and are notified; they do not approve." },
+      { kind: "new", text: "Approvers see the newly added blocks in a scrollable one-page preview, grouped by room, with the approval steps beside it." },
+      { kind: "improved", text: "A college cannot unlock a semester while other colleges have booked its rooms or have requests waiting. Blocks booked into a room show in both colleges' schedules, and only the college that owns the block can change it." },
+      { kind: "improved", text: "The About page lists the current capabilities." },
+    ],
+  },
+  {
+    version: "v0.6.2",
+    date: "2026-10-29",
+    title: "College switcher and unit viewers",
+    changes: [
+      { kind: "new", text: "College switcher at the top of the sidebar for the admin and the president: pick one college, or all of them, and the pages show that college's data. Everyone else belongs to one college, so their switcher is a locked label." },
+      { kind: "improved", text: "The sidebar is regrouped: Scheduling and College setup (tagged with the college being viewed), University, and Reports. Anything you create while viewing a college belongs to it." },
+      { kind: "new", text: "New UNIT role for viewers from the university administration. The admin chooses which colleges a unit viewer can see and which areas of them: rooms, schedules, curriculum and classes, faculty, reports. Unit viewers read only, and cannot open the audit log." },
+      { kind: "improved", text: "The audit log is closed to the president as well: only the admin, dean and college secretary read it." },
+      { kind: "improved", text: "Academic years uses the college chosen in the sidebar instead of its own college picker. The sidebar group is now called University setup." },
+    ],
+  },
+  {
+    version: "v0.6.1",
+    date: "2026-10-29",
+    title: "Profile pictures",
+    changes: [
+      { kind: "new", text: "Everyone can change their own name and add a picture on the Profile page. Pictures are PNG, JPEG or WebP up to 1 MB, cropped to a square and shrunk for you. Your email, role and department are still changed only by an administrator." },
+      { kind: "new", text: "Pictures show beside names in the top bar, the Faculty list and the admin's Users list." },
+      { kind: "new", text: "Each college can have a card picture, set by the admin on the Colleges page (up to 3 MB), shown on the University overview." },
+    ],
+  },
+  {
     version: "v0.6.0",
     date: "2026-10-29",
     title: "University and colleges",
@@ -28,7 +61,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       { kind: "improved", text: "GE subjects: the admin chooses which college's sheet to work on, and a term with no sheet yet says so plainly instead of showing an error." },
       { kind: "new", text: "The dean can view the GE subjects and their history. Only the college secretary adds, replaces or removes the sheet." },
       { kind: "new", text: "The dean can view the Faculty page for the whole college: units, deloading and possible subjects of every department, and its history. Adding and changing faculty stays with the chairmen." },
-      { kind: "improved", text: "The dashboard's Excel export is now an icon button with a tooltip beside the semester filter, and the Audit log link sits under Reports in the sidebar." },
+      { kind: "improved", text: "The dashboard's Excel export is now an icon button with a tooltip beside the semester filter, the Audit log link sits under Reports, and the sidebar scrolls when it does not fit the screen." },
     ],
   },
   {

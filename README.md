@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.6.0-197fa1)
+![Version](https://img.shields.io/badge/version-v0.7.0-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -133,6 +133,9 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.7.0** | Room sharing between colleges (chairman, then host college secretary approve) |
+| **v0.6.2** | College switcher in the sidebar, UNIT viewer role |
+| **v0.6.1** | Profile pictures and names, college card pictures |
 | **v0.6.0** | University and colleges, per-college isolation and semester locks, President role |
 | **v0.5.0** | Audit log with per-page History, semester lock, accountability that survives role changes |
 | **v0.4.1** | Notification bell for schedule, request, feedback and release updates; scheduler toolbar, legends and reset dialog |

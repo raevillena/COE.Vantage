@@ -16,6 +16,9 @@ export interface UserFormValues {
   role: Role;
   departmentId: string;
   collegeId: string;
+  /** UNIT role: the colleges and areas this viewer may see. */
+  unitColleges: string[];
+  unitAreas: string[];
   status: string;
   maxUnits: string;
 }
@@ -27,6 +30,8 @@ export const EMPTY_USER_FORM: UserFormValues = {
   role: "FACULTY",
   departmentId: "",
   collegeId: "",
+  unitColleges: [],
+  unitAreas: [],
   status: "",
   maxUnits: "18",
 };
@@ -38,6 +43,8 @@ export interface UserFormPayload {
   departmentId: string | null;
   /** Only sent when the form offers colleges (the admin). The admin and president role have none. */
   collegeId?: string | null;
+  unitColleges?: string[];
+  unitAreas?: string[];
   status: string | null;
   maxUnits: number | null;
   /** Only present when creating. */
@@ -60,6 +67,15 @@ interface UserFormDialogProps {
   /** Do the API call; throw on failure (the dialog shows the error and stays open). */
   onSubmit: (payload: UserFormPayload) => Promise<void>;
 }
+
+/** What an admin can allow a unit viewer to see inside a college. */
+const UNIT_AREA_OPTIONS = [
+  { value: "ROOMS", label: "Rooms", hint: "The rooms and when they are used." },
+  { value: "SCHEDULES", label: "Schedules", hint: "Dashboard, requests, and the faculty, class and room schedules." },
+  { value: "CURRICULUM", label: "Curriculum and classes", hint: "Curriculum, subjects, student classes, departments and the GE sheet." },
+  { value: "FACULTY", label: "Faculty", hint: "The faculty list with units, deloading and possible subjects." },
+  { value: "REPORTS", label: "Reports", hint: "Schedule and workload reports and exports." },
+] as const;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const inputClass =
@@ -92,7 +108,8 @@ export function UserFormDialog({
   const isCreate = mode === "create";
   const roleLocked = allowedRoles.length === 1;
   const showUnits = isTeachingRole(form.role);
-  const spansColleges = form.role === "ADMIN" || form.role === "PRESIDENT";
+  const isUnit = form.role === "UNIT";
+  const spansColleges = form.role === "ADMIN" || form.role === "PRESIDENT" || isUnit;
   const departmentChoices = departments.filter((d) => !form.collegeId || !d.collegeId || d.collegeId === form.collegeId);
   const set = <K extends keyof UserFormValues>(key: K, value: UserFormValues[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -117,6 +134,14 @@ export function UserFormDialog({
       toast.error("Choose the college this person belongs to");
       return;
     }
+    if (isUnit && form.unitColleges.length === 0) {
+      toast.error("Choose at least one college this viewer may see");
+      return;
+    }
+    if (isUnit && form.unitAreas.length === 0) {
+      toast.error("Choose at least one area this viewer may see");
+      return;
+    }
     if (isCreate && form.password.length < 8) {
       toast.error("Password must be at least 8 characters");
       return;
@@ -132,6 +157,7 @@ export function UserFormDialog({
       role: form.role,
       departmentId: form.departmentId || null,
       ...(colleges ? { collegeId: spansColleges ? null : form.collegeId || null } : {}),
+      ...(isUnit ? { unitColleges: form.unitColleges, unitAreas: form.unitAreas } : {}),
       status: form.status.trim() || null,
       maxUnits,
     };
@@ -202,6 +228,47 @@ export function UserFormDialog({
               </Select.Content>
             </Select.Root>
           </div>
+          {isUnit && colleges && (
+            <fieldset className="space-y-3 rounded border border-border p-3">
+              <legend className="px-1 text-sm font-medium text-foreground">What this viewer can see</legend>
+              <div>
+                <p className="mb-1 text-xs font-medium text-foreground-muted">Colleges</p>
+                <div className="max-h-40 space-y-1 overflow-y-auto">
+                  {colleges.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={form.unitColleges.includes(c.id)}
+                        onChange={(e) => set("unitColleges", e.target.checked ? [...form.unitColleges, c.id] : form.unitColleges.filter((x) => x !== c.id))}
+                        className="rounded border-border-strong focus:ring-focus-ring"
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium text-foreground-muted">In those colleges</p>
+                <div className="space-y-1">
+                  {UNIT_AREA_OPTIONS.map((a) => (
+                    <label key={a.value} className="flex items-start gap-2 text-sm text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={form.unitAreas.includes(a.value)}
+                        onChange={(e) => set("unitAreas", e.target.checked ? [...form.unitAreas, a.value] : form.unitAreas.filter((x) => x !== a.value))}
+                        className="mt-0.5 rounded border-border-strong focus:ring-focus-ring"
+                      />
+                      <span>
+                        {a.label}
+                        <span className="block text-xs text-foreground-muted">{a.hint}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-foreground-muted">A unit viewer only reads: nothing here can be changed by them.</p>
+            </fieldset>
+          )}
           {colleges && !spansColleges && (
             <div>
               <label className={labelClass}>College</label>

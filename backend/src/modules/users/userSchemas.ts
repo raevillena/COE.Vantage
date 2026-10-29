@@ -3,6 +3,9 @@ import { Role } from "@prisma/client";
 
 const roleEnum = z.nativeEnum(Role);
 
+/** What a unit viewer can be allowed to see inside a college. */
+export const UNIT_AREAS = ["ROOMS", "SCHEDULES", "CURRICULUM", "FACULTY", "REPORTS"] as const;
+
 /**
  * Email validation that allows Unicode in the local part (e.g. jpeña@mmsu.edu.ph for names with ñ).
  * Zod's default .email() is ASCII-only and would reject ñ.
@@ -39,8 +42,11 @@ export const createUserSchema = z.object({
     name: z.string().min(1),
     role: roleEnum,
     departmentId: z.string().uuid().optional().nullable(),
-    /** The admin says which college; the admin and the president have none. */
+    /** The admin says which college; the admin, the president and unit viewers have none. */
     collegeId: z.string().uuid().optional().nullable(),
+    /** Unit viewers only: the colleges and areas they may see. */
+    unitColleges: z.array(z.string().uuid()).max(100).optional(),
+    unitAreas: z.array(z.enum(UNIT_AREAS)).optional(),
     status: z.string().max(100).optional().nullable(),
     maxUnits: z.number().int().min(0).optional().nullable(), // 0 = faculty cannot receive any load
   }),
@@ -53,6 +59,8 @@ export const updateUserSchema = z.object({
     role: roleEnum.optional(),
     departmentId: z.string().uuid().optional().nullable(),
     collegeId: z.string().uuid().optional().nullable(),
+    unitColleges: z.array(z.string().uuid()).max(100).optional(),
+    unitAreas: z.array(z.enum(UNIT_AREAS)).optional(),
     status: z.string().max(100).optional().nullable(),
     maxUnits: z.number().int().min(0).optional().nullable(), // 0 = faculty cannot receive any load
   }),

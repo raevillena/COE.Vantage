@@ -6,12 +6,14 @@ import { apiClient } from "../../api/apiClient";
 import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
+import { CollegePicture } from "../../components/ui/collegePicture";
 import { SEMESTER_NAME } from "../../utils/termLock";
 
 interface CollegeSummary {
   id: string;
   name: string;
   code: string | null;
+  imageVersion: number | null;
   departments: number;
   users: number;
   studentClasses: number;
@@ -67,7 +69,7 @@ export function UniversityPage() {
       </div>
       <p className="mb-6 text-sm text-foreground-muted">
         Each college sets its own current term.
-        {role === "PRESIDENT" && " You can view everything here and change nothing."}
+        {(role === "PRESIDENT" || role === "UNIT") && " You can view everything here and change nothing."}
       </p>
 
       {data.colleges.length === 0 ? (
@@ -75,7 +77,9 @@ export function UniversityPage() {
       ) : (
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.colleges.map((c) => (
-            <li key={c.id} className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+            <li key={c.id} className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+              <CollegePicture id={c.id} name={c.name} code={c.code} version={c.imageVersion} className="h-32 w-full" />
+              <div className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h2 className="truncate font-semibold text-foreground">{c.name}</h2>
@@ -107,6 +111,7 @@ export function UniversityPage() {
                   </div>
                 ))}
               </dl>
+              </div>
             </li>
           ))}
         </ul>

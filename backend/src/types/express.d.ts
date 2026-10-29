@@ -7,9 +7,11 @@ declare global {
       email: string;
       role: Role;
       departmentId: string | null;
-      /** null for the admin and the president, who span colleges */
+      /** null for the admin, the president and unit viewers, who span colleges */
       collegeId: string | null;
       name: string;
+      unitColleges?: string[];
+      unitAreas?: string[];
     }
     interface Request {
       user?: User;

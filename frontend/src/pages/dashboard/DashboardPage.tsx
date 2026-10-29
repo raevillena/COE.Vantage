@@ -27,7 +27,7 @@ function DashboardCard({ to, title, subtitle, primary }: DashboardCardProps) {
 export function DashboardPage() {
   const user = useAppSelector((s) => s.auth.user);
   // the president's home is the university overview
-  if (user?.role === "PRESIDENT") return <Navigate to="/university" replace />;
+  if (user?.role === "PRESIDENT" || user?.role === "UNIT") return <Navigate to="/university" replace />;
 
   return (
     <div className="mb-6">

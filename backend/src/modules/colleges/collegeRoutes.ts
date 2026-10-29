@@ -4,8 +4,9 @@ import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate, validateParams } from "../../middleware/validate.js";
-import { audited } from "../audit/auditService.js";
-import { createCollege, deleteCollege, listColleges, universityOverview, updateCollege, updateUniversity } from "./collegeService.js";
+import { audit, audited } from "../audit/auditService.js";
+import { singleImage, uploadedImage, CARD_IMAGE_MAX_BYTES } from "../../utils/imageUpload.js";
+import { createCollege, deleteCollege, getCollegeImage, listColleges, removeCollegeImage, setCollegeImage, universityOverview, updateCollege, updateUniversity } from "./collegeService.js";
 
 const idParams = z.object({ params: z.object({ id: z.string().uuid() }) });
 const createSchema = z.object({ body: z.object({ name: z.string().trim().min(1).max(200), code: z.string().trim().max(20).optional().nullable() }) });
@@ -43,9 +44,27 @@ collegeRoutes.delete("/:id", authorize("ADMIN"), validateParams(idParams), async
   res.status(204).end();
 });
 
+collegeRoutes.put("/:id/image", authorize("ADMIN"), validateParams(idParams), singleImage("image", CARD_IMAGE_MAX_BYTES), async (req: Request, res: Response) => {
+  const out = await setCollegeImage(req.params.id, uploadedImage(req));
+  await audit({ entityType: "COLLEGE", entityId: req.params.id, entityLabel: out.name, collegeId: req.params.id, action: "UPDATE", summary: `Changed the card picture of ${out.name}` });
+  res.json({ imageVersion: out.imageVersion });
+});
+collegeRoutes.delete("/:id/image", authorize("ADMIN"), validateParams(idParams), async (req: Request, res: Response) => {
+  const out = await removeCollegeImage(req.params.id);
+  await audit({ entityType: "COLLEGE", entityId: req.params.id, entityLabel: out.name, collegeId: req.params.id, action: "UPDATE", summary: `Removed the card picture of ${out.name}` });
+  res.status(204).end();
+});
+collegeRoutes.get("/:id/image", validateParams(idParams), async (req: Request, res: Response) => {
+  const image = await getCollegeImage(req.params.id);
+  res.setHeader("Content-Type", image.mimeType);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.send(Buffer.from(image.data));
+});
+
 export const universityRoutes = Router();
 universityRoutes.use(authenticate);
-universityRoutes.get("/", authorize("ADMIN", "PRESIDENT"), async (_req: Request, res: Response) => {
+universityRoutes.get("/", authorize("ADMIN", "PRESIDENT", "UNIT"), async (_req: Request, res: Response) => {
   res.json(await universityOverview());
 });
 universityRoutes.patch("/", authorize("ADMIN"), validate(universitySchema), async (req: Request, res: Response) => {

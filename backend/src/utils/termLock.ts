@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma/client.js";
 import { forbidden } from "./errors.js";
-import { currentActor } from "./auditContext.js";
+import { scopeCollegeId } from "./auditContext.js";
 
 const SEMESTER_LABEL = ["", "1st Sem", "2nd Sem", "Mid Year"];
 
@@ -16,7 +16,7 @@ export async function assertTermUnlocked(
   collegeId?: string | null,
   tx?: Prisma.TransactionClient
 ): Promise<void> {
-  const college = collegeId ?? currentActor()?.collegeId;
+  const college = collegeId ?? scopeCollegeId();
   if (!college) return; // nothing to check against: the admin acting on a record without a college
   const lock = await (tx ?? prisma).termLock.findFirst({
     where: { academicYearId, semester, collegeId: college },

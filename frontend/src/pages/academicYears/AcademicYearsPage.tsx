@@ -10,6 +10,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
 import { getApiErrorMessage } from "../../types/api";
+import { useViewCollege } from "../../utils/collegeView";
 import { HistoryButton } from "../../components/audit/HistoryButton";
 
 const SEMESTER_LABEL: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3: "Mid Year" };
@@ -22,10 +23,15 @@ export function AcademicYearsPage() {
   // The dean can lock and unlock semesters too, but changes nothing else here.
   const canLock = canManage || role === "DEAN";
   // the admin and president see every college's locks, one college at a time
-  const spansColleges = role === "ADMIN" || role === "PRESIDENT";
-  const showLocks = canLock || role === "PRESIDENT";
+  const spansColleges = role === "ADMIN" || role === "PRESIDENT" || role === "UNIT";
+  const showLocksRole = canLock || role === "PRESIDENT" || role === "UNIT";
   const [colleges, setColleges] = useState<College[]>([]);
-  const [lockCollegeId, setLockCollegeId] = useState("");
+  // the admin, president and unit viewers work on the college chosen in the sidebar switcher
+  const viewId = useViewCollege();
+  const lockCollegeId = spansColleges ? viewId ?? (colleges.length === 1 ? colleges[0].id : "") : "";
+  /** With several colleges and none chosen there is no single term or lock to show. */
+  const needsCollege = spansColleges && colleges.length > 1 && !lockCollegeId;
+  const showLocks = showLocksRole && !needsCollege;
   const [lockTarget, setLockTarget] = useState<{ year: AcademicYear; semester: number; lock: boolean } | null>(null);
   const [lockSaving, setLockSaving] = useState(false);
   const [termYearId, setTermYearId] = useState("");
@@ -59,10 +65,7 @@ export function AcademicYearsPage() {
     load();
     apiClient
       .get<College[]>("/colleges")
-      .then(({ data }) => {
-        setColleges(data);
-        setLockCollegeId((cur) => cur || data[0]?.id || "");
-      })
+      .then(({ data }) => setColleges(data))
       .catch(() => setColleges([]));
   }, []);
 
@@ -140,8 +143,8 @@ export function AcademicYearsPage() {
   const currentSem = spansColleges ? shownCollege?.currentSemester ?? 1 : list.find((y) => y.isActive)?.currentSemester ?? 1;
   const activeYear = list.find((y) => y.id === currentYearId);
   const termChanged = termYearId !== currentYearId || (!!termYearId && termSemester !== currentSem);
-  const isCurrentRow = (y: AcademicYear) => (spansColleges && colleges.length > 0 ? y.id === currentYearId : y.isActive);
-  const currentSemOf = (y: AcademicYear) => (spansColleges && colleges.length > 0 ? currentSem : y.currentSemester ?? 1);
+  const isCurrentRow = (y: AcademicYear) => (spansColleges && lockCollegeId ? y.id === currentYearId : y.isActive);
+  const currentSemOf = (y: AcademicYear) => (spansColleges && lockCollegeId ? currentSem : y.currentSemester ?? 1);
 
   useEffect(() => {
     setTermYearId(currentYearId);
@@ -227,18 +230,13 @@ export function AcademicYearsPage() {
         {canManage && <Button type="button" onClick={openCreate}>Add Academic Year</Button>}
       </div>
 
-      {spansColleges && colleges.length > 1 && (
-        <div className="mb-3 flex items-center gap-2">
-          <label htmlFor="lock-college" className="text-sm font-medium text-foreground">College</label>
-          <select id="lock-college" value={lockCollegeId} onChange={(e) => setLockCollegeId(e.target.value)} className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
-            {colleges.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
+      {needsCollege && (
+        <p role="status" className="mb-4 rounded border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">
+          Choose a college in the sidebar to see or change its current term and semester locks.
+        </p>
       )}
 
-      {list.length > 0 && (
+      {list.length > 0 && !needsCollege && (
         <section className="mb-5 rounded border border-border bg-surface p-4" aria-label="Current term">
           <div className="flex items-center gap-1.5">
             <h2 className="text-sm font-semibold text-foreground">Current term</h2>

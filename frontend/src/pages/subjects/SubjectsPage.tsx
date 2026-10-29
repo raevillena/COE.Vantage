@@ -22,7 +22,7 @@ import {
 export function SubjectsPage() {
   /** The college secretary can view everything the dean can but never change it. */
   const role = useAppSelector((st) => st.auth.user?.role);
-  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
+  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
   const [list, setList] = useState<Subject[]>([]);
   /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
   const [curriculumFilter, setCurriculumFilter] = useState("");
@@ -38,7 +38,7 @@ export function SubjectsPage() {
     curriculumId: "",
     departmentId: "",
   });
-  const [curricula, setCurricula] = useState<{ id: string; name: string; createdAt?: string }[]>([]);
+  const [curricula, setCurricula] = useState<{ id: string; name: string; createdAt?: string; departmentId?: string | null }[]>([]);
   const userDeptId = useAppSelector((st) => st.auth.user?.departmentId) ?? null;
   /** Possible rooms for auto-assign: the subject being edited, all rooms, the ticked room ids. */
   const [roomsSubject, setRoomsSubject] = useState<Subject | null>(null);
@@ -125,7 +125,9 @@ export function SubjectsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", code: "", lecUnits: 3, labUnits: 0, yearLevel: "", curriculumId: "", departmentId: "" });
+    // A new subject starts in the curriculum being looked at (and its department), so it is not added ungrouped.
+    const inCurriculum = curriculumFilter && curriculumFilter !== "__none__" ? curricula.find((c) => c.id === curriculumFilter) : undefined;
+    setForm({ name: "", code: "", lecUnits: 3, labUnits: 0, yearLevel: "", curriculumId: inCurriculum?.id ?? "", departmentId: inCurriculum?.departmentId ?? "" });
     setModalOpen(true);
   };
 
@@ -176,6 +178,8 @@ export function SubjectsPage() {
       } else {
         await apiClient.post("/subjects", { ...payload, code: codeWhenCreating! });
         toast.success("Subject created");
+        // show it: the list is filtered by curriculum, and a subject in another one would seem to vanish
+        if (curriculumFilter) setCurriculumFilter(form.curriculumId || "__none__");
       }
       setModalOpen(false);
       load();
@@ -533,7 +537,14 @@ export function SubjectsPage() {
               <SearchableSelect
                 options={curricula.map((c) => ({ value: c.id, label: c.name }))}
                 value={form.curriculumId || "__none__"}
-                onValueChange={(v) => setForm((f) => ({ ...f, curriculumId: v === "__none__" ? "" : v }))}
+                onValueChange={(v) =>
+                  setForm((f) => {
+                    const id = v === "__none__" ? "" : v;
+                    // choosing a curriculum fills in its department when none is chosen yet
+                    const dept = id && !f.departmentId ? curricula.find((c) => c.id === id)?.departmentId ?? "" : f.departmentId;
+                    return { ...f, curriculumId: id, departmentId: dept };
+                  })
+                }
                 noneOption={{ value: "__none__", label: "No curriculum" }}
                 placeholder="Search curricula…"
                 aria-label="Curriculum"

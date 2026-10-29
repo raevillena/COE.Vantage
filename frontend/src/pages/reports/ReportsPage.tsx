@@ -177,7 +177,7 @@ export function ReportsPage() {
   }, [fetchRoomData]);
 
   const role = useAppSelector((s) => s.auth.user?.role);
-  const canExportOfficial = role === "ADMIN" || role === "DEAN" || role === "CHAIRMAN" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
+  const canExportOfficial = role === "ADMIN" || role === "DEAN" || role === "CHAIRMAN" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
   const [exporting, setExporting] = useState<string | null>(null);
 
   /** Downloads an official .xlsx form; uses the server's filename when it is exposed. */

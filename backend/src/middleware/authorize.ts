@@ -14,6 +14,24 @@ export function readOnly(...roles: Role[]) {
   };
 }
 
+/**
+ * Restrict a route to exactly these roles: no read-only viewer gets in through a dean's access. Use it for what only
+ * these roles may even read (the audit log).
+ */
+export function authorizeExact(...allowedRoles: Role[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      next(forbidden("Authentication required"));
+      return;
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      next(forbidden("Insufficient permissions"));
+      return;
+    }
+    next();
+  };
+}
+
 /** Restrict route to given roles. Must be used after authenticate. */
 export function authorize(...allowedRoles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -21,8 +39,8 @@ export function authorize(...allowedRoles: Role[]) {
       next(forbidden("Authentication required"));
       return;
     }
-    // The president views what a dean views across the university, and can change nothing.
-    const presidentViewing = req.user.role === "PRESIDENT" && allowedRoles.includes("DEAN") && ["GET", "HEAD", "OPTIONS"].includes(req.method);
+    // The president and the unit viewers see what a dean sees across colleges, and can change nothing.
+    const presidentViewing = (req.user.role === "PRESIDENT" || req.user.role === "UNIT") && allowedRoles.includes("DEAN") && ["GET", "HEAD", "OPTIONS"].includes(req.method);
     if (!allowedRoles.includes(req.user.role) && !presidentViewing) {
       next(forbidden("Insufficient permissions"));
       return;

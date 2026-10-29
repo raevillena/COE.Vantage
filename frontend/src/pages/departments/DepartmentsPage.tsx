@@ -240,7 +240,7 @@ export function DepartmentsPage() {
                 )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Code</th>
-                {(isAdmin || user?.role === "PRESIDENT") && <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>}
+                {(isAdmin || user?.role === "PRESIDENT" || user?.role === "UNIT") && <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>}
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
@@ -260,7 +260,7 @@ export function DepartmentsPage() {
                   )}
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{d.code ?? "—"}</td>
-                  {(isAdmin || user?.role === "PRESIDENT") && <td className="px-4 py-2 text-foreground-muted">{colleges.find((c) => c.id === d.collegeId)?.name ?? "—"}</td>}
+                  {(isAdmin || user?.role === "PRESIDENT" || user?.role === "UNIT") && <td className="px-4 py-2 text-foreground-muted">{colleges.find((c) => c.id === d.collegeId)?.name ?? "—"}</td>}
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       {canManage && (

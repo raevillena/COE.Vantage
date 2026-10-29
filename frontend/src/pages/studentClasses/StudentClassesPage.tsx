@@ -14,7 +14,7 @@ import { useAppSelector } from "../../store/hooks";
 export function StudentClassesPage() {
   /** The college secretary can view everything the dean can but never change it. */
   const role = useAppSelector((st) => st.auth.user?.role);
-  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
+  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
   const [list, setList] = useState<StudentClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);

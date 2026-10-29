@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { logout } from "../../store/authSlice";
 import { apiClient } from "../../api/apiClient";
-import { Avatar } from "../ui/avatar";
+import { UserAvatar } from "../ui/userAvatar";
 import { DropdownMenu } from "../ui/dropdownMenu";
 import { useTheme } from "../../context/ThemeContext";
 import { NotificationBell } from "./NotificationBell";
@@ -106,7 +106,7 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
           width={32}
           height={32}
         />
-        <span>COE.Vantage</span>
+        <span>Vantage</span>
       </Link>
       <span className="hidden truncate text-sm font-medium text-foreground-muted sm:block md:ml-4">
         {pageTitle}
@@ -130,7 +130,7 @@ export function AppBar({ pageTitle, onMenuClick }: AppBarProps) {
               type="button"
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-foreground hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2"
             >
-              <Avatar name={user?.name ?? "User"} />
+              <UserAvatar id={user?.id ?? ""} name={user?.name ?? "User"} version={user?.avatarVersion} />
               <span className="hidden max-w-[120px] truncate sm:inline">{user?.name}</span>
               <span className="text-foreground-subtle" aria-hidden>▼</span>
             </button>

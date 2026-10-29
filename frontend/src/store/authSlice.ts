@@ -1,5 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import type { User, ExperimentalFeaturesPreference } from "../types/auth";
+import { initViewCollege, resetViewCollege } from "../utils/collegeView";
 import { setAccessToken, clearAccessToken } from "../api/apiClient";
 
 interface AuthState {
@@ -33,6 +34,7 @@ const authSlice = createSlice({
       sessionStorage.setItem("accessToken", action.payload.accessToken);
       sessionStorage.setItem("user", JSON.stringify(action.payload.user));
       setAccessToken(action.payload.accessToken);
+      initViewCollege(action.payload.user.id);
     },
     setAccessTokenOnly(state, action: { payload: string }) {
       state.accessToken = action.payload;
@@ -44,15 +46,22 @@ const authSlice = createSlice({
       state.user.experimentalFeatures = action.payload;
       sessionStorage.setItem("user", JSON.stringify(state.user));
     },
+    setProfile(state, action: { payload: { name?: string; avatarVersion?: number | null } }) {
+      if (!state.user) return;
+      if (action.payload.name !== undefined) state.user.name = action.payload.name;
+      if (action.payload.avatarVersion !== undefined) state.user.avatarVersion = action.payload.avatarVersion;
+      sessionStorage.setItem("user", JSON.stringify(state.user));
+    },
     logout(state) {
       state.user = null;
       state.accessToken = null;
       sessionStorage.removeItem("accessToken");
       sessionStorage.removeItem("user");
       clearAccessToken();
+      resetViewCollege();
     },
   },
 });
 
-export const { setAuth, setAccessTokenOnly, setUserExperimentalFeatures, logout } = authSlice.actions;
+export const { setAuth, setAccessTokenOnly, setUserExperimentalFeatures, setProfile, logout } = authSlice.actions;
 export default authSlice.reducer;

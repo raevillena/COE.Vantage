@@ -19,6 +19,7 @@ import { FacultySchedulePage } from "./pages/schedules/FacultySchedulePage";
 import { StudentSchedulePage } from "./pages/schedules/StudentSchedulePage";
 import { RoomAvailabilityPage } from "./pages/schedules/RoomAvailabilityPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
+import { RoomSharingPage } from "./pages/roomSharing/RoomSharingPage";
 import { RequestsPage } from "./pages/requests/RequestsPage";
 import { TrashPage } from "./pages/trash/TrashPage";
 import { ChairmanFacultyPage } from "./pages/faculty/ChairmanFacultyPage";
@@ -54,23 +55,24 @@ function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="dashboard/details/:metric" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"]}><DashboardDetailPage /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><UsersPage /></ProtectedRoute>} />
-        <Route path="rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT"]}><RoomsPage /></ProtectedRoute>} />
-        <Route path="curriculum" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT"]}><CurriculumPage /></ProtectedRoute>} />
+        <Route path="rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><RoomsPage /></ProtectedRoute>} />
+        <Route path="curriculum" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><CurriculumPage /></ProtectedRoute>} />
         <Route path="curriculum/:id/build" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><CurriculumBuildPage /></ProtectedRoute>} />
         <Route path="subjects" element={<SubjectsPage />} />
         <Route path="student-classes" element={<StudentClassesPage />} />
-        <Route path="university" element={<ProtectedRoute allowedRoles={["ADMIN", "PRESIDENT"]}><UniversityPage /></ProtectedRoute>} />
+        <Route path="university" element={<ProtectedRoute allowedRoles={["ADMIN", "PRESIDENT", "UNIT"]}><UniversityPage /></ProtectedRoute>} />
         <Route path="colleges" element={<ProtectedRoute allowedRoles={["ADMIN"]}><CollegesPage /></ProtectedRoute>} />
         <Route path="audit-log" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "COLLEGE_SECRETARY"]}><AuditLogPage /></ProtectedRoute>} />
-        <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "COLLEGE_SECRETARY", "PRESIDENT"]}><AcademicYearsPage /></ProtectedRoute>} />
-        <Route path="departments" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT"]}><DepartmentsPage /></ProtectedRoute>} />
+        <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><AcademicYearsPage /></ProtectedRoute>} />
+        <Route path="departments" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><DepartmentsPage /></ProtectedRoute>} />
         <Route path="scheduler" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
-        <Route path="faculty" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "DEAN"]}><ChairmanFacultyPage /></ProtectedRoute>} />
+        <Route path="faculty" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "DEAN", "UNIT"]}><ChairmanFacultyPage /></ProtectedRoute>} />
         <Route path="scheduler/rules" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulingRulesPage backTo="/scheduler" title="Scheduling rule sets" /></ProtectedRoute>} />
         <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules" isAdminPage /></ProtectedRoute>} />
         <Route path="ge-subjects" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY", "DEAN"]}><GeSubjectsPage /></ProtectedRoute>} />
+        <Route path="room-sharing" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"]}><RoomSharingPage /></ProtectedRoute>} />
         <Route path="requests" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"]}><RequestsPage /></ProtectedRoute>} />
-        <Route path="schedules/faculty" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT"]}><FacultySchedulePage /></ProtectedRoute>} />
+        <Route path="schedules/faculty" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><FacultySchedulePage /></ProtectedRoute>} />
         <Route path="schedules/student-class" element={<StudentSchedulePage />} />
         <Route path="schedules/rooms" element={<RoomAvailabilityPage />} />
         <Route path="reports" element={<ReportsPage />} />

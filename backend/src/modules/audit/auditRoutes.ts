@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
-import { authorize } from "../../middleware/authorize.js";
+import { authorizeExact } from "../../middleware/authorize.js";
 import { validateQuery } from "../../middleware/validate.js";
 import { exportAuditCsv, listAudit, ENTITY_LABEL } from "./auditService.js";
 
@@ -27,7 +27,7 @@ const exportSchema = z.object({ query: z.object(filters) });
 const router = Router();
 router.use(authenticate);
 // Only the admin, dean and college secretary read the history. Nothing here writes: entries can only be appended by the app.
-router.use(authorize("ADMIN", "DEAN", "COLLEGE_SECRETARY"));
+router.use(authorizeExact("ADMIN", "DEAN", "COLLEGE_SECRETARY"));
 
 router.get("/kinds", (_req: Request, res: Response) => {
   res.json(ENTITY_LABEL);

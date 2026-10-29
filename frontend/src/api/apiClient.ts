@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from "axios";
+import { getViewCollege } from "../utils/collegeView";
 import { toast } from "react-hot-toast";
 
 const baseURL = import.meta.env.VITE_API_URL ?? "/api";
@@ -10,6 +11,9 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  // the admin, president and unit viewers look at one college at a time; the API ignores this for everyone else
+  const viewing = getViewCollege();
+  if (viewing) (config.headers as Record<string, unknown>)["X-College-Id"] = viewing;
   if (config.data instanceof FormData) {
     delete (config.headers as Record<string, unknown>)["Content-Type"];
   }

@@ -1,10 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
-import { currentActor } from "../../utils/auditContext.js";
+import { currentActor, scopeCollegeId } from "../../utils/auditContext.js";
 
 /** Kinds of record the history covers. The value is stored; the label is what people read. */
 export const ENTITY_LABEL: Record<string, string> = {
   ACADEMIC_YEAR: "Academic year",
+  ROOM_SHARE: "Room request",
   CURRICULUM: "Curriculum",
   SUBJECT: "Subject",
   STUDENT_CLASS: "Student class",
@@ -87,7 +88,7 @@ export async function audit(entry: AuditEntryInput): Promise<void> {
         changes: (entry.changes ?? undefined) as Prisma.InputJsonValue | undefined,
         academicYearId: entry.academicYearId ?? null,
         semester: entry.semester ?? null,
-        collegeId: entry.collegeId !== undefined ? entry.collegeId : actor?.collegeId ?? null,
+        collegeId: entry.collegeId !== undefined ? entry.collegeId : scopeCollegeId(actor),
       },
     });
   } catch (e) {
@@ -176,7 +177,7 @@ export interface AuditQuery {
 
 function whereOf(q: Omit<AuditQuery, "page" | "pageSize">): Prisma.AuditLogWhereInput {
   // a dean or secretary reads their own college's entries and the university-level ones; the admin and president read all
-  const mine = currentActor()?.collegeId;
+  const mine = scopeCollegeId();
   const types = q.entityType?.split(",").map((t) => t.trim()).filter(Boolean);
   const search = q.q?.trim();
   return {

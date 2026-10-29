@@ -77,11 +77,14 @@ type AuthUserPayload = {
   role: string;
   name: string;
   departmentId: string | null;
+  avatarVersion: number | null;
+  unitColleges: string[];
+  unitAreas: string[];
   experimentalFeatures: ExperimentalFeaturesPreference;
 };
 
 export async function login(body: LoginBody): Promise<{ accessToken: string; refreshToken: string; user: AuthUserPayload }> {
-  const user = await prisma.user.findUnique({ where: { email: body.email } });
+  const user = await prisma.user.findUnique({ where: { email: body.email }, include: { avatar: { select: { updatedAt: true } } } });
   if (!user || user.isDeleted) throw unauthorized("Invalid email or password");
   const valid = await bcrypt.compare(body.password, user.passwordHash);
   if (!valid) throw unauthorized("Invalid email or password");
@@ -97,6 +100,9 @@ export async function login(body: LoginBody): Promise<{ accessToken: string; ref
       role: user.role,
       name: user.name,
       departmentId: user.departmentId,
+      avatarVersion: user.avatar?.updatedAt.getTime() ?? null,
+      unitColleges: user.unitColleges,
+      unitAreas: user.unitAreas,
       experimentalFeatures: normalizeExperimentalFeatures(user.experimentalFeatures),
     },
   };

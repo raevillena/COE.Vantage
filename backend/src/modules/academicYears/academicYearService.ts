@@ -1,6 +1,7 @@
+import { assertNoGuestBookings } from "../roomSharing/roomSharingService.js";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, conflict, forbidden, notFound } from "../../utils/errors.js";
-import { currentActor, runUnscoped } from "../../utils/auditContext.js";
+import { currentActor, runUnscoped, scopeCollegeId } from "../../utils/auditContext.js";
 import { resolveCollegeId } from "../../utils/collegeScope.js";
 import { notifyUsers, userIdsWithRole } from "../notifications/notificationService.js";
 import { audit } from "../audit/auditService.js";
@@ -16,7 +17,7 @@ type YearRow = { id: string; isActive: boolean; currentSemester: number };
  * see a year as current when any college is on it.
  */
 async function withCurrent<T extends YearRow>(years: T[]): Promise<T[]> {
-  const mine = currentActor()?.collegeId;
+  const mine = scopeCollegeId();
   if (mine) {
     const c = await prisma.college.findUnique({ where: { id: mine }, select: { currentAcademicYearId: true, currentSemester: true } });
     return years.map((y) => {
@@ -38,7 +39,7 @@ export async function listAcademicYears() {
     include: {
       termLocks: {
         // a dean or secretary sees their own college's locks; the admin and president see every college's
-        ...(currentActor()?.collegeId ? { where: { collegeId: currentActor()!.collegeId! } } : {}),
+        ...(scopeCollegeId() ? { where: { collegeId: scopeCollegeId()! } } : {}),
         select: { semester: true, collegeId: true, lockedByName: true, lockedAt: true },
         orderBy: { semester: "asc" },
       },
@@ -108,6 +109,7 @@ export async function setTermLock(academicYearId: string, body: SetTermLockBody,
   if (body.locked && !existing) {
     await prisma.termLock.create({ data: { collegeId, academicYearId, semester: body.semester, lockedByName: actor.name } });
   } else if (!body.locked && existing) {
+    await assertNoGuestBookings(collegeId, academicYearId, body.semester);
     await prisma.termLock.delete({ where: { id: existing.id } });
   } else {
     return { locked: body.locked, changed: false };

@@ -18,6 +18,7 @@ enum Role {
   OFFICER
   COLLEGE_SECRETARY
   PRESIDENT // sees the whole university, read only
+  UNIT // a viewer from the university administration: only the colleges and areas the admin grants, read only
 }
 
 model User {
@@ -30,6 +31,8 @@ model User {
   name                 String
   experimentalFeatures Json?
   lastSeenVersion      String? // newest release this person has looked at in the notification bell
+  unitColleges         String[]  @default([]) // UNIT role: the colleges this viewer may see
+  unitAreas            String[]  @default([]) // UNIT role: what they may see in them (ROOMS, SCHEDULES, CURRICULUM, FACULTY, REPORTS)
   status               String? // e.g. Full-time, Part-time (from faculty list)
   maxUnits             Int? // max load units per term (null = no cap)
   isDeleted            Boolean   @default(false)
@@ -43,6 +46,7 @@ model User {
   deloadings                       FacultyDeloading[]
   feedbacks                        Feedback[]
   notifications                    Notification[]
+  avatar                           UserAvatar?
   crossDepartmentRequestsRequested CrossDepartmentLoadRequest[] @relation("RequestedBy")
   crossDepartmentRequestsResponded CrossDepartmentLoadRequest[] @relation("RespondedBy")
   crossDepartmentRequestsAsFaculty CrossDepartmentLoadRequest[] @relation("FacultyRequested")
@@ -91,6 +95,7 @@ model College {
   ruleSets            SchedulingRuleSet[]
   geOfferingSets      GeOfferingSet[]
   termLocks           TermLock[]
+  image               CollegeImage?
   requests            CrossDepartmentLoadRequest[]
 
   @@index([universityId])
@@ -382,6 +387,7 @@ model FacultyLoad {
   semester           Int // 1 or 2
   academicYearId     String
   isSplit            Boolean  @default(false) // the class is split between instructors for this subject (see facultyLoadService)
+  hostCollegeId      String? // set when the room belongs to another college (an approved room request); the room's college can see the block
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -400,6 +406,7 @@ model FacultyLoad {
   @@index([facultyId, dayOfWeek, academicYearId, semester])
   @@index([studentClassId, dayOfWeek, academicYearId, semester])
   @@index([collegeId])
+  @@index([hostCollegeId])
 }
 
 /// Per-term reduction of a person's maximum units (designations, research, admin work). Effective max = maxUnits - sum(units).
@@ -528,6 +535,98 @@ model Feedback {
   @@index([status, archivedAt])
   @@index([createdAt])
   @@index([userId])
+}
+
+// A person's picture, kept in the database like feedback pictures. Its own table so user lists never load the bytes.
+model UserAvatar {
+  userId    String   @id
+  mimeType  String
+  size      Int
+  data      Bytes
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// The card picture of a college, shown on the university overview.
+model CollegeImage {
+  collegeId String   @id
+  mimeType  String
+  size      Int
+  data      Bytes
+  updatedAt DateTime @updatedAt
+
+  college College @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+}
+
+// A college asking another college for the use of its rooms, after the other college locked its semester.
+// Flow: chairmen draft blocks (RoomShareBlock with no request), their college secretary submits them as a request, the chairman
+// of each room's department approves, then the host college secretary approves last and the blocks become schedule blocks.
+// The host dean only views and is notified. Ids only (no foreign keys): the rows are read across colleges by the service.
+model RoomShareRequest {
+  id              String    @id @default(uuid())
+  guestCollegeId  String
+  hostCollegeId   String
+  academicYearId  String
+  semester        Int
+  status          String    @default("PENDING_CHAIRMAN") // PENDING_CHAIRMAN, PENDING_SECRETARY, APPROVED, REJECTED, CANCELLED
+  note            String?
+  submittedById   String?
+  submittedByName String
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  decisionNotes   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  blocks    RoomShareBlock[]
+  approvals RoomShareApproval[]
+
+  @@index([guestCollegeId, status])
+  @@index([hostCollegeId, status])
+}
+
+model RoomShareBlock {
+  id             String   @id @default(uuid())
+  requestId      String? // null while it is only a draft
+  guestCollegeId String
+  hostCollegeId  String
+  roomId         String
+  academicYearId String
+  semester       Int
+  studentClassId String
+  subjectId      String
+  facultyId      String?
+  dayOfWeek      Int
+  startTime      String
+  endTime        String
+  createdById    String
+  createdByName  String
+  createdAt      DateTime @default(now())
+
+  request RoomShareRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([guestCollegeId, requestId])
+  @@index([roomId, academicYearId, semester])
+}
+
+// One chairman approval per department that owns a requested room.
+model RoomShareApproval {
+  id             String    @id @default(uuid())
+  requestId      String
+  departmentId   String
+  departmentName String
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  decidedById    String?
+  decidedByName  String?
+  decidedAt      DateTime?
+  notes          String?
+
+  request RoomShareRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, departmentId])
 }
 
 // Append-only history of changes to core records, for accountability. The person is copied into the entry (name, email,

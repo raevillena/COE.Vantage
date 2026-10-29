@@ -7,6 +7,8 @@ export interface College {
   /** The term this college is scheduling now; null when it has not started. */
   currentAcademicYearId?: string | null;
   currentSemester?: number | null;
+  /** Changes when the college's card picture does; null when it has none. */
+  imageVersion?: number | null;
 }
 
 export interface Department {
@@ -117,6 +119,9 @@ export interface UserListItem {
   departmentId: string | null;
   collegeId?: string | null;
   college?: { name: string; code: string | null } | null;
+  avatarVersion?: number | null;
+  unitColleges?: string[];
+  unitAreas?: string[];
   status?: string | null;
   maxUnits?: number | null;
   department?: { name: string; code: string | null } | null;

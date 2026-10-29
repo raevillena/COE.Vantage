@@ -8,6 +8,7 @@ export const routeTitles: Record<string, string> = {
   "/student-classes": "Manage Student Classes",
   "/academic-years": "Academic Years",
   "/audit-log": "Audit log",
+  "/room-sharing": "Room sharing",
   "/university": "University",
   "/colleges": "Colleges",
   "/departments": "Manage Departments",

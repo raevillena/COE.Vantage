@@ -80,3 +80,14 @@ Audit log
 University and colleges
  - University > College > Department. Everything that exists sits under the College of Engineering. Each college sees only its own departments, people, rooms, curricula, subjects, classes, schedules, requests, GE sheet and rule sets; the admin creates colleges and assigns people and departments; semester locks are per college; the audit log is per college; the President role sees the whole university, read only, with a University overview. done (v0.6.0, needs migrations 20260614000000_university_college, 20260614000001_college_optional and 20260615000000_college_current_term)
  - next (v0.7.0): room sharing. When a college locks a semester, all of its rooms open to other colleges for the free slots, with approval from the host's dean, college secretary and the room's chairman. The other college's chairmen draft the schedule; their college secretary collates the proposed blocks (Requests page or a new page) and submits the request; the approvers see the newly added blocks in one scrollable page preview. Unlocking a host semester stays blocked while guest bookings exist. Academic years are shared and created by the admin or a college secretary, each name only once; the current term is per college (decided).
+
+Profiles
+ - everyone changes their own name and picture on the Profile page (email, role, department stay with the admin); pictures show in the top bar, the faculty list and the admin's users list; the admin gives each college a card picture shown on the University overview. Stored as bytes in `UserAvatar` and `CollegeImage` (avatar up to 1 MB, resized to 256 px square in the browser; card up to 3 MB, resized to 1200 px). done (v0.6.1, needs migration 20260616000000_avatars_and_college_images)
+
+College switcher and unit viewers
+ - the admin and the president pick which college the pages show (sidebar switcher with search and recents, or all colleges); college-bound people see their own college locked. Sidebar regrouped as Scheduling / College setup (tagged with the viewed college) / University / Reports. New UNIT role: viewers from the university administration, read only, limited by the admin to chosen colleges and areas (rooms, schedules, curriculum and classes, faculty, reports). done (v0.6.2, needs migration 20260617000000_unit_role)
+ - open: pages do not yet add a College column when "All colleges" is chosen; the college is only implied by the switcher.
+
+Room sharing between colleges
+ - a college that locked a semester opens its rooms to the others; chairmen draft blocks, the college secretary submits, the room's chairman approves, then the host college secretary approves last; deans view and are notified; unlock is blocked while other colleges are booked. done (v0.7.0, needs migration 20260618000000_room_sharing)
+ - open: no partial approval (whole request only); no way yet for the host to remove one guest block after approval besides the guest college deleting it.

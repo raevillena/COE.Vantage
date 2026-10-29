@@ -9,6 +9,10 @@ export interface AuditActor {
   departmentId: string | null;
   /** The college the person belongs to; null for the admin and the president, who span colleges. */
   collegeId: string | null;
+  /** The college the admin, president or a unit viewer chose to look at (X-College-Id header); null = all they may see. */
+  viewCollegeId?: string | null;
+  /** A unit viewer's allowed colleges; null for everyone else. */
+  allowedCollegeIds?: string[] | null;
 }
 
 interface Store {
@@ -26,6 +30,11 @@ export function runWithActor<T>(actor: AuditActor, fn: () => T): T {
 
 export function currentActor(): AuditActor | undefined {
   return store.getStore()?.actor;
+}
+
+/** The college that limits what this person sees and what new records belong to: their own, or the one they chose to view. */
+export function scopeCollegeId(actor: AuditActor | undefined = currentActor()): string | null {
+  return actor?.collegeId ?? actor?.viewCollegeId ?? null;
 }
 
 /** True while inside `runUnscoped`. */

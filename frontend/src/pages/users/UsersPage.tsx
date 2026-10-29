@@ -16,6 +16,7 @@ import { isTeachingRole } from "../../utils/loadState";
 import type { AcademicYear } from "../../types/api";
 import { HistoryButton } from "../../components/audit/HistoryButton";
 import type { College } from "../../types/api";
+import { UserAvatar } from "../../components/ui/userAvatar";
 import {
   parseFacultyPaste,
   groupByDepartment,
@@ -135,6 +136,8 @@ export function UsersPage() {
         role: u.role,
         departmentId: u.departmentId ?? "",
         collegeId: u.collegeId ?? "",
+        unitColleges: u.unitColleges ?? [],
+        unitAreas: u.unitAreas ?? [],
         status: u.status ?? "",
         maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
       },
@@ -461,11 +464,16 @@ export function UsersPage() {
             <tbody className="divide-y divide-border">
               {filteredList.map((u) => (
                 <tr key={u.id}>
-                  <td className="px-4 py-2 text-foreground">{u.name}</td>
+                  <td className="px-4 py-2 text-foreground">
+                    <div className="flex items-center gap-2.5">
+                      <UserAvatar id={u.id} name={u.name} version={u.avatarVersion} className="!h-8 !w-8" />
+                      <span className="min-w-0">{u.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.role}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{u.college?.name ?? "—"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{u.role === "UNIT" ? `${u.unitColleges?.length ?? 0} ${(u.unitColleges?.length ?? 0) === 1 ? "college" : "colleges"}` : u.college?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
                   <td className="px-4 py-2 text-right">
@@ -571,7 +579,7 @@ export function UsersPage() {
           initial={userForm.initial}
           departments={departments}
           colleges={colleges}
-          allowedRoles={["ADMIN", "PRESIDENT", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}
+          allowedRoles={["ADMIN", "PRESIDENT", "UNIT", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}
           onClose={() => setUserForm(null)}
           onSubmit={submitUserForm}
         />

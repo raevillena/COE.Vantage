@@ -1,5 +1,5 @@
 import { prisma } from "../../prisma/client.js";
-import { currentActor, runUnscoped } from "../../utils/auditContext.js";
+import { currentActor, runUnscoped, scopeCollegeId } from "../../utils/auditContext.js";
 import { badRequest } from "../../utils/errors.js";
 
 /** Read notifications older than this are deleted when their owner opens the list. */
@@ -76,8 +76,8 @@ export async function chairmenOf(departmentId: string | null | undefined): Promi
 }
 
 /** People with these roles: the admin and president always (they span colleges), everyone else only in the signed-in person's college. */
-export async function userIdsWithRole(...roles: Array<"ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT">): Promise<string[]> {
-  const mine = currentActor()?.collegeId;
+export async function userIdsWithRole(...roles: Array<"ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT" | "UNIT">): Promise<string[]> {
+  const mine = scopeCollegeId();
   const rows = await runUnscoped(() =>
     prisma.user.findMany({
       where: { role: { in: roles }, isDeleted: false, ...(mine ? { OR: [{ collegeId: mine }, { collegeId: null }] } : {}) },

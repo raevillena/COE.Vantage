@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { badRequest } from "./errors.js";
-import { currentActor, isUnscoped, runUnscoped, type AuditActor } from "./auditContext.js";
+import { currentActor, isUnscoped, runUnscoped, scopeCollegeId, type AuditActor } from "./auditContext.js";
 
 /**
  * College isolation. Every record below carries a `collegeId`. While a person who belongs to a college is signed in,
@@ -75,17 +75,18 @@ export async function soleCollegeId(client: PrismaClient): Promise<string | null
 
 /** The college a new record belongs to: the one asked for, else the signed-in person's, else the only college. */
 export async function resolveCollegeId(client: PrismaClient, explicit?: string | null): Promise<string> {
-  const id = explicit ?? currentActor()?.collegeId ?? (await soleCollegeId(client));
+  const id = explicit ?? scopeCollegeId() ?? (await soleCollegeId(client));
   if (!id) throw badRequest("Choose a college for this record.");
   return id;
 }
 
 async function collegeForNew(client: PrismaClient, model: string, data: Data, actor: AuditActor | undefined): Promise<string | null | undefined> {
   if (data.collegeId !== undefined || data.college !== undefined) return undefined; // already decided
-  if (model === "User" && (data.role === "ADMIN" || data.role === "PRESIDENT")) return undefined; // span colleges
+  if (model === "User" && (data.role === "ADMIN" || data.role === "PRESIDENT" || data.role === "UNIT")) return undefined; // span colleges
   const fromParent = await parentCollege(client, model, data);
   if (fromParent) return fromParent;
-  if (actor?.collegeId) return actor.collegeId;
+  const scope = scopeCollegeId(actor);
+  if (scope) return scope;
   if (!actor) return undefined; // scripts and seeds set the college themselves
   const sole = await soleCollegeId(client);
   if (sole) return sole;
@@ -114,10 +115,19 @@ export function installCollegeScope(client: PrismaClient): void {
       }
     }
 
-    // keep a college-bound person inside their college
-    const bound = actor?.collegeId;
-    if (bound && FILTER_ACTIONS.has(action)) {
-      params.args.where = { ...(params.args.where ?? {}), collegeId: bound };
+    // keep a college-bound person inside their college, an admin or president inside the college they chose to view,
+    // and a unit viewer inside the colleges they were granted
+    if (FILTER_ACTIONS.has(action)) {
+      const bound = scopeCollegeId(actor);
+      const where = (params.args.where ?? {}) as Data;
+      if (model === "FacultyLoad" && (bound || actor?.allowedCollegeIds)) {
+        // a college also sees the blocks other colleges booked into its rooms (approved room requests)
+        const ids = bound ? [bound] : actor!.allowedCollegeIds!;
+        const and = where.AND === undefined ? [] : Array.isArray(where.AND) ? where.AND : [where.AND];
+        // AND beside the original conditions, so a unique key (findUnique, update, delete) stays at the top level
+        params.args.where = { ...where, AND: [...and, { OR: [{ collegeId: { in: ids } }, { hostCollegeId: { in: ids } }] }] };
+      } else if (bound) params.args.where = { ...where, collegeId: bound };
+      else if (actor?.allowedCollegeIds) params.args.where = { ...where, collegeId: { in: actor.allowedCollegeIds } };
     }
     return next(params);
   });

@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppSelector } from "../../store/hooks";
 import { useAppDispatch } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
 import { Select } from "../../components/ui/select";
 import { useSchedulePalette, type SchedulePaletteId } from "../../context/SchedulePaletteContext";
-import { setUserExperimentalFeatures } from "../../store/authSlice";
+import { setProfile, setUserExperimentalFeatures } from "../../store/authSlice";
 import {
   experimentalFeatureCatalog,
   type ExperimentalFeatureDefinition,
 } from "../../features/experimental/featureCatalog";
 import type { ExperimentalFeatureKey } from "../../types/auth";
+import { UserAvatar } from "../../components/ui/userAvatar";
+import { Button } from "../../components/ui/button";
+import { resizeImage } from "../../utils/compressImage";
+import toast from "react-hot-toast";
+import { getApiErrorMessage } from "../../types/api";
 import { HelpTip } from "../../components/ui/helpTip";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -21,6 +26,110 @@ const ROLE_LABELS: Record<string, string> = {
   OFFICER: "Officer",
   PRESIDENT: "President",
 };
+
+const AVATAR_MAX_MB = 1;
+const field = "w-full rounded border border-border-strong bg-surface px-3 py-2 text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
+
+/** Name and picture: the two things a person changes about themselves. The email stays with the administrator. */
+function ProfileDetailsForm() {
+  const dispatch = useAppDispatch();
+  const user = useAppSelector((s) => s.auth.user);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState(user?.name ?? "");
+  const [savingName, setSavingName] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  if (!user) return null;
+
+  const saveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const next = name.trim();
+    if (!next) {
+      toast.error("Name is required");
+      return;
+    }
+    setSavingName(true);
+    try {
+      await apiClient.patch("/users/me", { name: next });
+      dispatch(setProfile({ name: next }));
+      toast.success("Name saved");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Could not save your name"));
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const chooseFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      toast.error("Choose a PNG, JPEG or WebP picture");
+      return;
+    }
+    setUploading(true);
+    try {
+      // a square 256 px picture is plenty for an avatar and keeps the stored bytes small
+      const small = await resizeImage(file, { maxSide: 256, square: true });
+      if (small.size > AVATAR_MAX_MB * 1024 * 1024) {
+        toast.error(`The picture is larger than ${AVATAR_MAX_MB} MB. Choose a smaller one.`);
+        return;
+      }
+      const form = new FormData();
+      form.append("image", small);
+      const { data } = await apiClient.put<{ avatarVersion: number }>("/users/me/avatar", form);
+      dispatch(setProfile({ avatarVersion: data.avatarVersion }));
+      toast.success("Picture saved");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Could not save the picture"));
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
+  const removePicture = async () => {
+    setUploading(true);
+    try {
+      await apiClient.delete("/users/me/avatar");
+      dispatch(setProfile({ avatarVersion: null }));
+      toast.success("Picture removed");
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Could not remove the picture"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-xl overflow-hidden rounded border border-border bg-surface">
+      <div className="flex flex-wrap items-center gap-4 border-b border-border px-4 py-4">
+        <UserAvatar id={user.id} name={user.name} version={user.avatarVersion} className="!h-20 !w-20 [&_span]:!text-xl" />
+        <div className="min-w-0">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => fileInput.current?.click()} disabled={uploading}>
+              {uploading ? "Saving…" : user.avatarVersion ? "Change picture" : "Add a picture"}
+            </Button>
+            {user.avatarVersion ? (
+              <Button type="button" variant="secondary" size="sm" onClick={() => void removePicture()} disabled={uploading}>
+                Remove
+              </Button>
+            ) : null}
+          </div>
+          <p className="mt-1.5 text-xs text-foreground-muted">PNG, JPEG or WebP, up to {AVATAR_MAX_MB} MB. It is cropped to a square and shrunk for you.</p>
+          <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label="Choose a picture" onChange={(e) => void chooseFile(e.target.files?.[0])} />
+        </div>
+      </div>
+      <form onSubmit={saveName} className="flex flex-wrap items-end gap-3 px-4 py-3">
+        <div className="min-w-[12rem] flex-1">
+          <label htmlFor="profile-name" className="mb-1 block text-sm font-medium text-foreground-muted">Name</label>
+          <input id="profile-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} className={field} />
+        </div>
+        <Button type="submit" disabled={savingName || !name.trim() || name.trim() === user.name}>
+          {savingName ? "Saving…" : "Save name"}
+        </Button>
+      </form>
+    </div>
+  );
+}
 
 function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -180,14 +289,11 @@ export function UserProfilePage() {
       <div className="mb-6 flex items-center gap-2">
 <h1 className="text-2xl font-semibold text-foreground">
         Profile</h1>
-<HelpTip>Your name and email can be changed only by an administrator.</HelpTip>
+<HelpTip>You can change your name and your picture. Your email, role and department can be changed only by an administrator.</HelpTip>
 </div>
-      <div className="rounded border border-border bg-surface overflow-hidden max-w-xl">
+      <ProfileDetailsForm />
+      <div className="mt-4 rounded border border-border bg-surface overflow-hidden max-w-xl">
         <dl className="divide-y divide-border">
-          <div className="px-4 py-3">
-            <dt className="text-sm font-medium text-foreground-muted">Name</dt>
-            <dd className="mt-0.5 text-foreground">{user.name}</dd>
-          </div>
           <div className="px-4 py-3">
             <dt className="text-sm font-medium text-foreground-muted">Email</dt>
             <dd className="mt-0.5 text-foreground">{user.email}</dd>
