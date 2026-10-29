@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.4.1-197fa1)
+![Version](https://img.shields.io/badge/version-v0.6.0-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -133,6 +133,8 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.6.0** | University and colleges, per-college isolation and semester locks, President role |
+| **v0.5.0** | Audit log with per-page History, semester lock, accountability that survives role changes |
 | **v0.4.1** | Notification bell for schedule, request, feedback and release updates; scheduler toolbar, legends and reset dialog |
 | **v0.4.0** | Subjects with lecture and laboratory units (3 lec + 1 lab = 6 hours a week) |
 | **v0.3.9** | Split Class with a different instructor and a Split label, Assignment panel day and time fix |

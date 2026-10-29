@@ -12,6 +12,9 @@ import type {
   SlotAvailabilityQuery,
 } from "./facultyLoadSchemas.js";
 import { notifyScheduleChange } from "../notifications/notificationService.js";
+import { audit, audited } from "../audit/auditService.js";
+
+const DAY = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 import type { CopyFromPreviousFacultyLoadBody } from "./facultyLoadSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -71,6 +74,15 @@ export async function create(req: Request, res: Response): Promise<void> {
     }
   }
   const load = await facultyLoadService.createFacultyLoad(body, caller);
+  void audit({
+    entityType: "SCHEDULE_BLOCK",
+    entityId: load.id,
+    entityLabel: `${load.subject.code} · ${load.studentClass.name}`,
+    action: "CREATE",
+    summary: `Added ${load.subject.code} to ${load.studentClass.name}: ${DAY[load.dayOfWeek] ?? ""} ${load.startTime}-${load.endTime}`,
+    academicYearId: load.academicYearId,
+    semester: load.semester,
+  });
   void notifyScheduleChange(load.facultyId, "assigned", `${load.subject.code} · ${load.studentClass.name}`, { exceptUserId: req.user?.id });
   res.status(201).json(load);
 }
@@ -133,6 +145,15 @@ export async function remove(req: Request, res: Response): Promise<void> {
     select: { facultyId: true, subject: { select: { code: true } }, studentClass: { select: { name: true } } },
   });
   await facultyLoadService.deleteFacultyLoad(req.params.id, caller);
+  if (gone) {
+    void audit({
+      entityType: "SCHEDULE_BLOCK",
+      entityId: req.params.id,
+      entityLabel: `${gone.subject?.code ?? ""} · ${gone.studentClass?.name ?? ""}`,
+      action: "DELETE",
+      summary: `Removed ${gone.subject?.code ?? "a block"} from ${gone.studentClass?.name ?? "a class"}`,
+    });
+  }
   if (gone) void notifyScheduleChange(gone.facultyId, "removed", `${gone.subject?.code ?? ""} · ${gone.studentClass?.name ?? ""}`, { exceptUserId: req.user?.id });
   res.status(204).send();
 }
@@ -147,13 +168,36 @@ export async function autoAssign(req: Request, res: Response): Promise<void> {
     body.ruleSetId,
     caller
   );
+  const autoClass = await prisma.studentClass.findUnique({ where: { id: body.studentClassId }, select: { name: true } });
+  void audit({
+    entityType: "SCHEDULE_BLOCK",
+    entityId: body.studentClassId,
+    entityLabel: autoClass?.name ?? null,
+    action: "CREATE",
+    summary: `Auto-assigned ${summary.assigned.length} ${summary.assigned.length === 1 ? "block" : "blocks"} for ${autoClass?.name ?? "a class"}`,
+    academicYearId: body.academicYearId,
+    semester: body.semester,
+  });
   res.json(summary);
 }
 
 export async function resetForClass(req: Request, res: Response): Promise<void> {
   const body = req.body as ResetFacultyLoadBody;
   const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
+  const [removed, cls] = await Promise.all([
+    prisma.facultyLoad.count({ where: { academicYearId: body.academicYearId, semester: body.semester, studentClassId: body.studentClassId } }),
+    prisma.studentClass.findUnique({ where: { id: body.studentClassId }, select: { name: true } }),
+  ]);
   await facultyLoadService.resetForClass(body.academicYearId, body.semester, body.studentClassId, caller);
+  void audit({
+    entityType: "SCHEDULE_BLOCK",
+    entityId: body.studentClassId,
+    entityLabel: cls?.name ?? null,
+    action: "DELETE",
+    summary: `Reset the schedule of ${cls?.name ?? "a class"}: ${removed} ${removed === 1 ? "block" : "blocks"} removed`,
+    academicYearId: body.academicYearId,
+    semester: body.semester,
+  });
   res.status(204).send();
 }
 
@@ -161,6 +205,16 @@ export async function copyFromPrevious(req: Request, res: Response): Promise<voi
   const body = req.body as CopyFromPreviousFacultyLoadBody;
   const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
   const summary = await facultyLoadService.copyClassSchedule(body, caller);
+  const copyClass = await prisma.studentClass.findUnique({ where: { id: body.studentClassId }, select: { name: true } });
+  void audit({
+    entityType: "SCHEDULE_BLOCK",
+    entityId: body.studentClassId,
+    entityLabel: copyClass?.name ?? null,
+    action: "CREATE",
+    summary: `Copied ${summary.copied.length} ${summary.copied.length === 1 ? "block" : "blocks"} into ${copyClass?.name ?? "a class"} from a previous term`,
+    academicYearId: body.targetAcademicYearId,
+    semester: body.targetSemester,
+  });
   res.json(summary);
 }
 

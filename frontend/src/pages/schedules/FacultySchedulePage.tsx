@@ -21,7 +21,7 @@ export function FacultySchedulePage() {
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
   const role = user?.role;
-  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY";
+  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {

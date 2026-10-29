@@ -15,6 +15,7 @@ export interface UserFormValues {
   password: string;
   role: Role;
   departmentId: string;
+  collegeId: string;
   status: string;
   maxUnits: string;
 }
@@ -25,6 +26,7 @@ export const EMPTY_USER_FORM: UserFormValues = {
   password: "",
   role: "FACULTY",
   departmentId: "",
+  collegeId: "",
   status: "",
   maxUnits: "18",
 };
@@ -34,6 +36,8 @@ export interface UserFormPayload {
   name: string;
   role: Role;
   departmentId: string | null;
+  /** Only sent when the form offers colleges (the admin). The admin and president role have none. */
+  collegeId?: string | null;
   status: string | null;
   maxUnits: number | null;
   /** Only present when creating. */
@@ -44,7 +48,9 @@ interface UserFormDialogProps {
   mode: "create" | "edit";
   title?: string;
   initial: UserFormValues;
-  departments: { id: string; name: string }[];
+  departments: { id: string; name: string; collegeId?: string | null }[];
+  /** Offer a College field (the admin assigns people to colleges). */
+  colleges?: { id: string; name: string }[];
   /** Roles the caller may assign. A single role locks the role field. */
   allowedRoles: Role[];
   lockDepartment?: boolean;
@@ -73,6 +79,7 @@ export function UserFormDialog({
   title,
   initial,
   departments,
+  colleges,
   allowedRoles,
   lockDepartment = false,
   lockIdentity = false,
@@ -85,6 +92,8 @@ export function UserFormDialog({
   const isCreate = mode === "create";
   const roleLocked = allowedRoles.length === 1;
   const showUnits = isTeachingRole(form.role);
+  const spansColleges = form.role === "ADMIN" || form.role === "PRESIDENT";
+  const departmentChoices = departments.filter((d) => !form.collegeId || !d.collegeId || d.collegeId === form.collegeId);
   const set = <K extends keyof UserFormValues>(key: K, value: UserFormValues[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -104,6 +113,10 @@ export function UserFormDialog({
       toast.error("Enter a valid email address");
       return;
     }
+    if (colleges && !spansColleges && !form.collegeId) {
+      toast.error("Choose the college this person belongs to");
+      return;
+    }
     if (isCreate && form.password.length < 8) {
       toast.error("Password must be at least 8 characters");
       return;
@@ -118,6 +131,7 @@ export function UserFormDialog({
       name,
       role: form.role,
       departmentId: form.departmentId || null,
+      ...(colleges ? { collegeId: spansColleges ? null : form.collegeId || null } : {}),
       status: form.status.trim() || null,
       maxUnits,
     };
@@ -188,6 +202,22 @@ export function UserFormDialog({
               </Select.Content>
             </Select.Root>
           </div>
+          {colleges && !spansColleges && (
+            <div>
+              <label className={labelClass}>College</label>
+              <Select.Root value={form.collegeId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, collegeId: v === "__none__" ? "" : v, departmentId: "" }))}>
+                <Select.Trigger aria-label="College">
+                  <Select.Value placeholder="Choose a college" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="__none__">Choose a college</Select.Item>
+                  {colleges.map((c) => (
+                    <Select.Item key={c.id} value={c.id}>{c.name}</Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+            </div>
+          )}
           <div>
             <label className={labelClass}>Department</label>
             <Select.Root
@@ -200,7 +230,7 @@ export function UserFormDialog({
               </Select.Trigger>
               <Select.Content>
                 <Select.Item value="__none__">No department</Select.Item>
-                {departments.map((d) => (
+                {departmentChoices.map((d) => (
                   <Select.Item key={d.id} value={d.id}>{d.name}</Select.Item>
                 ))}
               </Select.Content>

@@ -77,6 +77,7 @@ export async function createSubject(body: CreateSubjectBody) {
       code: body.code,
       name: body.name,
       ...unitFields,
+      collegeId: body.collegeId,
       yearLevel: body.yearLevel ?? undefined,
       semester: body.semester ?? undefined,
       curriculumId: body.curriculumId ?? undefined,

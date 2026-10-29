@@ -3,6 +3,8 @@ import { z } from "zod";
 export const createDepartmentSchema = z.object({
   body: z.object({
     name: z.string().min(1, "Name required"),
+    /** The admin says which college; everyone else adds to their own. */
+    collegeId: z.string().uuid().optional(),
   }),
 });
 

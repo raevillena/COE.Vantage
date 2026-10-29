@@ -23,7 +23,7 @@ export function StudentSchedulePage() {
   const role = user?.role;
   // A faculty member only sees the classes where they teach, and only through the report endpoints.
   const isFaculty = role === "FACULTY";
-  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY";
+  const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {

@@ -4,6 +4,7 @@ import { badRequest, conflict, forbidden, notFound } from "../../utils/errors.js
 import { assertRoomAssignable, assertStudentClassInDepartment, requiredMinutesForSubject, timeToMinutes } from "../facultyLoads/facultyLoadService.js";
 import type { CallerContext } from "../facultyLoads/facultyLoadService.js";
 import { codeKey } from "./geParser.js";
+import { assertTermUnlocked } from "../../utils/termLock.js";
 import type { ImportBody } from "./geImportSchemas.js";
 
 const DAY_LABEL = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -230,6 +231,7 @@ export async function previewImport(body: ImportBody, caller: CallerContext, tx?
 /** Creates every new block in one transaction after checking again. */
 export async function saveImport(body: ImportBody, caller: CallerContext) {
   if (caller.role !== "CHAIRMAN") throw forbidden("Only a chairman imports GE schedules");
+  await assertTermUnlocked(body.academicYearId, body.semester);
   return prisma.$transaction(async (tx) => {
     const preview = await previewImport(body, caller, tx);
     if (preview.blockingCount > 0) throw conflict(`${preview.blockingCount} block(s) still have problems to resolve. Nothing was saved.`);

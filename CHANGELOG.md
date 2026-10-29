@@ -2,6 +2,34 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.6.0 - 2026-10-29
+
+University and colleges
+
+- **New:** The system now has a University that holds Colleges. Everything that exists today sits under the College of Engineering, and works as before.
+- **New:** Each college has its own departments, people, rooms, curricula, subjects, classes and schedules, and sees only its own. The admin creates colleges on the new Colleges page and assigns people and departments to them.
+- **New:** President role: sees the whole university and can change nothing. Their home is a University overview with every college side by side: size, scheduled blocks this term, and which semesters each college has locked.
+- **Improved:** Semester locks are now per college. A dean or college secretary locks their own college's semester, and the admin picks the college. A college's lock does not affect another college.
+- **Improved:** The audit log of a dean or college secretary shows their own college. The admin and the president's views span all colleges.
+- **Improved:** Each college sets its own current term, or leaves it as not started. Academic years are shared by all colleges and each name exists only once; the admin and college secretaries can add them, and adding an existing name is refused.
+- **Improved:** GE subjects: the admin chooses which college's sheet to work on, and a term with no sheet yet says so plainly instead of showing an error.
+- **New:** The dean can view the GE subjects and their history. Only the college secretary adds, replaces or removes the sheet.
+- **New:** The dean can view the Faculty page for the whole college: units, deloading and possible subjects of every department, and its history. Adding and changing faculty stays with the chairmen.
+- **Improved:** The dashboard's Excel export is now an icon button with a tooltip beside the semester filter, and the Audit log link sits under Reports in the sidebar.
+
+## v0.5.0 - 2026-10-29
+
+Audit log
+
+- **New:** Audit log: a record of who changed what, for the admin, dean and college secretary only. It covers academic years (including the current term and semester locks), curricula, subjects, student classes, departments, rooms, users, scheduling rules, GE sheets and deloading, and schedules being added or removed.
+- **New:** Each of those pages has a History button that shows the entries for that page. The Audit log page in the sidebar shows everything, with filters by record kind, action, date and text, and an Export CSV button.
+- **New:** Entries cannot be edited or deleted, and each keeps the name, email and role the person had at that moment, so a later change of role or a removed account does not alter the history.
+- **New:** Semester lock: the admin, dean and college secretary can lock a semester from Academic years. A locked semester takes no scheduling changes from anyone until it is unlocked.
+- **New:** Notification bell in the top bar: changes to your schedule, requests, feedback and new releases, with an unread count.
+- **New:** Legends for the scheduler: one for the subject status colours and one for the block markers, and Block colors now sits beside the schedule legend.
+- **Improved:** The scheduler toolbar is tidier: Rules and Auto-schedule on the first row, and Import GE, More (Copy previous, Reset) and Add load on the second. Reset asks in a dialog with a 3 second countdown.
+- **Improved:** Subjects have lecture and laboratory units, and the schedule grid has a faint line at every hour.
+
 ## v0.4.1 - 2026-10-28
 
 Notification bell and scheduler tidy-up

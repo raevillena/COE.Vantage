@@ -37,7 +37,7 @@ async function assertDepartmentCodeAvailable(code: string, excludeId?: string) {
 export async function createDepartment(body: CreateDepartmentBody) {
   const code = codeFromName(body.name);
   await assertDepartmentCodeAvailable(code);
-  return prisma.department.create({ data: { name: body.name, code } });
+  return prisma.department.create({ data: { name: body.name, code, collegeId: body.collegeId } });
 }
 
 export async function updateDepartment(id: string, body: UpdateDepartmentBody) {

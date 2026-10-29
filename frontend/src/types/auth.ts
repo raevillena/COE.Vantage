@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY";
+export type Role = "ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT";
 export type ExperimentalFeatureKey = "gradeModule";
 
 export interface ExperimentalFeaturesPreference {

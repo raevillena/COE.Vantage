@@ -14,6 +14,8 @@ import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayl
 import { DeloadingDialog } from "../../components/faculty/DeloadingDialog";
 import { isTeachingRole } from "../../utils/loadState";
 import type { AcademicYear } from "../../types/api";
+import { HistoryButton } from "../../components/audit/HistoryButton";
+import type { College } from "../../types/api";
 import {
   parseFacultyPaste,
   groupByDepartment,
@@ -69,7 +71,8 @@ export function UsersPage() {
   const [list, setList] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [userForm, setUserForm] = useState<{ id: string | null; initial: UserFormValues } | null>(null);
-  const [departments, setDepartments] = useState<{ id: string; name: string; code?: string | null }[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string; code?: string | null; collegeId?: string | null }[]>([]);
+  const [colleges, setColleges] = useState<College[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [resetEmailLoading, setResetEmailLoading] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export function UsersPage() {
   useEffect(() => {
     load();
     apiClient.get("/departments").then(({ data }) => setDepartments(data));
+    apiClient.get<College[]>("/colleges").then(({ data }) => setColleges(data)).catch(() => setColleges([]));
   }, []);
 
   const openCreate = () => setUserForm({ id: null, initial: { ...EMPTY_USER_FORM } });
@@ -130,6 +134,7 @@ export function UsersPage() {
         password: "",
         role: u.role,
         departmentId: u.departmentId ?? "",
+        collegeId: u.collegeId ?? "",
         status: u.status ?? "",
         maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
       },
@@ -386,7 +391,10 @@ export function UsersPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">Users</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Users</h1>
+          <HistoryButton entityType="USER,DELOADING" title="Users" />
+        </div>
         <div className="flex gap-2">
           <Button
             type="button"
@@ -444,6 +452,7 @@ export function UsersPage() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Email</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Role</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Status</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Max units</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
@@ -456,6 +465,7 @@ export function UsersPage() {
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.role}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{u.college?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
                   <td className="px-4 py-2 text-right">
@@ -560,7 +570,8 @@ export function UsersPage() {
           mode={userForm.id ? "edit" : "create"}
           initial={userForm.initial}
           departments={departments}
-          allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}
+          colleges={colleges}
+          allowedRoles={["ADMIN", "PRESIDENT", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}
           onClose={() => setUserForm(null)}
           onSubmit={submitUserForm}
         />

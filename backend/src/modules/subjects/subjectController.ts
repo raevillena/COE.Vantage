@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import * as subjectService from "./subjectService.js";
 import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody, CopyPrioritizedFacultyBody, PutSubjectRoomsBody } from "./subjectSchemas.js";
 import { prioritizedTermQuerySchema } from "./subjectSchemas.js";
+import { audited } from "../audit/auditService.js";
 import { badRequest } from "../../utils/errors.js";
 
 function caller(req: Request) {
@@ -20,18 +21,18 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateSubjectBody;
-  const s = await subjectService.createSubject(body);
+  const s = await audited({ entityType: "SUBJECT", model: "subject", action: "CREATE", label: (r) => `${r.code} ${r.name}` }, () => subjectService.createSubject(body));
   res.status(201).json(s);
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateSubjectBody;
-  const s = await subjectService.updateSubject(req.params.id, body);
+  const s = await audited({ entityType: "SUBJECT", model: "subject", action: "UPDATE", id: req.params.id, fields: ["code", "name", "units", "lecUnits", "labUnits", "yearLevel", "semester", "curriculumId", "departmentId"], label: (r) => `${r.code} ${r.name}` }, () => subjectService.updateSubject(req.params.id, body));
   res.json(s);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await subjectService.softDeleteSubject(req.params.id);
+  await audited({ entityType: "SUBJECT", model: "subject", action: "DELETE", id: req.params.id, label: (r) => `${r.code} ${r.name}` }, () => subjectService.softDeleteSubject(req.params.id));
   res.status(204).send();
 }
 
@@ -41,12 +42,12 @@ export async function listTrash(req: Request, res: Response): Promise<void> {
 }
 
 export async function restore(req: Request, res: Response): Promise<void> {
-  await subjectService.restoreSubject(req.params.id);
+  await audited({ entityType: "SUBJECT", model: "subject", action: "RESTORE", id: req.params.id, label: (r) => `${r.code} ${r.name}` }, () => subjectService.restoreSubject(req.params.id));
   res.status(204).send();
 }
 
 export async function permanentDelete(req: Request, res: Response): Promise<void> {
-  await subjectService.permanentDeleteSubject(req.params.id);
+  await audited({ entityType: "SUBJECT", model: "subject", action: "PERMANENT_DELETE", id: req.params.id, label: (r) => `${r.code} ${r.name}` }, () => subjectService.permanentDeleteSubject(req.params.id));
   res.status(204).send();
 }
 

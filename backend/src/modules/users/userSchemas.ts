@@ -39,6 +39,8 @@ export const createUserSchema = z.object({
     name: z.string().min(1),
     role: roleEnum,
     departmentId: z.string().uuid().optional().nullable(),
+    /** The admin says which college; the admin and the president have none. */
+    collegeId: z.string().uuid().optional().nullable(),
     status: z.string().max(100).optional().nullable(),
     maxUnits: z.number().int().min(0).optional().nullable(), // 0 = faculty cannot receive any load
   }),
@@ -50,6 +52,7 @@ export const updateUserSchema = z.object({
     name: z.string().min(1).optional(),
     role: roleEnum.optional(),
     departmentId: z.string().uuid().optional().nullable(),
+    collegeId: z.string().uuid().optional().nullable(),
     status: z.string().max(100).optional().nullable(),
     maxUnits: z.number().int().min(0).optional().nullable(), // 0 = faculty cannot receive any load
   }),

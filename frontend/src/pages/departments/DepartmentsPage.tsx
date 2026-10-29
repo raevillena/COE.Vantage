@@ -9,6 +9,8 @@ import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { isTeachingRole } from "../../utils/loadState";
+import { HistoryButton } from "../../components/audit/HistoryButton";
+import type { College } from "../../types/api";
 import { useAppSelector } from "../../store/hooks";
 
 export function DepartmentsPage() {
@@ -18,7 +20,9 @@ export function DepartmentsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "" });
+  const [form, setForm] = useState({ name: "", collegeId: "" });
+  const [colleges, setColleges] = useState<College[]>([]);
+  const isAdmin = user?.role === "ADMIN";
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -28,6 +32,10 @@ export function DepartmentsPage() {
   const [viewFacultiesList, setViewFacultiesList] = useState<UserListItem[]>([]);
   const [viewFacultiesLoading, setViewFacultiesLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    apiClient.get<College[]>("/colleges").then(({ data }) => setColleges(data)).catch(() => setColleges([]));
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -47,13 +55,13 @@ export function DepartmentsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "" });
+    setForm({ name: "", collegeId: colleges.length === 1 ? colleges[0].id : "" });
     setModalOpen(true);
   };
 
   const openEdit = (d: Department) => {
     setEditingId(d.id);
-    setForm({ name: d.name });
+    setForm({ name: d.name, collegeId: d.collegeId ?? "" });
     setModalOpen(true);
   };
 
@@ -65,7 +73,7 @@ export function DepartmentsPage() {
       return;
     }
     try {
-      const payload = { name: nameTrimmed };
+      const payload = { name: nameTrimmed, ...(isAdmin && !editingId && form.collegeId ? { collegeId: form.collegeId } : {}) };
       if (editingId) {
         await apiClient.patch(`/departments/${editingId}`, payload);
         toast.success("Department updated");
@@ -164,7 +172,10 @@ export function DepartmentsPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-foreground">Departments</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Departments</h1>
+          <HistoryButton entityType="DEPARTMENT" title="Departments" />
+        </div>
         {canManage && <Button type="button" onClick={openCreate}>Add Department</Button>}
       </div>
       {list.length > 0 && (
@@ -229,6 +240,7 @@ export function DepartmentsPage() {
                 )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Code</th>
+                {(isAdmin || user?.role === "PRESIDENT") && <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>}
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
@@ -248,6 +260,7 @@ export function DepartmentsPage() {
                   )}
                   <td className="px-4 py-2 text-foreground">{d.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{d.code ?? "—"}</td>
+                  {(isAdmin || user?.role === "PRESIDENT") && <td className="px-4 py-2 text-foreground-muted">{colleges.find((c) => c.id === d.collegeId)?.name ?? "—"}</td>}
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       {canManage && (
@@ -290,6 +303,14 @@ export function DepartmentsPage() {
         <Dialog.Content title={editingId ? "Edit Department" : "Add Department"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+            {isAdmin && !editingId && colleges.length > 1 && (
+              <select aria-label="College" value={form.collegeId} onChange={(e) => setForm((f) => ({ ...f, collegeId: e.target.value }))} className="w-full rounded border border-border-strong bg-surface px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
+                <option value="">Choose a college</option>
+                {colleges.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
             <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
               Department code
               <HelpTip>End the name with the shorthand in parentheses, for example “Computer Engineering Department (CPE)”. The shorthand is used as the department code in dropdowns.</HelpTip>

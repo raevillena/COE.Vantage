@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { list, getById, getActive, listActive, listForSchedules, setCurrentTerm, create, update, remove, listTrash, restore, permanentDelete } from "./academicYearController.js";
+import { list, getById, getActive, listActive, listForSchedules, setCurrentTerm, setTermLock, create, update, remove, listTrash, restore, permanentDelete } from "./academicYearController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
-import { createAcademicYearSchema, setCurrentTermSchema, updateAcademicYearSchema } from "./academicYearSchemas.js";
+import { createAcademicYearSchema, setCurrentTermSchema, setTermLockSchema, updateAcademicYearSchema } from "./academicYearSchemas.js";
 
 const router = Router();
 
@@ -17,6 +17,9 @@ router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
 // The admin and the college secretary choose the current academic year and semester (the default of the filters).
 router.put("/current-term", authorize("ADMIN", "COLLEGE_SECRETARY"), validate(setCurrentTermSchema), setCurrentTerm);
+
+// The admin, dean and college secretary lock a semester so its schedules stop changing, and unlock it again.
+router.put("/:id/term-lock", authorize("ADMIN", "DEAN", "COLLEGE_SECRETARY"), validate(setTermLockSchema), setTermLock);
 
 router.get("/", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), list);
 router.get("/:id", authorize("ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"), getById);

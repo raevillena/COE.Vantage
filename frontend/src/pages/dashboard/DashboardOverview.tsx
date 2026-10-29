@@ -7,11 +7,12 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { LOAD_STATE_BADGE } from "../../utils/loadState";
-import { Button } from "../../components/ui/button";
 import { currentTerm } from "../../utils/currentTerm";
 import { downloadFromApi } from "../../utils/downloadFile";
 import { MyWorkloadPanel } from "../../components/dashboard/MyWorkloadPanel";
 import { useAppSelector } from "../../store/hooks";
+import { FileSpreadsheet, Loader2 } from "lucide-react";
+import { IconButton } from "../../components/ui/iconButton";
 import { isTeachingRole } from "../../utils/loadState";
 
 interface Alert {
@@ -188,29 +189,22 @@ export function DashboardOverview() {
               </Select.Content>
             </Select.Root>
           </div>
+          {academicYearId && !failed && (
+            <IconButton
+              label="Export all metrics (Excel)"
+              hint="One workbook for the selected term, following your role's scope."
+              disabled={exporting || loading}
+              onClick={async () => {
+                setExporting(true);
+                await downloadFromApi("/dashboard/export", { academicYearId, semester: String(semester), metric: "all" }, "dashboard.xlsx");
+                setExporting(false);
+              }}
+            >
+              {exporting ? <Loader2 size={18} className="animate-spin" aria-hidden /> : <FileSpreadsheet size={18} aria-hidden />}
+            </IconButton>
+          )}
         </div>
       </div>
-
-      {academicYearId && !failed && (
-        <div className="mb-3 flex items-center justify-end gap-1.5">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={exporting || loading}
-            onClick={async () => {
-              setExporting(true);
-              await downloadFromApi("/dashboard/export", { academicYearId, semester: String(semester), metric: "all" }, "dashboard.xlsx");
-              setExporting(false);
-            }}
-          >
-            {exporting ? "Preparing…" : "Export all metrics (Excel)"}
-          </Button>
-          <HelpTip>
-            One workbook for the selected term: a summary sheet plus a table for faculty workload, room utilization, curriculum completion, scheduling gaps, the projection and schedule conflicts. It follows your role's scope.
-          </HelpTip>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex justify-center rounded border border-border bg-surface py-10" aria-busy="true">

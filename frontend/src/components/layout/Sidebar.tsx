@@ -22,6 +22,8 @@ import {
   FlaskConical,
   MessageSquarePlus,
   FileSpreadsheet,
+  ScrollText,
+  Landmark,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
@@ -108,6 +110,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             Home
           </div>
           <NavItem to="/dashboard" icon={LayoutDashboard} onClose={onClose}>Dashboard</NavItem>
+          {(user?.role === "ADMIN" || user?.role === "PRESIDENT") && <NavItem to="/university" icon={Landmark} onClose={onClose}>University</NavItem>}
         </div>
 
         {user?.role === "CHAIRMAN" && (
@@ -133,7 +136,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <NavItem to="/schedules/rooms" icon={DoorOpen} onClose={onClose}>Room availability</NavItem>
         </div>
 
-        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "OFFICER" || user?.role === "COLLEGE_SECRETARY") && (
+        {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "OFFICER" || user?.role === "COLLEGE_SECRETARY" || user?.role === "PRESIDENT") && (
           <>
             <Separator.Root className="my-2 h-px bg-border" />
             <div className="space-y-1">
@@ -142,17 +145,19 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               </div>
               <NavItem to="/rooms" icon={Building} onClose={onClose}>Rooms</NavItem>
               {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "COLLEGE_SECRETARY") && <RequestsNavItem onClose={onClose} />}
-              {(user?.role === "ADMIN" || user?.role === "OFFICER" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && (
+              {(user?.role === "ADMIN" || user?.role === "OFFICER" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY" || user?.role === "PRESIDENT") && (
                 <>
                   <NavItem to="/departments" icon={Building2} onClose={onClose}>Departments</NavItem>
                   <NavItem to="/curriculum" icon={BookOpen} onClose={onClose}>Curriculum</NavItem>
-                  {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY") && (
+                  {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "CHAIRMAN" || user?.role === "COLLEGE_SECRETARY" || user?.role === "PRESIDENT") && (
                     <>
                       <NavItem to="/subjects" icon={BookMarked} onClose={onClose}>Subjects</NavItem>
                       <NavItem to="/student-classes" icon={GraduationCap} onClose={onClose}>Student classes</NavItem>
-                      {user?.role === "CHAIRMAN" && <NavItem to="/faculty" icon={Users} onClose={onClose}>Faculty</NavItem>}
+                      {(user?.role === "CHAIRMAN" || user?.role === "DEAN") && <NavItem to="/faculty" icon={Users} onClose={onClose}>Faculty</NavItem>}
                     </>
                   )}
+                  {user?.role === "DEAN" && <NavItem to="/ge-subjects" icon={FileSpreadsheet} onClose={onClose}>GE subjects</NavItem>}
+                  {(user?.role === "DEAN" || user?.role === "PRESIDENT") && <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>}
                   {user?.role === "COLLEGE_SECRETARY" && (
                     <>
                       <NavItem to="/ge-subjects" icon={FileSpreadsheet} onClose={onClose}>GE subjects</NavItem>
@@ -163,6 +168,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   {user?.role === "ADMIN" && (
                     <>
                       <NavItem to="/ge-subjects" icon={FileSpreadsheet} onClose={onClose}>GE subjects</NavItem>
+                      <NavItem to="/colleges" icon={Landmark} onClose={onClose}>Colleges</NavItem>
                       <NavItem to="/users" icon={Users} onClose={onClose}>Users</NavItem>
                       <NavItem to="/academic-years" icon={Calendar} onClose={onClose}>Academic years</NavItem>
                       <NavItem to="/admin/scheduling-rules" icon={SlidersHorizontal} onClose={onClose}>Scheduling rules</NavItem>
@@ -181,6 +187,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             Reports
           </div>
           <NavItem to="/reports" icon={FileText} onClose={onClose}>Reports</NavItem>
+          {(user?.role === "ADMIN" || user?.role === "DEAN" || user?.role === "COLLEGE_SECRETARY") && <NavItem to="/audit-log" icon={ScrollText} onClose={onClose}>Audit log</NavItem>}
         </div>
 
         {experimentalFeatures.length > 0 && (

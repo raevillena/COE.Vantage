@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { isTeachingRole } from "../../utils/teachingRoles.js";
 import { chairmenOf, notifyScheduleChange, notifyUsers } from "../notifications/notificationService.js";
+import { assertTermUnlocked } from "../../utils/termLock.js";
 import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
 export interface CallerContext {
@@ -22,6 +23,7 @@ export async function createAssignmentRequest(body: CreateAssignmentRequestBody,
   if (!subject) throw notFound("Subject not found");
   if (!studentClass) throw notFound("Student class not found");
   if (!academicYear) throw notFound("Academic year not found");
+  await assertTermUnlocked(body.academicYearId, body.semester);
   const subjectDeptId = subject.departmentId ?? studentClass.curriculum.departmentId ?? null;
   if (subjectDeptId === faculty.departmentId) {
     throw badRequest("Faculty is in the same department as the subject; use regular assignment.");
@@ -159,6 +161,7 @@ export async function approveRequest(id: string, caller: CallerContext, body?: R
   if (caller.role === "CHAIRMAN" && caller.departmentId !== request.faculty.departmentId) {
     throw forbidden("Only the faculty's department chairman can approve this request");
   }
+  await assertTermUnlocked(request.academicYearId, request.semester, request.collegeId);
   if (caller.role !== "ADMIN" && caller.role !== "DEAN" && caller.role !== "CHAIRMAN") {
     throw forbidden("Not allowed to approve");
   }

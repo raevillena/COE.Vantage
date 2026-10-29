@@ -15,6 +15,12 @@ async function main() {
   await prisma.curriculum.deleteMany({});
   await prisma.room.deleteMany({});
 
+  // 0. University and college: everything below belongs to the College of Engineering
+  const UNIVERSITY_ID = "00000000-0000-0000-0000-0000000000a1";
+  const COLLEGE_ID = "00000000-0000-0000-0000-0000000000a2";
+  await prisma.university.upsert({ where: { id: UNIVERSITY_ID }, update: {}, create: { id: UNIVERSITY_ID, name: "University" } });
+  await prisma.college.upsert({ where: { id: COLLEGE_ID }, update: {}, create: { id: COLLEGE_ID, universityId: UNIVERSITY_ID, name: "College of Engineering", code: "COE" } });
+
   // 1. Departments
   const deptCoe = await prisma.department.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
@@ -58,6 +64,7 @@ async function main() {
     { email: "faculty3@coe.vantage", role: "FACULTY" as const, name: "Prof. Ana Lopez", departmentId: deptEce.id },
     { email: "faculty4@coe.vantage", role: "FACULTY" as const, name: "Dr. Pedro Cruz", departmentId: deptEce.id },
     { email: "officer@coe.vantage", role: "OFFICER" as const, name: "Office Staff", departmentId: deptCoe.id },
+    { email: "president@coe.vantage", role: "PRESIDENT" as const, name: "University President", departmentId: null as string | null },
   ];
 
   const users: { id: string; role: string }[] = [];
@@ -71,6 +78,8 @@ async function main() {
         role: u.role,
         name: u.name,
         departmentId: u.departmentId,
+        // the admin and the president span colleges; everyone else belongs to one
+        collegeId: u.role === "ADMIN" || u.role === "PRESIDENT" ? null : COLLEGE_ID,
       },
     });
     users.push(created);
@@ -321,6 +330,12 @@ async function main() {
   console.log(`  Users: ${users.length} (ADMIN, DEAN, CHAIRMAN, ${facultyUsers.length} FACULTY, OFFICER)`);
   console.log(`  Academic years: 2 (active: ${activeYear.name})`);
   console.log(`  Rooms: ${rooms.length}`);
+  // stamp the college on every record created above
+  for (const table of ["Department", "Curriculum", "Subject", "StudentClass", "Room", "FacultyLoad", "SchedulingRuleSet", "GeOfferingSet", "TermLock", "CrossDepartmentLoadRequest"]) {
+    await prisma.$executeRawUnsafe(`UPDATE "${table}" SET "collegeId" = '${COLLEGE_ID}' WHERE "collegeId" IS NULL`);
+  }
+  await prisma.$executeRawUnsafe(`UPDATE "User" SET "collegeId" = '${COLLEGE_ID}' WHERE "collegeId" IS NULL AND "role" NOT IN ('ADMIN', 'PRESIDENT')`);
+
   const totalSubjects = bsceSubjects.length + bseeSubjects.length;
   console.log(`  Curricula: 2 | Subjects: ${totalSubjects} (BSCE: ${bsceSubjects.length}, BSEE: ${bseeSubjects.length}) | Student classes: 3`);
   console.log(`  Faculty loads: ${totalLoads} (${ay2526.name}: ${loadsData.length}, ${ay2425.name}: ${loadsData2425.length})`);

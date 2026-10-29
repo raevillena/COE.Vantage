@@ -10,6 +10,8 @@ import {
   removeAssignment,
   resolveRuleSetFor,
 } from "./schedulingRuleService.js";
+import { audit, audited } from "../audit/auditService.js";
+import { prisma } from "../../prisma/client.js";
 import type { SchedulingRuleSetConfig } from "./schedulingRuleTypes.js";
 
 function getCaller(req: Request): { role: string; departmentId: string | null } {
@@ -36,7 +38,7 @@ export async function getById(req: Request, res: Response): Promise<void> {
 export async function create(req: Request, res: Response): Promise<void> {
   const body = (req.body as { name: string; description?: string; config: SchedulingRuleSetConfig });
   const caller = getCaller(req);
-  const set = await createRuleSet(body, caller);
+  const set = await audited({ entityType: "SCHEDULING_RULE", model: "schedulingRuleSet", action: "CREATE", label: (r) => String(r.name) }, () => createRuleSet(body, caller));
   res.status(201).json(set);
 }
 
@@ -44,14 +46,14 @@ export async function update(req: Request, res: Response): Promise<void> {
   const id = (req.params as { id: string }).id;
   const body = req.body as { name?: string; description?: string | null; config?: SchedulingRuleSetConfig };
   const caller = getCaller(req);
-  const set = await updateRuleSet(id, body, caller);
+  const set = await audited({ entityType: "SCHEDULING_RULE", model: "schedulingRuleSet", action: "UPDATE", id: id, fields: ["name", "description", "config"], label: (r) => String(r.name) }, () => updateRuleSet(id, body, caller));
   res.json(set);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
   const id = (req.params as { id: string }).id;
   const caller = getCaller(req);
-  await deleteRuleSet(id, caller);
+  await audited({ entityType: "SCHEDULING_RULE", model: "schedulingRuleSet", action: "PERMANENT_DELETE", id: id, label: (r) => String(r.name) }, () => deleteRuleSet(id, caller));
   res.status(204).send();
 }
 
@@ -65,6 +67,19 @@ export async function setAssignmentHandler(req: Request, res: Response): Promise
   const body = req.body as { academicYearId?: string | null; studentClassId?: string | null; ruleSetId: string };
   const caller = getCaller(req);
   await setAssignment(body, caller);
+  const [set, year, cls] = await Promise.all([
+    prisma.schedulingRuleSet.findUnique({ where: { id: body.ruleSetId }, select: { name: true } }),
+    body.academicYearId ? prisma.academicYear.findUnique({ where: { id: body.academicYearId }, select: { name: true } }) : null,
+    body.studentClassId ? prisma.studentClass.findUnique({ where: { id: body.studentClassId }, select: { name: true } }) : null,
+  ]);
+  await audit({
+    entityType: "SCHEDULING_RULE",
+    entityId: body.ruleSetId,
+    entityLabel: set?.name ?? null,
+    action: "UPDATE",
+    summary: `Assigned scheduling rule ${set?.name ?? ""} to ${[cls?.name, year?.name].filter(Boolean).join(", ") || "the whole college"}`,
+    academicYearId: body.academicYearId ?? null,
+  });
   res.status(204).send();
 }
 

@@ -1,9 +1,19 @@
 import type { Role } from "./auth";
 
+export interface College {
+  id: string;
+  name: string;
+  code: string | null;
+  /** The term this college is scheduling now; null when it has not started. */
+  currentAcademicYearId?: string | null;
+  currentSemester?: number | null;
+}
+
 export interface Department {
   id: string;
   name: string;
   code: string | null;
+  collegeId?: string | null;
   deletedAt?: string | null;
 }
 
@@ -94,6 +104,8 @@ export interface AcademicYear {
   isActive: boolean;
   /** 1 = 1st, 2 = 2nd, 3 = Mid Year: the semester filters open on while this year is the active one. */
   currentSemester?: number;
+  /** Semesters locked against scheduling changes. */
+  termLocks?: { semester: number; collegeId?: string; lockedByName: string; lockedAt: string }[];
   deletedAt?: string | null;
 }
 
@@ -103,6 +115,8 @@ export interface UserListItem {
   name: string;
   role: Role;
   departmentId: string | null;
+  collegeId?: string | null;
+  college?: { name: string; code: string | null } | null;
   status?: string | null;
   maxUnits?: number | null;
   department?: { name: string; code: string | null } | null;

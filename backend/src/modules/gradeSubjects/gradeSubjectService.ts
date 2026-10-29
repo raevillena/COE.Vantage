@@ -22,7 +22,7 @@ import { gradingSystemV1Schema, mergeGradingSystemJson } from "../../utils/gradi
 
 type Caller = {
   id: string;
-  role: "ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY";
+  role: "ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT";
   departmentId: string | null;
 };
 

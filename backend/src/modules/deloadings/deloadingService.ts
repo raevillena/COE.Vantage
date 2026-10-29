@@ -3,6 +3,7 @@ import { badRequest, forbidden, notFound } from "../../utils/errors.js";
 import { loadDeloadings, round2 } from "../../utils/deloading.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { notifyUsers } from "../notifications/notificationService.js";
+import { assertTermUnlocked } from "../../utils/termLock.js";
 import type { CopyDeloadingsBody, PutDeloadingsBody } from "./deloadingSchemas.js";
 
 export interface DeloadingCaller {
@@ -42,6 +43,8 @@ async function assertCanEdit(userId: string, caller: DeloadingCaller) {
 /** Replaces one person's deloading for one term. */
 export async function replaceDeloadings(userId: string, body: PutDeloadingsBody, caller: DeloadingCaller) {
   await assertCanEdit(userId, caller);
+  const person = await prisma.user.findUnique({ where: { id: userId }, select: { collegeId: true } });
+  await assertTermUnlocked(body.academicYearId, body.semester, person?.collegeId);
   const ay = await prisma.academicYear.findFirst({ where: { id: body.academicYearId, isDeleted: false } });
   if (!ay) throw badRequest("Academic year not found");
   await prisma.$transaction(async (tx) => {
@@ -77,6 +80,7 @@ export async function copyDeloadings(body: CopyDeloadingsBody, caller: Deloading
   if (body.fromAcademicYearId === body.toAcademicYearId && body.fromSemester === body.toSemester) {
     throw badRequest("Pick a different term to copy from.");
   }
+  await assertTermUnlocked(body.toAcademicYearId, body.toSemester);
   const ay = await prisma.academicYear.findFirst({ where: { id: body.toAcademicYearId, isDeleted: false } });
   if (!ay) throw badRequest("Target academic year not found");
 

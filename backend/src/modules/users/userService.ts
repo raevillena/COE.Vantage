@@ -4,6 +4,7 @@ import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { notifyUsers } from "../notifications/notificationService.js";
+import { currentActor } from "../../utils/auditContext.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 /** `onlyId` narrows the list to one person (a faculty member may only list themselves). */
@@ -18,7 +19,7 @@ export async function listUsers(query: ListUsersQuery, onlyId?: string) {
   if (query.departmentId) where.departmentId = query.departmentId;
   return prisma.user.findMany({
     where,
-    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } } },
     orderBy: { name: "asc" },
   });
 }
@@ -53,7 +54,7 @@ export async function listAssignableFaculty(callerDepartmentId: string | null) {
 export async function getUserById(id: string) {
   const user = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true, createdAt: true, isDeleted: true, department: { select: { name: true, code: true } } },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, isDeleted: true, department: { select: { name: true, code: true } } },
   });
   if (!user || user.isDeleted) throw notFound("User not found");
   const { isDeleted: _d, ...rest } = user;
@@ -63,10 +64,15 @@ export async function getUserById(id: string) {
 export async function createUser(body: CreateUserBody) {
   const existing = await prisma.user.findFirst({ where: { email: body.email, isDeleted: false } });
   if (existing) throw badRequest("Email already registered");
-  if (body.departmentId) {
-    const dept = await prisma.department.findUnique({ where: { id: body.departmentId } });
-    if (!dept || dept.isDeleted) throw badRequest("Department not found");
-  }
+  const dept = body.departmentId ? await prisma.department.findUnique({ where: { id: body.departmentId } }) : null;
+  if (body.departmentId && (!dept || dept.isDeleted)) throw badRequest("Department not found");
+  // The admin and the president belong to no college. Everyone else belongs to the one asked for, their department's,
+  // or the creator's (the stamp in collegeScope.ts fills that in when this stays undefined).
+  const spans = body.role === "ADMIN" || body.role === "PRESIDENT";
+  const mine = currentActor()?.collegeId;
+  if (mine && body.collegeId && body.collegeId !== mine) throw forbidden("You can only add people to your own college.");
+  const collegeId = spans ? null : body.collegeId ?? dept?.collegeId ?? undefined;
+  if (collegeId && dept?.collegeId && dept.collegeId !== collegeId) throw badRequest("That department belongs to another college.");
   const passwordHash = await bcrypt.hash(body.password, 12);
   const user = await prisma.user.create({
     data: {
@@ -74,11 +80,12 @@ export async function createUser(body: CreateUserBody) {
       passwordHash,
       name: body.name,
       role: body.role,
+      collegeId,
       departmentId: body.departmentId ?? undefined,
       status: body.status ?? undefined,
       maxUnits: body.maxUnits ?? undefined,
     },
-    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, status: true, maxUnits: true },
   });
   return user;
 }
@@ -110,17 +117,21 @@ export async function updateUser(
     const dept = await prisma.department.findUnique({ where: { id: body.departmentId } });
     if (!dept || dept.isDeleted) throw badRequest("Department not found");
   }
+  // only the admin moves people between colleges; the admin and president role means no college
+  const movesCollege = body.collegeId !== undefined && (!caller || caller.role === "ADMIN");
+  const spans = body.role === "ADMIN" || body.role === "PRESIDENT";
   const updated = await prisma.user.update({
     where: { id },
     data: {
       email: body.email,
       name: body.name,
       role: body.role,
+      ...(spans ? { collegeId: null } : movesCollege ? { collegeId: body.collegeId } : {}),
       departmentId: body.departmentId ?? undefined,
       ...(body.status !== undefined && { status: body.status }),
       ...(body.maxUnits !== undefined && { maxUnits: body.maxUnits }),
     },
-    select: { id: true, email: true, name: true, role: true, departmentId: true, status: true, maxUnits: true },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, status: true, maxUnits: true },
   });
   if (body.maxUnits !== undefined && body.maxUnits !== user.maxUnits) {
     void notifyUsers([id], {

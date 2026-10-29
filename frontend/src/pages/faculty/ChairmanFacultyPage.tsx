@@ -15,6 +15,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { useAppSelector } from "../../store/hooks";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
 
 /** Subject row from GET /users/:id/prioritized-subjects (possible subjects to teach). */
@@ -33,6 +34,8 @@ export function ChairmanFacultyPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const user = useAppSelector((s) => s.auth.user);
+  // the dean views the faculty of the whole college and changes nothing
+  const viewerOnly = user?.role === "DEAN";
   const [ownDepartment, setOwnDepartment] = useState<{ id: string; name: string } | null>(null);
   const [facultyForm, setFacultyForm] = useState<{ id: string | null; initial: UserFormValues } | null>(null);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -151,6 +154,7 @@ export function ChairmanFacultyPage() {
         password: "",
         role: u.role,
         departmentId: u.departmentId ?? "",
+        collegeId: u.collegeId ?? "",
         status: u.status ?? "",
         maxUnits: u.maxUnits != null ? String(u.maxUnits) : "",
       },
@@ -340,14 +344,17 @@ export function ChairmanFacultyPage() {
         <div className="flex items-center gap-2">
 <h1 className="text-2xl font-semibold text-foreground">
           Faculty</h1>
-<HelpTip>Faculty of your department, including the chairman. Possible subjects define which subjects auto-assign may give each person in the selected term; a subject is only assigned to faculty listed for it.</HelpTip>
+<HelpTip>{viewerOnly ? "Faculty of the whole college, for viewing. Possible subjects define which subjects auto-assign may give each person in the selected term; the chairmen set them." : "Faculty of your department, including the chairman. Possible subjects define which subjects auto-assign may give each person in the selected term; a subject is only assigned to faculty listed for it."}</HelpTip>
+<HistoryButton entityType="USER,DELOADING" title="Faculty" />
 </div>
+        {!viewerOnly && (
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={openCopy} disabled={!academicYearId || academicYears.length < 1}>
             Copy possible subjects from another term
           </Button>
           <Button type="button" onClick={openAdd}>Add Faculty</Button>
         </div>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -420,6 +427,7 @@ export function ChairmanFacultyPage() {
             <thead className="bg-surface-muted">
               <tr>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
+                {viewerOnly && <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Email</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Status</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Units</th>
@@ -440,11 +448,13 @@ export function ChairmanFacultyPage() {
                       </span>
                     )}
                   </td>
+                  {viewerOnly && <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>}
                   <td className="px-4 py-2 text-foreground-muted">{u.email}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
                   <td className="px-4 py-2">{renderUnits(u)}</td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
+                      {!viewerOnly && (
                       <button
                         type="button"
                         onClick={() => openEdit(u)}
@@ -454,12 +464,13 @@ export function ChairmanFacultyPage() {
                       >
                         <Pencil size={20} className="shrink-0" aria-hidden />
                       </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setDeloadTarget(u)}
                         className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
                         aria-label={`Deloading for ${u.name}`}
-                        title="Deloading: units deducted from the maximum"
+                        title={viewerOnly ? "View deloading" : "Deloading: units deducted from the maximum"}
                       >
                         <SlidersHorizontal size={20} className="shrink-0" aria-hidden />
                       </button>
@@ -468,10 +479,11 @@ export function ChairmanFacultyPage() {
                         onClick={() => openPossibleSubjects(u)}
                         className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
                         aria-label={`Manage possible subjects for ${u.name}`}
-                        title="Manage possible subjects to teach"
+                        title={viewerOnly ? "View possible subjects to teach" : "Manage possible subjects to teach"}
                       >
                         <ClipboardList size={20} className="shrink-0" aria-hidden />
                       </button>
+                      {!viewerOnly && (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
                           <button
@@ -494,6 +506,7 @@ export function ChairmanFacultyPage() {
                           </DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -519,6 +532,7 @@ export function ChairmanFacultyPage() {
               </div>
             ) : (
               <>
+                {!viewerOnly && (
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="min-w-0 basis-44">
                     <label htmlFor="ps-scope" className="mb-1 block text-sm font-medium text-foreground">Offered</label>
@@ -581,10 +595,11 @@ export function ChairmanFacultyPage() {
                     {savingSubject ? "…" : "Add"}
                   </Button>
                 </div>
+                )}
 
                 {possibleSubjectsList.length === 0 ? (
                   <p className="py-4 text-center text-foreground-muted">
-                    No possible subjects set. Add subjects above so auto-assign can consider this faculty for those subjects.
+                    {viewerOnly ? "No possible subjects are set for this term." : "No possible subjects set. Add subjects above so auto-assign can consider this faculty for those subjects."}
                   </p>
                 ) : (
                   <div className="rounded border border-border overflow-hidden">
@@ -596,7 +611,7 @@ export function ChairmanFacultyPage() {
                           <th className="px-3 py-2 text-left font-medium text-foreground">Subject</th>
                           <th className="px-3 py-2 text-left font-medium text-foreground">Units</th>
                           <th className="px-3 py-2 text-left font-medium text-foreground">Lab</th>
-                          <th className="px-3 py-2 text-right font-medium text-foreground">Remove</th>
+                          {!viewerOnly && <th className="px-3 py-2 text-right font-medium text-foreground">Remove</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -607,6 +622,7 @@ export function ChairmanFacultyPage() {
                             <td className="px-3 py-2 text-foreground">{row.name}</td>
                             <td className="px-3 py-2 text-foreground-muted">{row.units}</td>
                             <td className="px-3 py-2 text-foreground-muted">{row.isLab ? "Yes" : "—"}</td>
+                            {!viewerOnly && (
                             <td className="px-3 py-2 text-right">
                               <button
                                 type="button"
@@ -618,6 +634,7 @@ export function ChairmanFacultyPage() {
                                 <span className="text-xs font-medium">Remove</span>
                               </button>
                             </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -688,7 +705,7 @@ export function ChairmanFacultyPage() {
           years={academicYears}
           academicYearId={academicYearId}
           semester={semester}
-          canEdit
+          canEdit={!viewerOnly}
           onClose={() => setDeloadTarget(null)}
           onSaved={loadUnits}
         />

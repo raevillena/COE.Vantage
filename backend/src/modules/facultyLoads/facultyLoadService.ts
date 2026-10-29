@@ -64,6 +64,7 @@ import {
   getConfigForAutoAssign,
   getRuleSetConfigById,
 } from "../schedulingRules/schedulingRuleService.js";
+import { assertTermUnlocked } from "../../utils/termLock.js";
 import type { SchedulingRuleSetConfig } from "../schedulingRules/schedulingRuleTypes.js";
 
 export interface ListFacultyLoadsQuery {
@@ -322,6 +323,7 @@ export async function previewFacultyLoad(body: PreviewFacultyLoadBody) {
 }
 
 export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: CallerContext) {
+  await assertTermUnlocked(body.academicYearId, body.semester);
   const effectiveRoomId = body.roomId?.trim() || null;
   if (effectiveRoomId && caller) {
     await assertRoomAssignable(effectiveRoomId, body.academicYearId, body.semester, caller);
@@ -436,6 +438,8 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
 export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody, caller?: CallerContext) {
   const existing = await prisma.facultyLoad.findUnique({ where: { id }, include: { subject: { select: { units: true } } } });
   if (!existing) throw notFound("Faculty load not found");
+  await assertTermUnlocked(existing.academicYearId, existing.semester);
+  if (body.academicYearId || body.semester) await assertTermUnlocked(body.academicYearId ?? existing.academicYearId, body.semester ?? existing.semester);
 
   if (caller) {
     const effectiveStudentClassId = body.studentClassId ?? existing.studentClassId;
@@ -533,6 +537,7 @@ export async function deleteFacultyLoad(id: string, caller?: CallerContext) {
     include: { studentClass: { include: { curriculum: { select: { departmentId: true } } } } },
   });
   if (!load) throw notFound("Faculty load not found");
+  await assertTermUnlocked(load.academicYearId, load.semester);
   if (caller) await assertStudentClassInDepartment(load.studentClassId, caller);
   if (caller) await assertLoadNotLocked(load, caller);
   await prisma.facultyLoad.delete({ where: { id } });
@@ -555,6 +560,7 @@ export async function resetForClass(
   studentClassId: string,
   caller?: CallerContext
 ) {
+  await assertTermUnlocked(academicYearId, semester);
   if (caller) await assertStudentClassInDepartment(studentClassId, caller);
   await prisma.facultyLoad.deleteMany({
     where: { academicYearId, semester, studentClassId },
@@ -582,6 +588,7 @@ export interface CopyClassScheduleResult {
 
 export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, caller?: CallerContext): Promise<CopyClassScheduleResult> {
   const { studentClassId, sourceAcademicYearId, sourceSemester, targetAcademicYearId, targetSemester } = body;
+  await assertTermUnlocked(targetAcademicYearId, targetSemester);
 
   if (caller) await assertStudentClassInDepartment(studentClassId, caller);
 
@@ -731,6 +738,7 @@ export async function autoAssignForClass(
   ruleSetIdOverride?: string,
   caller?: CallerContext
 ) {
+  await assertTermUnlocked(academicYearId, semester);
   if (caller) await assertStudentClassInDepartment(studentClassId, caller);
   const studentClass = await prisma.studentClass.findUnique({
     where: { id: studentClassId },

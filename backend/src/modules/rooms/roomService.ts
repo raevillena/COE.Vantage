@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden, conflict } from "../../utils/errors.js";
+import { assertTermUnlocked } from "../../utils/termLock.js";
 import type { CreateRoomBody, UpdateRoomBody, ListRoomsQuery, SetRoomAvailabilityBody, TransferRoomBody } from "./roomSchemas.js";
 
 type Caller = { role: string; departmentId: string | null };
@@ -177,6 +178,7 @@ export async function setRoomTermAvailability(roomId: string, body: SetRoomAvail
     caller.role === "DEAN" ||
     (caller.role === "CHAIRMAN" && caller.departmentId != null && caller.departmentId === room.departmentId);
   if (!allowed) throw forbidden("Only the chairman of the room's department (or an admin/dean) can open or close this room.");
+  await assertTermUnlocked(body.academicYearId, body.semester, room.collegeId);
   return prisma.roomTermAvailability.upsert({
     where: { roomId_academicYearId_semester: { roomId, academicYearId: body.academicYearId, semester: body.semester } },
     create: { roomId, academicYearId: body.academicYearId, semester: body.semester, isOpen: body.isOpen },

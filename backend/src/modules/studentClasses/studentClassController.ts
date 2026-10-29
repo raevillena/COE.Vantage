@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import * as studentClassService from "./studentClassService.js";
+import { audited } from "../audit/auditService.js";
 import type { CreateStudentClassBody, UpdateStudentClassBody } from "./studentClassSchemas.js";
 
 function caller(req: Request) {
@@ -22,7 +23,7 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateStudentClassBody;
-  const c = await studentClassService.createStudentClass(body, caller(req));
+  const c = await audited({ entityType: "STUDENT_CLASS", model: "studentClass", action: "CREATE", label: (r) => String(r.name) }, () => studentClassService.createStudentClass(body, caller(req)));
   res.status(201).json(c);
 }
 
@@ -33,7 +34,7 @@ export async function update(req: Request, res: Response): Promise<void> {
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await studentClassService.softDeleteStudentClass(req.params.id, caller(req));
+  await audited({ entityType: "STUDENT_CLASS", model: "studentClass", action: "DELETE", id: req.params.id, label: (r) => String(r.name) }, () => studentClassService.softDeleteStudentClass(req.params.id, caller(req)));
   res.status(204).send();
 }
 
@@ -43,11 +44,11 @@ export async function listTrash(req: Request, res: Response): Promise<void> {
 }
 
 export async function restore(req: Request, res: Response): Promise<void> {
-  await studentClassService.restoreStudentClass(req.params.id, caller(req));
+  await audited({ entityType: "STUDENT_CLASS", model: "studentClass", action: "RESTORE", id: req.params.id, label: (r) => String(r.name) }, () => studentClassService.restoreStudentClass(req.params.id, caller(req)));
   res.status(204).send();
 }
 
 export async function permanentDelete(req: Request, res: Response): Promise<void> {
-  await studentClassService.permanentDeleteStudentClass(req.params.id, caller(req));
+  await audited({ entityType: "STUDENT_CLASS", model: "studentClass", action: "PERMANENT_DELETE", id: req.params.id, label: (r) => String(r.name) }, () => studentClassService.permanentDeleteStudentClass(req.params.id, caller(req)));
   res.status(204).send();
 }

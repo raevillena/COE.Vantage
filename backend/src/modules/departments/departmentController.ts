@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import * as departmentService from "./departmentService.js";
+import { audited } from "../audit/auditService.js";
 import type { CreateDepartmentBody, UpdateDepartmentBody, DepartmentParams } from "./departmentSchemas.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -30,20 +31,20 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateDepartmentBody;
-  const dept = await departmentService.createDepartment(body);
+  const dept = await audited({ entityType: "DEPARTMENT", model: "department", action: "CREATE", label: (r) => String(r.name) }, () => departmentService.createDepartment(body));
   res.status(201).json(dept);
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
   const { id } = req.params as DepartmentParams;
   const body = req.body as UpdateDepartmentBody;
-  const dept = await departmentService.updateDepartment(id, body);
+  const dept = await audited({ entityType: "DEPARTMENT", model: "department", action: "UPDATE", id: id, label: (r) => String(r.name) }, () => departmentService.updateDepartment(id, body));
   res.json(dept);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
   const { id } = req.params as DepartmentParams;
-  await departmentService.softDeleteDepartment(id);
+  await audited({ entityType: "DEPARTMENT", model: "department", action: "DELETE", id: id, label: (r) => String(r.name) }, () => departmentService.softDeleteDepartment(id));
   res.status(204).send();
 }
 
@@ -54,12 +55,12 @@ export async function listTrash(req: Request, res: Response): Promise<void> {
 
 export async function restore(req: Request, res: Response): Promise<void> {
   const { id } = req.params as DepartmentParams;
-  await departmentService.restoreDepartment(id);
+  await audited({ entityType: "DEPARTMENT", model: "department", action: "RESTORE", id: id, label: (r) => String(r.name) }, () => departmentService.restoreDepartment(id));
   res.status(204).send();
 }
 
 export async function permanentDelete(req: Request, res: Response): Promise<void> {
   const { id } = req.params as DepartmentParams;
-  await departmentService.permanentDeleteDepartment(id);
+  await audited({ entityType: "DEPARTMENT", model: "department", action: "PERMANENT_DELETE", id: id, label: (r) => String(r.name) }, () => departmentService.permanentDeleteDepartment(id));
   res.status(204).send();
 }

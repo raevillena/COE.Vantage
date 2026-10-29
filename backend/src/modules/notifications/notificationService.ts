@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma/client.js";
+import { currentActor, runUnscoped } from "../../utils/auditContext.js";
 import { badRequest } from "../../utils/errors.js";
 
 /** Read notifications older than this are deleted when their owner opens the list. */
@@ -36,7 +37,7 @@ export async function notifyUsers(userIds: Array<string | null | undefined>, spe
     const ids = [...new Set(userIds.filter((id): id is string => Boolean(id) && id !== opts.exceptUserId))];
     if (ids.length === 0) return;
     const increment = Math.max(1, opts.increment ?? 1);
-    const active = await prisma.user.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } });
+    const active = await runUnscoped(() => prisma.user.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true } }));
     const since = new Date(Date.now() - COALESCE_MINUTES * 60_000);
     for (const { id: userId } of active) {
       const open = spec.groupKey
@@ -70,18 +71,25 @@ export async function notifyUsers(userIds: Array<string | null | undefined>, spe
 /** Everyone who may act on cross-department requests for a department: its chairmen. */
 export async function chairmenOf(departmentId: string | null | undefined): Promise<string[]> {
   if (!departmentId) return [];
-  const rows = await prisma.user.findMany({ where: { role: "CHAIRMAN", departmentId, isDeleted: false }, select: { id: true } });
+  const rows = await runUnscoped(() => prisma.user.findMany({ where: { role: "CHAIRMAN", departmentId, isDeleted: false }, select: { id: true } }));
   return rows.map((r) => r.id);
 }
 
-export async function userIdsWithRole(...roles: Array<"ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY">): Promise<string[]> {
-  const rows = await prisma.user.findMany({ where: { role: { in: roles }, isDeleted: false }, select: { id: true } });
+/** People with these roles: the admin and president always (they span colleges), everyone else only in the signed-in person's college. */
+export async function userIdsWithRole(...roles: Array<"ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT">): Promise<string[]> {
+  const mine = currentActor()?.collegeId;
+  const rows = await runUnscoped(() =>
+    prisma.user.findMany({
+      where: { role: { in: roles }, isDeleted: false, ...(mine ? { OR: [{ collegeId: mine }, { collegeId: null }] } : {}) },
+      select: { id: true },
+    })
+  );
   return rows.map((r) => r.id);
 }
 
 /** Every active user, for announcements such as a change of the current term. */
 export async function allUserIds(): Promise<string[]> {
-  const rows = await prisma.user.findMany({ where: { isDeleted: false }, select: { id: true } });
+  const rows = await runUnscoped(() => prisma.user.findMany({ where: { isDeleted: false }, select: { id: true } }));
   return rows.map((r) => r.id);
 }
 

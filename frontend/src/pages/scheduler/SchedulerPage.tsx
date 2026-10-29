@@ -37,7 +37,7 @@ import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOver
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
 import { GeImportModal } from "../../components/scheduler/geImport/GeImportModal";
-import { Copy, FileUp, MoreHorizontal, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { Copy, FileUp, Lock, MoreHorizontal, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
@@ -56,6 +56,8 @@ import { BlockColorPicker } from "../../components/scheduler/BlockColorPicker";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { useSchedulePalette } from "../../context/SchedulePaletteContext";
 import { ResetScheduleDialog } from "../../components/scheduler/ResetScheduleDialog";
+import { SEMESTER_NAME, findTermLock, lockedOn } from "../../utils/termLock";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { facultyRoleSuffix } from "../../components/scheduler/facultyGroups";
 
 type ViewMode = "class" | "faculty";
@@ -576,6 +578,10 @@ export function SchedulerPage() {
     setActiveDragLoad(null);
     setOverSlotId(null);
     const { active, over } = event;
+    if (termLock) {
+      toast.error("This semester is locked, so the schedule cannot be changed.");
+      return;
+    }
     if (!over?.id || typeof over.id !== "string") return;
     const slot = parseSlotId(over.id);
     if (!slot) return;
@@ -1145,6 +1151,8 @@ export function SchedulerPage() {
     (f) => f.departmentId === user?.departmentId && (!slotAvailability || slotAvailability.facultyIds.includes(f.id))
   );
 
+  const termLock = academicYearId ? findTermLock(academicYears, academicYearId, semester) : undefined;
+
   const showGrid = academicYearId && (viewMode === "class" ? studentClassId : viewMode === "faculty" ? selectedFacultyId : false);
 
   const SCHEDULE_HOUR_END_DEFAULT = 18;
@@ -1153,8 +1161,20 @@ export function SchedulerPage() {
 
   return (
     <div className="flex flex-col min-h-[55vh] h-auto overflow-y-auto">
-      <h1 className="text-2xl font-semibold text-foreground mb-4 shrink-0">Scheduler</h1>
+      <div className="mb-4 flex shrink-0 items-center gap-3">
+        <h1 className="text-2xl font-semibold text-foreground">Scheduler</h1>
+        <HistoryButton entityType="SCHEDULE_BLOCK" title="Schedule" />
+      </div>
       <section aria-label="Scheduler toolbar" className="mb-4 flex shrink-0 flex-col gap-3.5 rounded-xl border border-border bg-surface p-4">
+        {termLock && (
+          <div role="status" className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning-muted px-3 py-2 text-sm text-foreground">
+            <Lock size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+            <p>
+              <strong className="font-semibold">{SEMESTER_NAME[semester]} of {academicYears.find((y) => y.id === academicYearId)?.name} is locked</strong>
+              {" "}by {termLock.lockedByName}{lockedOn(termLock) ? ` on ${lockedOn(termLock)}` : ""}. The schedule can be viewed but not changed until the admin, dean or college secretary unlocks it.
+            </p>
+          </div>
+        )}
         {/* Row 1: what is being scheduled, and how auto-schedule behaves */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[160px]">
@@ -1266,7 +1286,7 @@ export function SchedulerPage() {
                 type="button"
                 variant="accent"
                 onClick={handleAutoSchedule}
-                disabled={autoScheduling}
+                disabled={autoScheduling || Boolean(termLock)}
                 className={`flex items-center gap-1.5 px-3 text-sm ${schedulePalette.accent}`}
                 title="Auto-schedule remaining subjects for this class"
               >
@@ -1289,6 +1309,7 @@ export function SchedulerPage() {
               type="button"
               variant="secondary"
               onClick={() => setGeImportOpen(true)}
+              disabled={Boolean(termLock)}
               className="flex items-center gap-1.5 px-3 text-sm"
               title="Import a GE course offering sheet into a class"
             >
@@ -1298,7 +1319,7 @@ export function SchedulerPage() {
             {viewMode === "class" && studentClassId && (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
-                  <Button type="button" variant="secondary" className="flex items-center gap-1.5 px-3 text-sm" aria-label="More actions">
+                  <Button type="button" variant="secondary" className="flex items-center gap-1.5 px-3 text-sm" aria-label="More actions" disabled={Boolean(termLock)}>
                     <MoreHorizontal size={16} aria-hidden />
                     <span className="hidden sm:inline">More</span>
                   </Button>
@@ -1333,6 +1354,7 @@ export function SchedulerPage() {
             <Button
               type="button"
               onClick={() => setAddModalOpen(true)}
+              disabled={Boolean(termLock)}
               className="flex items-center gap-1.5 px-3 text-sm"
               title="Add a new faculty load"
             >
@@ -1416,8 +1438,8 @@ export function SchedulerPage() {
                         setOverlayRoomId(load.roomId ?? "");
                         if (load.roomId) setSelectedRoomId(load.roomId);
                       }}
-                      onLoadMove={academicYearId ? handleLoadMove : undefined}
-                      onLoadResize={academicYearId ? handleLoadResize : undefined}
+                      onLoadMove={academicYearId && !termLock ? handleLoadMove : undefined}
+                      onLoadResize={academicYearId && !termLock ? handleLoadResize : undefined}
                       onLoadResizeStart={(load) => {
                         setResizingLoadId(load.id);
                         setOverlayFacultyId(load.facultyId ?? "");

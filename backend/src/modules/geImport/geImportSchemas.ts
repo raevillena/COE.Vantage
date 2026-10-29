@@ -37,6 +37,8 @@ export const collegeQuerySchema = z.object({
   query: z.object({
     academicYearId: z.string().uuid(),
     semester: z.coerce.number().int().min(1).max(2),
+    /** The admin says which college's sheet; everyone else means their own. */
+    collegeId: z.string().uuid().optional(),
   }),
 });
 export type CollegeQuery = z.infer<typeof collegeQuerySchema>["query"];
@@ -46,6 +48,7 @@ export const collegeUploadSchema = z.object({
   academicYearId: z.string().uuid(),
   semester: z.coerce.number().int().min(1).max(2),
   text: z.string().max(900_000).optional(),
+  collegeId: z.string().uuid().optional(),
 });
 
 export const parseTextSchema = z.object({ text: z.string().min(1).max(900_000) });

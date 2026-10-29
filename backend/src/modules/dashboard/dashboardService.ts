@@ -7,6 +7,7 @@ import { timeToMinutes } from "../facultyLoads/facultyLoadService.js";
 import { loadWorkloadRows } from "./dashboardWorkload.js";
 import { countConflicts, findScheduleConflicts } from "./dashboardConflicts.js";
 import { getPendingCount } from "../assignmentRequests/assignmentRequestService.js";
+import { getActiveAcademicYear } from "../academicYears/academicYearService.js";
 import { creditedUnitsByFaculty, loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
 
 export interface DashboardCaller {
@@ -44,7 +45,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
 
   const academicYear = academicYearId
     ? await prisma.academicYear.findFirst({ where: { id: academicYearId, isDeleted: false } })
-    : await prisma.academicYear.findFirst({ where: { isActive: true, isDeleted: false } });
+    : await getActiveAcademicYear();
   if (!academicYear) return { empty: true as const, context: { academicYear: null, semester, scope: scopeLabel(caller) } };
   const ayId = academicYear.id;
 
@@ -259,7 +260,7 @@ export async function getMyWorkload(caller: DashboardCaller, academicYearId: str
   if (!isTeachingRole(caller.role)) throw badRequest("This view is for people who carry a teaching load.");
   const academicYear = academicYearId
     ? await prisma.academicYear.findFirst({ where: { id: academicYearId, isDeleted: false } })
-    : await prisma.academicYear.findFirst({ where: { isActive: true, isDeleted: false } });
+    : await getActiveAcademicYear();
   if (!academicYear) return { empty: true as const, context: { academicYear: null, semester } };
 
   const [rows, loads] = await Promise.all([

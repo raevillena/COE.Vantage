@@ -13,6 +13,7 @@ import { useAppSelector } from "../../store/hooks";
 import { parseIusisCurriculumHtml } from "../../utils/parseIusisCurriculumHtml";
 import { parseIusisCurriculumClipboard } from "../../utils/parseIusisCurriculumClipboard";
 import { labUnitsOf, lecUnitsOf, unitsLabel, weeklyHours } from "../../utils/subjectUnits";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { HelpTip } from "../../components/ui/helpTip";
 
 export function CurriculumPage() {
@@ -269,7 +270,10 @@ export function CurriculumPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-foreground">Curriculum</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Curriculum</h1>
+          <HistoryButton entityType="CURRICULUM" title="Curriculum" />
+        </div>
         {canEdit && (
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={() => openImport("iusis")} disabled={list.length === 0}>Import from IUSIS</Button>

@@ -3,6 +3,7 @@ import * as curriculumService from "./curriculumService.js";
 import * as subjectService from "../subjects/subjectService.js";
 import * as applyImportModule from "./applyImport.js";
 import type { CreateCurriculumBody, UpdateCurriculumBody, ApplyImportBody } from "./curriculumSchemas.js";
+import { audit, audited } from "../audit/auditService.js";
 import { forbidden } from "../../utils/errors.js";
 
 function caller(req: Request) {
@@ -24,18 +25,18 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = req.body as CreateCurriculumBody;
-  const c = await curriculumService.createCurriculum(body, caller(req));
+  const c = await audited({ entityType: "CURRICULUM", model: "curriculum", action: "CREATE", label: (r) => String(r.name) }, () => curriculumService.createCurriculum(body, caller(req)));
   res.status(201).json(c);
 }
 
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateCurriculumBody;
-  const c = await curriculumService.updateCurriculum(req.params.id, body, caller(req));
+  const c = await audited({ entityType: "CURRICULUM", model: "curriculum", action: "UPDATE", id: req.params.id, fields: ["name", "code", "departmentId"], label: (r) => String(r.name) }, () => curriculumService.updateCurriculum(req.params.id, body, caller(req)));
   res.json(c);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await curriculumService.softDeleteCurriculum(req.params.id, caller(req));
+  await audited({ entityType: "CURRICULUM", model: "curriculum", action: "DELETE", id: req.params.id, label: (r) => String(r.name) }, () => curriculumService.softDeleteCurriculum(req.params.id, caller(req)));
   res.status(204).send();
 }
 
@@ -45,12 +46,12 @@ export async function listTrash(req: Request, res: Response): Promise<void> {
 }
 
 export async function restore(req: Request, res: Response): Promise<void> {
-  await curriculumService.restoreCurriculum(req.params.id);
+  await audited({ entityType: "CURRICULUM", model: "curriculum", action: "RESTORE", id: req.params.id, label: (r) => String(r.name) }, () => curriculumService.restoreCurriculum(req.params.id));
   res.status(204).send();
 }
 
 export async function permanentDelete(req: Request, res: Response): Promise<void> {
-  await curriculumService.permanentDeleteCurriculum(req.params.id);
+  await audited({ entityType: "CURRICULUM", model: "curriculum", action: "PERMANENT_DELETE", id: req.params.id, label: (r) => String(r.name) }, () => curriculumService.permanentDeleteCurriculum(req.params.id));
   res.status(204).send();
 }
 
@@ -64,6 +65,15 @@ export async function applyImport(req: Request, res: Response): Promise<void> {
     }
   }
   const result = await applyImportModule.applyImport(curriculumId, subjects);
+  const target = await curriculumService.getCurriculumById(curriculumId);
+  await audit({
+    entityType: "CURRICULUM",
+    entityId: curriculumId,
+    entityLabel: target.name,
+    action: "IMPORT",
+    summary: `Imported subjects into curriculum ${target.name}: ${result.created} added, ${result.updated} updated`,
+    changes: { subjects: { to: { created: result.created, updated: result.updated, errors: result.errors.length } } },
+  });
   res.json(result);
 }
 

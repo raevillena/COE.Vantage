@@ -6,6 +6,7 @@ import { simulateProjection } from "./dashboardProjection.js";
 import { loadWorkloadRows } from "./dashboardWorkload.js";
 import { findScheduleConflicts } from "./dashboardConflicts.js";
 import type { DashboardCaller } from "./dashboardService.js";
+import { getActiveAcademicYear } from "../academicYears/academicYearService.js";
 import { loadCurriculumProgress, loadRoomUtilization, ROOM_AVAILABLE_MINUTES } from "./dashboardProgress.js";
 
 export const analyticsQuerySchema = z.object({
@@ -49,7 +50,7 @@ export async function getDashboardAnalytics(caller: DashboardCaller, query: Anal
 
   const academicYear = query.academicYearId
     ? await prisma.academicYear.findFirst({ where: { id: query.academicYearId, isDeleted: false } })
-    : await prisma.academicYear.findFirst({ where: { isActive: true, isDeleted: false } });
+    : await getActiveAcademicYear();
   if (!academicYear) throw badRequest("No academic year available");
   const ayId = academicYear.id;
   const { semester, page, pageSize, q } = query;

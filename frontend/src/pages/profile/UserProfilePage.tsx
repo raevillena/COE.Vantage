@@ -19,6 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
   CHAIRMAN: "Chairman",
   FACULTY: "Faculty",
   OFFICER: "Officer",
+  PRESIDENT: "President",
 };
 
 function ChangePasswordForm() {

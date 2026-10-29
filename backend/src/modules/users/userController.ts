@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import * as userService from "./userService.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
+import { audited } from "../audit/auditService.js";
 import { forbidden, badRequest } from "../../utils/errors.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -31,7 +32,7 @@ export async function create(req: Request, res: Response): Promise<void> {
     if (body.role !== "FACULTY") throw forbidden("Chairman can only add faculty.");
     body.departmentId = req.user.departmentId; // always their own department
   }
-  const user = await userService.createUser(body);
+  const user = await audited({ entityType: "USER", model: "user", action: "CREATE", label: (r) => `${r.name} (${r.email})` }, () => userService.createUser(body));
   res.status(201).json(user);
 }
 
@@ -40,12 +41,12 @@ export async function update(req: Request, res: Response): Promise<void> {
   // Admins must not set another user's password; only email-based reset is allowed.
   if ("password" in body) delete body.password;
   const caller = req.user ? { id: req.user.id, role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
-  const user = await userService.updateUser(req.params.id, body, caller);
+  const user = await audited({ entityType: "USER", model: "user", action: "UPDATE", id: req.params.id, fields: ["email", "name", "role", "departmentId", "status", "maxUnits"], label: (r) => `${r.name} (${r.email})` }, () => userService.updateUser(req.params.id, body, caller));
   res.json(user);
 }
 
 export async function remove(req: Request, res: Response): Promise<void> {
-  await userService.softDeleteUser(req.params.id);
+  await audited({ entityType: "USER", model: "user", action: "DELETE", id: req.params.id, label: (r) => `${r.name} (${r.email})` }, () => userService.softDeleteUser(req.params.id));
   res.status(204).send();
 }
 
@@ -55,12 +56,12 @@ export async function listTrash(req: Request, res: Response): Promise<void> {
 }
 
 export async function restore(req: Request, res: Response): Promise<void> {
-  await userService.restoreUser(req.params.id);
+  await audited({ entityType: "USER", model: "user", action: "RESTORE", id: req.params.id, label: (r) => `${r.name} (${r.email})` }, () => userService.restoreUser(req.params.id));
   res.status(204).send();
 }
 
 export async function permanentDelete(req: Request, res: Response): Promise<void> {
-  await userService.permanentDeleteUser(req.params.id);
+  await audited({ entityType: "USER", model: "user", action: "PERMANENT_DELETE", id: req.params.id, label: (r) => `${r.name} (${r.email})` }, () => userService.permanentDeleteUser(req.params.id));
   res.status(204).send();
 }
 

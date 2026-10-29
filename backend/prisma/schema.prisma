@@ -17,76 +17,125 @@ enum Role {
   FACULTY
   OFFICER
   COLLEGE_SECRETARY
+  PRESIDENT // sees the whole university, read only
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String
-  role         Role
-  departmentId String?
-  name         String
+  id                   String    @id @default(uuid())
+  collegeId            String?
+  email                String    @unique
+  passwordHash         String
+  role                 Role
+  departmentId         String?
+  name                 String
   experimentalFeatures Json?
-  lastSeenVersion String? // newest release this person has looked at in the notification bell
-  status       String?    // e.g. Full-time, Part-time (from faculty list)
-  maxUnits     Int?       // max load units per term (null = no cap)
-  isDeleted    Boolean    @default(false)
-  deletedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  lastSeenVersion      String? // newest release this person has looked at in the notification bell
+  status               String? // e.g. Full-time, Part-time (from faculty list)
+  maxUnits             Int? // max load units per term (null = no cap)
+  isDeleted            Boolean   @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  department Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  facultyLoads FacultyLoad[]
-  subjectFacultyPriorities SubjectFacultyPriority[]
-  deloadings FacultyDeloading[]
-  feedbacks Feedback[]
-  notifications Notification[]
+  department                       Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyLoads                     FacultyLoad[]
+  subjectFacultyPriorities         SubjectFacultyPriority[]
+  deloadings                       FacultyDeloading[]
+  feedbacks                        Feedback[]
+  notifications                    Notification[]
   crossDepartmentRequestsRequested CrossDepartmentLoadRequest[] @relation("RequestedBy")
   crossDepartmentRequestsResponded CrossDepartmentLoadRequest[] @relation("RespondedBy")
   crossDepartmentRequestsAsFaculty CrossDepartmentLoadRequest[] @relation("FacultyRequested")
-  gradeSubjectsOwned GradeSubject[] @relation("GradeSubjectOwner")
-  gradeSubjectViewerLinks GradeSubjectViewer[]
+  gradeSubjectsOwned               GradeSubject[]               @relation("GradeSubjectOwner")
+  gradeSubjectViewerLinks          GradeSubjectViewer[]
+  college                          College?                     @relation(fields: [collegeId], references: [id])
 
   @@index([role, departmentId])
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
-model Department {
+// The university holds colleges; every college holds its own departments, people, rooms and schedules.
+model University {
   id        String   @id @default(uuid())
   name      String
   code      String?
-  isDeleted Boolean  @default(false)
-  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  colleges College[]
+}
+
+model College {
+  id                    String    @id @default(uuid())
+  universityId          String
+  name                  String
+  code                  String?
+  /// The term this college is scheduling now; both null = it has not started. Academic years are shared, each college picks its own.
+  currentAcademicYearId String?
+  currentSemester       Int?
+  isDeleted             Boolean   @default(false)
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  university          University                   @relation(fields: [universityId], references: [id])
+  currentAcademicYear AcademicYear?                @relation("CollegeCurrentYear", fields: [currentAcademicYearId], references: [id], onDelete: SetNull)
   users               User[]
-  rooms               Room[]
-  roomsControlled     Room[]  @relation("ControlDepartment")
+  departments         Department[]
   curricula           Curriculum[]
   subjects            Subject[]
-  gradeSubjects       GradeSubject[]
-  schedulingRuleSets  SchedulingRuleSet[]
+  studentClasses      StudentClass[]
+  rooms               Room[]
+  facultyLoads        FacultyLoad[]
+  ruleSets            SchedulingRuleSet[]
+  geOfferingSets      GeOfferingSet[]
+  termLocks           TermLock[]
+  requests            CrossDepartmentLoadRequest[]
+
+  @@index([universityId])
+}
+
+model Department {
+  id        String    @id @default(uuid())
+  collegeId String?
+  name      String
+  code      String?
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  users              User[]
+  rooms              Room[]
+  roomsControlled    Room[]              @relation("ControlDepartment")
+  curricula          Curriculum[]
+  subjects           Subject[]
+  gradeSubjects      GradeSubject[]
+  schedulingRuleSets SchedulingRuleSet[]
+  college            College?            @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
 model GradeSubject {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   name                  String
   code                  String?
   ownerId               String
   departmentId          String?
   gradingSystem         Json?
-  studentComputeEnabled Boolean  @default(false)
-  isDeleted             Boolean  @default(false)
+  studentComputeEnabled Boolean   @default(false)
+  isDeleted             Boolean   @default(false)
   deletedAt             DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  owner       User               @relation("GradeSubjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  department  Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  viewers     GradeSubjectViewer[]
-  records     GradeRecord[]
+  owner      User                 @relation("GradeSubjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  department Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  viewers    GradeSubjectViewer[]
+  records    GradeRecord[]
 
   @@index([ownerId, isDeleted])
   @@index([departmentId])
@@ -107,7 +156,7 @@ model GradeSubjectViewer {
 }
 
 model GradeRecord {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   subjectId     String
   studentName   String
   studentNumber String
@@ -117,8 +166,8 @@ model GradeRecord {
   maxScores     Json?
   computedGrade Json?
   emailSentAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   subject GradeSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
@@ -127,127 +176,144 @@ model GradeRecord {
 }
 
 model Room {
-  id                   String   @id @default(uuid())
-  name                 String
-  capacity             Int
-  hasComputer          Boolean  @default(false)
-  isLab                Boolean  @default(false)
-  hasAC                Boolean  @default(false)
-  departmentId         String
-  controlDepartmentId  String?  // department that controls assignment; when closed, only they can assign
-  isDeleted            Boolean  @default(false)
-  deletedAt            DateTime?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  collegeId           String?
+  name                String
+  capacity            Int
+  hasComputer         Boolean   @default(false)
+  isLab               Boolean   @default(false)
+  hasAC               Boolean   @default(false)
+  departmentId        String
+  controlDepartmentId String? // department that controls assignment; when closed, only they can assign
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  department          Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  controlDepartment   Department?  @relation("ControlDepartment", fields: [controlDepartmentId], references: [id], onDelete: SetNull)
-  facultyLoads        FacultyLoad[]
-  termAvailability    RoomTermAvailability[]
-  subjectRooms        SubjectRoom[]
+  department                  Department                   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  controlDepartment           Department?                  @relation("ControlDepartment", fields: [controlDepartmentId], references: [id], onDelete: SetNull)
+  facultyLoads                FacultyLoad[]
+  termAvailability            RoomTermAvailability[]
+  subjectRooms                SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
+  college                     College?                     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([departmentId])
   @@index([departmentId, isLab, capacity])
   @@index([controlDepartmentId])
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
 model AcademicYear {
-  id        String   @id @default(uuid())
-  name      String   // e.g. "2025-2026"
-  isActive  Boolean  @default(false)
-  currentSemester Int @default(1) // 1 = 1st, 2 = 2nd, 3 = Mid Year; the default semester while this year is the active one
-  isDeleted Boolean  @default(false)
-  deletedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(uuid())
+  name            String // e.g. "2025-2026"
+  isActive        Boolean   @default(false)
+  currentSemester Int       @default(1) // 1 = 1st, 2 = 2nd, 3 = Mid Year; the default semester while this year is the active one
+  isDeleted       Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  facultyLoads           FacultyLoad[]
-  roomTermAvailability   RoomTermAvailability[]
-  crossDepartmentRequests CrossDepartmentLoadRequest[]
+  facultyLoads                 FacultyLoad[]
+  roomTermAvailability         RoomTermAvailability[]
+  crossDepartmentRequests      CrossDepartmentLoadRequest[]
   schedulingRuleSetAssignments SchedulingRuleSetAssignment[]
-  subjectFacultyPriorities SubjectFacultyPriority[]
-  deloadings FacultyDeloading[]
-  geOfferingSets GeOfferingSet[]
+  subjectFacultyPriorities     SubjectFacultyPriority[]
+  deloadings                   FacultyDeloading[]
+  geOfferingSets               GeOfferingSet[]
+  termLocks                    TermLock[]
+  collegesCurrent              College[]                     @relation("CollegeCurrentYear")
+
   @@index([isDeleted])
 }
 
 model Curriculum {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
+  collegeId    String?
   name         String
   code         String?
   departmentId String?
-  isDeleted    Boolean  @default(false)
+  isDeleted    Boolean   @default(false)
   deletedAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  department    Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  subjects      Subject[]
+  department     Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  subjects       Subject[]
   studentClasses StudentClass[]
+  college        College?       @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
 model Subject {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
+  collegeId    String?
   code         String
   name         String
-  units        Int      // total units: lecUnits + labUnits (the curriculum checklist figure)
-  lecUnits     Int      @default(0) // lecture units, 1 hour/week each
-  labUnits     Int      @default(0) // laboratory units, 3 hours/week each; faculty load credit = lecUnits + 3 * labUnits
-  isLab        Boolean  @default(false) // pure laboratory subject (no lecture units): needs a laboratory room
-  yearLevel    Int?     // 1-5
-  semester     Int?     // 1 = 1st sem, 2 = 2nd sem, 3 = mid year
+  units        Int // total units: lecUnits + labUnits (the curriculum checklist figure)
+  lecUnits     Int       @default(0) // lecture units, 1 hour/week each
+  labUnits     Int       @default(0) // laboratory units, 3 hours/week each; faculty load credit = lecUnits + 3 * labUnits
+  isLab        Boolean   @default(false) // pure laboratory subject (no lecture units): needs a laboratory room
+  yearLevel    Int? // 1-5
+  semester     Int? // 1 = 1st sem, 2 = 2nd sem, 3 = mid year
   curriculumId String?
   departmentId String?
-  isDeleted    Boolean  @default(false)
+  isDeleted    Boolean   @default(false)
   deletedAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  curriculum    Curriculum?  @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
-  department    Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  facultyLoads  FacultyLoad[]
-  subjectFacultyPriorities SubjectFacultyPriority[]
-  subjectRooms SubjectRoom[]
+  curriculum                  Curriculum?                  @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
+  department                  Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  facultyLoads                FacultyLoad[]
+  subjectFacultyPriorities    SubjectFacultyPriority[]
+  subjectRooms                SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
+  college                     College?                     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
   @@unique([curriculumId, code])
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
 model StudentClass {
-  id           String   @id @default(uuid())
-  name         String   // e.g. BSCE-3A
+  id           String    @id @default(uuid())
+  collegeId    String?
+  name         String // e.g. BSCE-3A
   yearLevel    Int
   curriculumId String
   studentCount Int
-  isDeleted    Boolean  @default(false)
+  isDeleted    Boolean   @default(false)
   deletedAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  curriculum   Curriculum   @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
-  facultyLoads FacultyLoad[]
-  crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
+  curriculum                   Curriculum                    @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  facultyLoads                 FacultyLoad[]
+  crossDepartmentLoadRequests  CrossDepartmentLoadRequest[]
   schedulingRuleSetAssignments SchedulingRuleSetAssignment[]
+  college                      College?                      @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([curriculumId])
   @@index([isDeleted])
+  @@index([collegeId])
 }
 
 // Per-term room availability: closed = only control dept can assign; open = any dept
 model RoomTermAvailability {
-  id              String   @id @default(uuid())
-  roomId          String
-  academicYearId  String
-  semester        Int      // 1 or 2
-  isOpen          Boolean  @default(false) // when true, any department can assign
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  roomId         String
+  academicYearId String
+  semester       Int // 1 or 2
+  isOpen         Boolean  @default(false) // when true, any department can assign
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  room          Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  academicYear  AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  room         Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, academicYearId, semester])
   @@index([roomId])
@@ -262,12 +328,13 @@ enum CrossDepartmentRequestStatus {
 
 // Chairman A requests to assign faculty from Dept B; Chairman B approves/rejects
 model CrossDepartmentLoadRequest {
-  id              String   @id @default(uuid())
+  id              String                       @id @default(uuid())
+  collegeId       String?
   requestedById   String
   facultyId       String
   subjectId       String
   studentClassId  String
-  roomId          String?  // nullable for off-system room
+  roomId          String? // nullable for off-system room
   roomDisplayName String?
   dayOfWeek       Int
   startTime       String
@@ -278,48 +345,52 @@ model CrossDepartmentLoadRequest {
   respondedById   String?
   respondedAt     DateTime?
   notes           String?
-  replacesLoadId  String?  // when set, approval replaces this existing load (faculty change on edit)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  replacesLoadId  String? // when set, approval replaces this existing load (faculty change on edit)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
 
-  requestedBy   User         @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
-  faculty       User         @relation("FacultyRequested", fields: [facultyId], references: [id], onDelete: Cascade)
-  subject       Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  studentClass  StudentClass @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
-  room          Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  academicYear  AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
-  respondedBy   User?        @relation("RespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
+  requestedBy  User         @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  faculty      User         @relation("FacultyRequested", fields: [facultyId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentClass StudentClass @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
+  room         Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  respondedBy  User?        @relation("RespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
+  college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([facultyId])
   @@index([academicYearId])
   @@index([status])
+  @@index([collegeId])
 }
 
 // dayOfWeek: 1 = Monday, 7 = Saturday (ISO); or 0-6 in some systems - we use 1-7
 // startTime/endTime: "HH:mm" e.g. "08:00", "09:30"
 // facultyId/roomId optional for "Others" faculty and off-system room; use facultyDisplayName/roomDisplayName when null
 model FacultyLoad {
-  id                  String   @id @default(uuid())
-  facultyId           String?  // null = off-system faculty (use facultyDisplayName)
-  facultyDisplayName  String?
-  subjectId           String
-  studentClassId      String
-  roomId              String?  // null = off-system room (use roomDisplayName)
-  roomDisplayName     String?
-  dayOfWeek           Int      // 1 = Mon .. 7 = Sat (or 0-6; we use 1-7 for display)
-  startTime           String   // "HH:mm"
-  endTime             String   // "HH:mm"
-  semester            Int      // 1 or 2
-  academicYearId      String
-  isSplit             Boolean  @default(false) // the class is split between instructors for this subject (see facultyLoadService)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  collegeId          String?
+  facultyId          String? // null = off-system faculty (use facultyDisplayName)
+  facultyDisplayName String?
+  subjectId          String
+  studentClassId     String
+  roomId             String? // null = off-system room (use roomDisplayName)
+  roomDisplayName    String?
+  dayOfWeek          Int // 1 = Mon .. 7 = Sat (or 0-6; we use 1-7 for display)
+  startTime          String // "HH:mm"
+  endTime            String // "HH:mm"
+  semester           Int // 1 or 2
+  academicYearId     String
+  isSplit            Boolean  @default(false) // the class is split between instructors for this subject (see facultyLoadService)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  faculty      User?         @relation(fields: [facultyId], references: [id], onDelete: SetNull)
-  subject      Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  studentClass StudentClass  @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
-  room         Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  faculty      User?        @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentClass StudentClass @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
+  room         Room?        @relation(fields: [roomId], references: [id], onDelete: SetNull)
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([facultyId])
   @@index([roomId])
@@ -328,6 +399,7 @@ model FacultyLoad {
   @@index([roomId, dayOfWeek, academicYearId, semester])
   @@index([facultyId, dayOfWeek, academicYearId, semester])
   @@index([studentClassId, dayOfWeek, academicYearId, semester])
+  @@index([collegeId])
 }
 
 /// Per-term reduction of a person's maximum units (designations, research, admin work). Effective max = maxUnits - sum(units).
@@ -364,11 +436,11 @@ model SubjectRoom {
 }
 
 model SubjectFacultyPriority {
-  id         String   @id @default(uuid())
-  subjectId  String
-  facultyId  String
-  priority   Int      @default(0)
-  createdAt  DateTime @default(now())
+  id             String   @id @default(uuid())
+  subjectId      String
+  facultyId      String
+  priority       Int      @default(0)
+  createdAt      DateTime @default(now())
   /// Term this "possible subject to teach" applies to. Null = legacy row from before terms existed (ignored).
   academicYearId String?
   semester       Int?
@@ -386,33 +458,36 @@ model SubjectFacultyPriority {
 // Configurable rule set for auto-schedule (work hours, lunch, MWF preference, etc.). Assignable per academic year and/or student class.
 model SchedulingRuleSet {
   id           String   @id @default(uuid())
+  collegeId    String?
   name         String
   description  String?
-  config       Json     // workStartMinutes, workEndMinutes, lunchStart/End, slotStep, preferMwf3Unit, maxBlockMinutes, avoidLunchSpan
-  departmentId String?  // chairman sees only sets for their department or null (shared)
+  config       Json // workStartMinutes, workEndMinutes, lunchStart/End, slotStep, preferMwf3Unit, maxBlockMinutes, avoidLunchSpan
+  departmentId String? // chairman sees only sets for their department or null (shared)
   isSystem     Boolean  @default(false) // system default; not deletable
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  assignments  SchedulingRuleSetAssignment[]
+  department  Department?                   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignments SchedulingRuleSetAssignment[]
+  college     College?                      @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([departmentId])
   @@index([isSystem])
+  @@index([collegeId])
 }
 
 // Which rule set applies for a given (academic year, student class). Resolution: (year, class) exact > (year, null) > (null, class) > default rule set.
 model SchedulingRuleSetAssignment {
-  id              String   @id @default(uuid())
-  academicYearId   String?
-  studentClassId   String?
-  ruleSetId        String
-  createdAt        DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  academicYearId String?
+  studentClassId String?
+  ruleSetId      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  academicYear  AcademicYear?  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
-  studentClass  StudentClass?  @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
-  ruleSet       SchedulingRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear?     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  studentClass StudentClass?     @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
+  ruleSet      SchedulingRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
 
   @@unique([academicYearId, studentClassId])
   @@index([ruleSetId])
@@ -437,13 +512,13 @@ enum FeedbackStatus {
 model Feedback {
   id          String         @id @default(uuid())
   userId      String
-  page        String         // page or section the feedback is about
+  page        String // page or section the feedback is about
   type        FeedbackType
   title       String
   description String
   status      FeedbackStatus @default(NEW)
   adminNote   String?
-  archivedAt  DateTime?      // archived items are hidden from the default list
+  archivedAt  DateTime? // archived items are hidden from the default list
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -455,14 +530,57 @@ model Feedback {
   @@index([userId])
 }
 
+// Append-only history of changes to core records, for accountability. The person is copied into the entry (name, email,
+// role, department) and actorId has no foreign key, so entries stay as they were when a user changes role or is removed.
+model AuditLog {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now())
+  actorId           String?
+  actorName         String
+  actorEmail        String?
+  actorRole         String
+  actorDepartmentId String?
+  entityType        String // ACADEMIC_YEAR, CURRICULUM, SUBJECT, STUDENT_CLASS, DEPARTMENT, ROOM, USER, SCHEDULING_RULE, SCHEDULE_BLOCK, GE_SHEET, DELOADING
+  entityId          String?
+  entityLabel       String? // name of the record at that time
+  action            String
+  summary           String
+  changes           Json? // { field: { from, to } }
+  academicYearId    String?
+  semester          Int?
+  collegeId         String? // college the record belongs to; null = university level
+
+  @@index([createdAt])
+  @@index([collegeId])
+  @@index([entityType, createdAt])
+  @@index([entityId])
+  @@index([actorId])
+}
+
+// A locked semester takes no scheduling changes until it is unlocked (see utils/termLock.ts).
+model TermLock {
+  id             String   @id @default(uuid())
+  collegeId      String?
+  academicYearId String
+  semester       Int // 1 = 1st, 2 = 2nd, 3 = Mid Year
+  lockedByName   String // who locked it, kept as text so it survives account changes
+  lockedAt       DateTime @default(now())
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
+  @@unique([collegeId, academicYearId, semester])
+  @@index([collegeId])
+}
+
 // Bell notification for one user. Events of one kind fold into a single unread row (groupKey, count).
 model Notification {
   id        String    @id @default(uuid())
   userId    String
-  type      String    // SCHEDULE, DELOADING, REQUEST, REQUEST_RESULT, FEEDBACK, TERM, GE_SHEET ...
+  type      String // SCHEDULE, DELOADING, REQUEST, REQUEST_RESULT, FEEDBACK, TERM, GE_SHEET ...
   title     String
   body      String?
-  link      String?   // app route the notification opens
+  link      String? // app route the notification opens
   groupKey  String?
   count     Int       @default(1)
   readAt    DateTime?
@@ -492,9 +610,10 @@ model FeedbackImage {
 /// The college-wide GE course offering sheet of one term, uploaded by the college secretary. Chairmen import their classes from it.
 model GeOfferingSet {
   id             String   @id @default(uuid())
+  collegeId      String?
   academicYearId String
   semester       Int
-  rows           Json     // parsed rows (see geParser.ts)
+  rows           Json // parsed rows (see geParser.ts)
   rowCount       Int
   sourceName     String?
   uploadedByName String?
@@ -502,6 +621,8 @@ model GeOfferingSet {
   updatedAt      DateTime @updatedAt
 
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
-  @@unique([academicYearId, semester])
+  @@unique([collegeId, academicYearId, semester])
+  @@index([collegeId])
 }

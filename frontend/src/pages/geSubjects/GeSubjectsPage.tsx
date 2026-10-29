@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
-import type { AcademicYear } from "../../types/api";
+import type { AcademicYear, College } from "../../types/api";
 import { currentTerm } from "../../utils/currentTerm";
+import { useAppSelector } from "../../store/hooks";
 import { Button } from "../../components/ui/button";
 import { HelpTip } from "../../components/ui/helpTip";
 import { Spinner } from "../../components/ui/spinner";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { DAY_NAMES, type GeGroup, type GeRow } from "../../components/scheduler/geImport/geImportTypes";
 
 interface CollegeSet {
@@ -57,6 +59,14 @@ export function GeSubjectsPage() {
   const [semester, setSemester] = useState(1);
   const [data, setData] = useState<CollegeResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  // the admin works on one college's sheet at a time; a college secretary has only their own
+  const role = useAppSelector((st) => st.auth.user?.role);
+  const isAdmin = role === "ADMIN";
+  // the dean reads the sheet and its history but does not change it
+  const viewerOnly = role === "DEAN";
+  const [colleges, setColleges] = useState<College[]>([]);
+  const [collegeId, setCollegeId] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const [source, setSource] = useState<"paste" | "file">("paste");
   const [text, setText] = useState("");
@@ -83,21 +93,30 @@ export function GeSubjectsPage() {
         }
       })
       .catch(() => toast.error("Could not load the academic years"));
+    apiClient
+      .get<College[]>("/colleges")
+      .then(({ data: cs }) => {
+        setColleges(cs);
+        setCollegeId((cur) => cur || cs[0]?.id || "");
+      })
+      .catch(() => setColleges([]));
   }, []);
 
   const load = useCallback(async () => {
-    if (!yearId) return;
+    if (!yearId || (isAdmin && !collegeId)) return;
     setLoading(true);
+    setLoadError("");
     try {
-      const { data: res } = await apiClient.get<CollegeResponse>("/ge-import/college", { params: { academicYearId: yearId, semester } });
+      const { data: res } = await apiClient.get<CollegeResponse>("/ge-import/college", { params: { academicYearId: yearId, semester, ...(isAdmin ? { collegeId } : {}) } });
       setData(res);
-    } catch {
+    } catch (err: unknown) {
+      // a term with no sheet yet is not an error (the server answers exists: false); this is a real failure
       setData(null);
-      toast.error("Could not load the GE schedule");
+      setLoadError(getApiErrorMessage(err, "The GE schedule could not be read. Try again."));
     } finally {
       setLoading(false);
     }
-  }, [yearId, semester]);
+  }, [yearId, semester, isAdmin, collegeId]);
 
   useEffect(() => {
     void load();
@@ -136,9 +155,10 @@ export function GeSubjectsPage() {
         form.append("file", file);
         form.append("academicYearId", yearId);
         form.append("semester", String(semester));
+        if (isAdmin && collegeId) form.append("collegeId", collegeId);
         await apiClient.put("/ge-import/college", form);
       } else {
-        await apiClient.put("/ge-import/college", { academicYearId: yearId, semester, text });
+        await apiClient.put("/ge-import/college", { academicYearId: yearId, semester, text, ...(isAdmin && collegeId ? { collegeId } : {}) });
       }
       toast.success("GE schedule saved for this term");
       setParsed(null);
@@ -156,7 +176,7 @@ export function GeSubjectsPage() {
   const remove = async () => {
     setSaving(true);
     try {
-      await apiClient.delete("/ge-import/college", { params: { academicYearId: yearId, semester } });
+      await apiClient.delete("/ge-import/college", { params: { academicYearId: yearId, semester, ...(isAdmin && collegeId ? { collegeId } : {}) } });
       toast.success("GE schedule removed for this term");
       setConfirmDelete(false);
       await load();
@@ -187,11 +207,22 @@ export function GeSubjectsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold text-foreground">GE subjects</h1>
         <HelpTip>
-          The college-wide GE course offering sheet for a term. Add the whole sheet once, by pasting it or choosing a file, and chairmen import their classes&apos; GE subjects from it in the scheduler (the Import GE button) instead of pasting it themselves. Adding a sheet for a term replaces the one saved before.
+          The college-wide GE course offering sheet for a term. Add the whole sheet once, by pasting it or choosing a file, and chairmen import their classes&apos; GE subjects from it in the scheduler (the Import GE button) instead of pasting it themselves. Adding a sheet for a term replaces the one saved before.{viewerOnly ? " You can view the sheet here; the college secretary adds and replaces it." : ""}
         </HelpTip>
+        <HistoryButton entityType="GE_SHEET" title="GE subjects" />
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        {isAdmin && colleges.length > 1 && (
+          <div>
+            <label htmlFor="ge-college" className="mb-1 block text-xs font-medium text-foreground-muted">College</label>
+            <select id="ge-college" value={collegeId} onChange={(e) => setCollegeId(e.target.value)} className={fieldClass}>
+              {colleges.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label htmlFor="ge-year" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
           <select id="ge-year" value={yearId} onChange={(e) => setYearId(e.target.value)} className={fieldClass}>
@@ -220,7 +251,7 @@ export function GeSubjectsPage() {
               {existing.set.rowCount} rows from {existing.set.sourceName ?? "a pasted sheet"}, added by {existing.set.uploadedByName ?? "unknown"} on{" "}
               {new Date(existing.set.updatedAt).toLocaleString()}.
             </span>
-            {confirmDelete ? (
+            {viewerOnly ? null : confirmDelete ? (
               <span className="flex items-center gap-2">
                 <span>Remove it?</span>
                 <Button size="sm" variant="danger" onClick={remove} disabled={saving}>Yes, remove</Button>
@@ -230,11 +261,16 @@ export function GeSubjectsPage() {
               <Button size="sm" variant="dangerOutline" onClick={() => setConfirmDelete(true)}>Remove</Button>
             )}
           </div>
+        ) : loadError ? (
+          <p role="alert" className="mt-1 text-sm text-danger">{loadError}</p>
         ) : (
-          <p className="mt-1 text-sm text-foreground-muted">Nothing is saved for this term yet. Add the sheet below.</p>
+          <p className="mt-1 text-sm text-foreground-muted">
+            No GE subjects have been added for {yearName}, {semLabel} yet.{viewerOnly ? " The college secretary adds the sheet." : " Add the whole sheet below, and chairmen can then import their classes' GE subjects from it."}
+          </p>
         )}
       </section>
 
+      {!viewerOnly && (
       <section className="rounded border border-border bg-surface p-4" aria-label="Add the GE schedule">
         <h2 className="text-sm font-semibold text-foreground">{existing ? "Replace the sheet" : "Add the sheet"}</h2>
         <div className="mt-2 mb-2 flex items-center gap-2">
@@ -321,6 +357,8 @@ export function GeSubjectsPage() {
           </div>
         )}
       </section>
+
+      )}
 
       {existing && (
         <section aria-label="Saved rows">

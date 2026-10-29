@@ -12,6 +12,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { useAppSelector } from "../../store/hooks";
 
 type RoomForm = {
@@ -429,7 +430,10 @@ export function RoomsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-foreground">Rooms</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Rooms</h1>
+          <HistoryButton entityType="ROOM" title="Rooms" />
+        </div>
         {canAddRoom && <Button type="button" onClick={openCreate}>Add Room</Button>}
       </div>
 

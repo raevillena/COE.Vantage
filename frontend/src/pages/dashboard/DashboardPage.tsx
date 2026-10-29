@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAppSelector } from "../../store/hooks";
 import { DashboardOverview } from "./DashboardOverview";
 import { FacultyDashboard } from "./FacultyDashboard";
@@ -26,6 +26,8 @@ function DashboardCard({ to, title, subtitle, primary }: DashboardCardProps) {
 
 export function DashboardPage() {
   const user = useAppSelector((s) => s.auth.user);
+  // the president's home is the university overview
+  if (user?.role === "PRESIDENT") return <Navigate to="/university" replace />;
 
   return (
     <div className="mb-6">

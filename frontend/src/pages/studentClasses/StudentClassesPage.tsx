@@ -8,11 +8,13 @@ import { Select } from "../../components/ui/select";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { useAppSelector } from "../../store/hooks";
 
 export function StudentClassesPage() {
   /** The college secretary can view everything the dean can but never change it. */
-  const readOnly = useAppSelector((st) => st.auth.user?.role) === "COLLEGE_SECRETARY";
+  const role = useAppSelector((st) => st.auth.user?.role);
+  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
   const [list, setList] = useState<StudentClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -165,7 +167,10 @@ export function StudentClassesPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-foreground">Student Classes</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Student Classes</h1>
+          <HistoryButton entityType="STUDENT_CLASS" title="Student classes" />
+        </div>
         {!readOnly && <Button type="button" onClick={openCreate}>Add Student Class</Button>}
       </div>
       {list.length > 0 && (

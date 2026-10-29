@@ -13,6 +13,8 @@ export const createSubjectSchema = z.object({
     semester: z.number().int().min(1).max(3).optional().nullable(),
     curriculumId: z.string().uuid().optional().nullable(),
     departmentId: z.string().uuid().optional().nullable(),
+    /** For a subject with no curriculum or department: the admin says which college; everyone else means their own. */
+    collegeId: z.string().uuid().optional(),
   }),
 });
 

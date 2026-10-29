@@ -12,6 +12,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
 import { labUnitsOf, lecUnitsOf, unitsLabel, weeklyHours } from "../../utils/subjectUnits";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import {
   PrioritizedFacultyModal,
   type FacultyWithDepartment,
@@ -20,7 +21,8 @@ import {
 
 export function SubjectsPage() {
   /** The college secretary can view everything the dean can but never change it. */
-  const readOnly = useAppSelector((st) => st.auth.user?.role) === "COLLEGE_SECRETARY";
+  const role = useAppSelector((st) => st.auth.user?.role);
+  const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT";
   const [list, setList] = useState<Subject[]>([]);
   /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
   const [curriculumFilter, setCurriculumFilter] = useState("");
@@ -325,7 +327,10 @@ export function SubjectsPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">Subjects</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">Subjects</h1>
+          <HistoryButton entityType="SUBJECT" title="Subjects" />
+        </div>
         {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
       </div>
       {list.length > 0 && (

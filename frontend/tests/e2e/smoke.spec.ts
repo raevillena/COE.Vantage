@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = process.env.E2E_PASSWORD ?? "Test123!";
 const API = process.env.E2E_API_URL ?? "http://localhost:4000";
+/** The College of Engineering. The admin names it when a call needs a college, since other colleges may exist. */
+const COE = "00000000-0000-0000-0000-0000000000a2";
 
 async function browserLogin(browser: import("@playwright/test").Browser, email: string): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
@@ -23,6 +25,8 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.6.0" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.5.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.4.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.4.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.3.9" })).toBeVisible();
@@ -760,7 +764,7 @@ test.describe("current term", () => {
     // only admin and college secretary may set it
     const faculty = { Authorization: `Bearer ${await token("faculty1@coe.vantage")}` };
     expect((await request.put(`${API}/academic-years/current-term`, { headers: faculty, data: { academicYearId: original!.id, semester: 2 } })).status()).toBe(403);
-    expect((await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 4 } })).status()).toBe(400);
+    expect((await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 4, collegeId: COE } })).status()).toBe(400);
 
     try {
       await login(page, "secretary@coe.vantage");
@@ -778,11 +782,11 @@ test.describe("current term", () => {
       await expect(page.getByRole("combobox", { name: "Semester" })).toHaveText(/2/);
 
       // Mid Year is a valid current semester too
-      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 3 } });
+      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: 3, collegeId: COE } });
       await page.goto("/schedules/rooms");
       await expect(page.getByRole("combobox", { name: "Semester" })).toHaveText(/Mid Year/);
     } finally {
-      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: original!.currentSemester ?? 1 } });
+      await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: original!.id, semester: original!.currentSemester ?? 1, collegeId: COE } });
     }
   });
 });
@@ -805,6 +809,510 @@ test.describe("scheduler legend", () => {
     menu = page.getByRole("menu");
     for (const text of ["Dashed border: laboratory-only subject", "Amber outline: awaiting approval", "Red: conflict with another block", "Class split between instructors"]) await expect(menu.getByText(text)).toBeVisible();
     await expect(menu.getByText("Not scheduled yet")).toHaveCount(0);
+  });
+});
+
+test.describe("university pages", () => {
+  async function token(request: import("@playwright/test").APIRequestContext, email: string) {
+    return ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+  }
+
+  test("the admin adds a college and the president sees every college read-only", async ({ page, request }) => {
+    const admin = { Authorization: `Bearer ${await token(request, "admin@coe.vantage")}` };
+    const stamp = Date.now();
+    const presidentEmail = `pres${stamp}@coe.vantage`;
+    const made = await request.post(`${API}/users`, { headers: admin, data: { email: presidentEmail, password: PASSWORD, name: `President ${stamp}`, role: "PRESIDENT" } });
+    expect(made.status()).toBe(201);
+    const presidentId = ((await made.json()) as { id: string }).id;
+    const collegeName = `Admin Test College ${stamp}`;
+    let collegeId = "";
+    try {
+      // the admin creates a college from the Colleges page
+      await login(page, "admin@coe.vantage");
+      await page.getByRole("link", { name: "Colleges", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Colleges" })).toBeVisible();
+      await page.getByRole("button", { name: "Add college" }).click();
+      const dialog = page.getByRole("dialog", { name: "Add college" });
+      await dialog.getByLabel("Name").fill(collegeName);
+      await dialog.getByRole("button", { name: "Save" }).click();
+      await expect(page.getByRole("cell", { name: collegeName, exact: true })).toBeVisible();
+      collegeId = ((await (await request.get(`${API}/colleges`, { headers: admin })).json()) as { id: string; name: string }[]).find((c) => c.name === collegeName)!.id;
+
+      // the president lands on the university overview, which lists both colleges
+      await page.context().clearCookies();
+      await page.evaluate(() => window.localStorage.clear());
+      await login(page, presidentEmail);
+      await page.waitForURL("**/university");
+      await expect(page.getByRole("heading", { name: collegeName, level: 2 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "College of Engineering", level: 2 })).toBeVisible();
+      await expect(page.getByText("You can view everything here and change nothing.")).toBeVisible();
+
+      // read-only everywhere else: no Add buttons, no audit log, no user management
+      await page.goto("/subjects");
+      await expect(page.getByRole("heading", { name: "Subjects" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Add Subject" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Audit log", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
+      await page.goto("/users");
+      await page.waitForURL("**/dashboard**");
+    } finally {
+      if (collegeId) await request.delete(`${API}/colleges/${collegeId}`, { headers: admin });
+      await request.delete(`${API}/users/${presidentId}`, { headers: admin });
+      await request.delete(`${API}/users/trash/${presidentId}`, { headers: admin });
+    }
+  });
+
+  test("the user form of the admin asks for a college, and a college's lock is picked per college", async ({ page, request }) => {
+    const admin = { Authorization: `Bearer ${await token(request, "admin@coe.vantage")}` };
+    const stamp = Date.now();
+    const col = await request.post(`${API}/colleges`, { headers: admin, data: { name: `Lock College ${stamp}` } });
+    const collegeId = ((await col.json()) as { id: string }).id;
+    try {
+      await login(page, "admin@coe.vantage");
+      await page.getByRole("link", { name: "Users", exact: true }).click();
+      await page.getByRole("button", { name: "Add User" }).click();
+      const dialog = page.getByRole("dialog", { name: "Add User" });
+      await expect(dialog.getByLabel("College")).toBeVisible();
+      await dialog.getByLabel("Role").click();
+      await page.getByRole("option", { name: "PRESIDENT" }).click();
+      // the president belongs to no college
+      await expect(dialog.getByLabel("College")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+
+      await page.goto("/academic-years");
+      await expect(page.locator("#lock-college")).toBeVisible();
+    } finally {
+      await request.delete(`${API}/colleges/${collegeId}`, { headers: admin });
+    }
+  });
+});
+
+test.describe("colleges", () => {
+  async function token(request: import("@playwright/test").APIRequestContext, email: string) {
+    return ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+  }
+  type Named = { id: string; name: string; email?: string };
+
+  test("a second college is isolated from the first, each locks its own semester, and the president views both but changes nothing", async ({ request }) => {
+    const bearer = async (email: string) => ({ Authorization: `Bearer ${await token(request, email)}` });
+    const admin = await bearer("admin@coe.vantage");
+    const coeDean = await bearer("dean@coe.vantage");
+    const stamp = Date.now();
+    const made: { college?: string; dept?: string; users: string[] } = { users: [] };
+    const asAdmin = async <T,>(path: string) => (await (await request.get(`${API}${path}`, { headers: admin })).json()) as T;
+    const ay = await asAdmin<{ id: string }>("/academic-years/active");
+    try {
+      // the admin creates a second college with its own department and people
+      const col = await request.post(`${API}/colleges`, { headers: admin, data: { name: `Test College ${stamp}`, code: "TC" } });
+      expect(col.status()).toBe(201);
+      made.college = ((await col.json()) as Named).id;
+      const dept = await request.post(`${API}/departments`, { headers: admin, data: { name: `Test Department ${stamp} (TD${stamp % 1000})`, collegeId: made.college } });
+      expect(dept.status()).toBe(201);
+      made.dept = ((await dept.json()) as Named).id;
+      const person = async (prefix: string, role: string, departmentId?: string) => {
+        const email = `${prefix}${stamp}@coe.vantage`;
+        const r = await request.post(`${API}/users`, { headers: admin, data: { email, password: PASSWORD, name: `${prefix} ${stamp}`, role, collegeId: role === "PRESIDENT" ? undefined : made.college, ...(departmentId ? { departmentId } : {}) } });
+        expect(r.status(), `create ${role}`).toBe(201);
+        made.users.push(((await r.json()) as Named).id);
+        return email;
+      };
+      const deanB = await bearer(await person("deanb", "DEAN"));
+      const secB = await bearer(await person("secb", "COLLEGE_SECRETARY"));
+      const president = await bearer(await person("pres", "PRESIDENT"));
+
+      const names = async (headers: Record<string, string>, path: string) => ((await (await request.get(`${API}${path}`, { headers })).json()) as Named[]).map((x) => x.name);
+
+      // college B sees only itself; college A never sees B
+      expect(await names(deanB, "/departments")).toEqual([`Test Department ${stamp} (TD${stamp % 1000})`]);
+      for (const path of ["/subjects", "/student-classes", "/rooms", "/curriculum"]) expect(await names(deanB, path), path).toEqual([]);
+      const usersB = await names(deanB, "/users");
+      expect(usersB.every((n) => /\d{13}$/.test(n))).toBe(true);
+      expect(usersB.some((n) => n.startsWith("deanb"))).toBe(true);
+      expect(await names(deanB, "/colleges")).toEqual([`Test College ${stamp}`]);
+      const coeDepts = await names(coeDean, "/departments");
+      expect(coeDepts.some((n) => n.startsWith("Test Department"))).toBe(false);
+      expect((await names(coeDean, "/users")).some((n) => n.endsWith(String(stamp)))).toBe(false);
+      expect((await request.get(`${API}/departments/${made.dept}`, { headers: coeDean })).status()).toBe(404);
+      expect((await request.get(`${API}/departments/${(await asAdmin<Named[]>("/departments"))[0].id}`, { headers: deanB })).status()).toBe(404);
+
+      // a dean cannot put people in, or lock, another college
+      expect((await request.post(`${API}/users`, { headers: deanB, data: { email: `x${stamp}@coe.vantage`, password: PASSWORD, name: "x", role: "FACULTY", collegeId: (await asAdmin<Named[]>("/colleges"))[0].id } })).status()).not.toBe(201);
+
+      // semester locks are per college
+      expect((await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secB, data: { semester: 3, locked: true } })).status()).toBe(200);
+      const years = async (headers: Record<string, string>) => (await (await request.get(`${API}/academic-years`, { headers })).json()) as { id: string; termLocks: { semester: number; collegeId: string }[] }[];
+      expect((await years(deanB)).find((y) => y.id === ay.id)?.termLocks.map((l) => l.semester)).toContain(3);
+      expect((await years(coeDean)).find((y) => y.id === ay.id)?.termLocks.some((l) => l.collegeId === made.college)).toBe(false);
+      expect((await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: coeDean, data: { semester: 3, locked: false, collegeId: made.college } })).status()).toBe(403);
+      await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secB, data: { semester: 3, locked: false } });
+
+      // the audit log of a college shows its own entries only
+      const trailB = ((await (await request.get(`${API}/audit?entityId=${made.dept}`, { headers: deanB })).json()) as { items: unknown[] }).items;
+      const trailA = ((await (await request.get(`${API}/audit?entityId=${made.dept}`, { headers: coeDean })).json()) as { items: unknown[] }).items;
+      expect(trailB.length).toBeGreaterThan(0);
+      expect(trailA.length).toBe(0);
+
+      // the president views every college and changes nothing
+      const overview = (await (await request.get(`${API}/university`, { headers: president })).json()) as { colleges: { name: string; departments: number }[] };
+      expect(overview.colleges.map((c) => c.name)).toEqual(expect.arrayContaining([`Test College ${stamp}`, "College of Engineering"]));
+      expect((await names(president, "/departments")).length).toBeGreaterThan(coeDepts.length);
+      expect((await request.post(`${API}/departments`, { headers: president, data: { name: `Nope ${stamp}` } })).status()).toBe(403);
+      expect((await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: president, data: { semester: 3, locked: true } })).status()).toBe(403);
+      expect((await request.get(`${API}/university`, { headers: deanB })).status()).toBe(403);
+    } finally {
+      for (const id of made.users) await request.delete(`${API}/users/${id}`, { headers: admin });
+      if (made.dept) await request.delete(`${API}/departments/${made.dept}`, { headers: admin });
+      if (made.college) await request.delete(`${API}/colleges/${made.college}`, { headers: admin });
+      for (const id of made.users) await request.delete(`${API}/users/trash/${id}`, { headers: admin });
+      if (made.dept) await request.delete(`${API}/departments/trash/${made.dept}`, { headers: admin });
+    }
+  });
+
+  test("each college sets its own current term, or none, and a shared academic year name exists only once", async ({ request }) => {
+    const bearer = async (email: string) => ({ Authorization: `Bearer ${await token(request, email)}` });
+    const admin = await bearer("admin@coe.vantage");
+    const coeSecretary = await bearer("secretary@coe.vantage");
+    const stamp = Date.now();
+    const made: { college?: string; user?: string; years: string[] } = { years: [] };
+    type Year = { id: string; name: string; isActive: boolean; currentSemester: number };
+    const years = async (headers: Record<string, string>) => (await (await request.get(`${API}/academic-years`, { headers })).json()) as Year[];
+    const currentOf = async (headers: Record<string, string>) => (await years(headers)).find((y) => y.isActive);
+    const coeBefore = await currentOf(coeSecretary);
+    try {
+      const col = await request.post(`${API}/colleges`, { headers: admin, data: { name: `Term College ${stamp}` } });
+      made.college = ((await col.json()) as Named).id;
+      const email = `termsec${stamp}@coe.vantage`;
+      const u = await request.post(`${API}/users`, { headers: admin, data: { email, password: PASSWORD, name: `Term Sec ${stamp}`, role: "COLLEGE_SECRETARY", collegeId: made.college } });
+      expect(u.status()).toBe(201);
+      made.user = ((await u.json()) as Named).id;
+      const secB = await bearer(email);
+
+      // academic years are shared: both colleges list the same years, and a name can exist only once
+      const created = await request.post(`${API}/academic-years`, { headers: secB, data: { name: `Shared ${stamp}` } });
+      expect(created.status()).toBe(201);
+      const shared = (await created.json()) as Year;
+      made.years.push(shared.id);
+      expect((await years(coeSecretary)).some((y) => y.id === shared.id)).toBe(true);
+      expect((await request.post(`${API}/academic-years`, { headers: coeSecretary, data: { name: `shared ${stamp}` } })).status()).toBe(409);
+      expect((await request.post(`${API}/academic-years`, { headers: admin, data: { name: `  SHARED ${stamp} ` } })).status()).toBe(409);
+
+      // college B has not started, and COE's term is unaffected
+      expect(await currentOf(secB)).toBeUndefined();
+      const set = await request.put(`${API}/academic-years/current-term`, { headers: secB, data: { academicYearId: shared.id, semester: 2 } });
+      expect(set.status()).toBe(200);
+      const b = await currentOf(secB);
+      expect([b?.id, b?.currentSemester]).toEqual([shared.id, 2]);
+      expect((await currentOf(coeSecretary))?.id).toBe(coeBefore?.id);
+      expect((await (await request.get(`${API}/academic-years/active`, { headers: secB })).json() as Year).id).toBe(shared.id);
+
+      // a college secretary cannot set another college's term; the admin can, naming the college
+      expect((await request.put(`${API}/academic-years/current-term`, { headers: coeSecretary, data: { academicYearId: shared.id, semester: 1, collegeId: made.college } })).status()).toBe(403);
+      expect((await request.put(`${API}/academic-years/current-term`, { headers: admin, data: { academicYearId: shared.id, semester: 3, collegeId: made.college } })).status()).toBe(200);
+      expect((await currentOf(secB))?.currentSemester).toBe(3);
+
+      // "not at all": a college can go back to not started
+      expect((await request.put(`${API}/academic-years/current-term`, { headers: secB, data: { academicYearId: null } })).status()).toBe(200);
+      expect(await currentOf(secB)).toBeUndefined();
+      expect((await (await request.get(`${API}/academic-years/active`, { headers: secB })).json())).toBeNull();
+      expect((await currentOf(coeSecretary))?.id).toBe(coeBefore?.id);
+
+      // the university overview shows each college's own term
+      const overview = (await (await request.get(`${API}/university`, { headers: admin })).json()) as { colleges: { name: string; currentTerm: unknown }[] };
+      expect(overview.colleges.find((c) => c.name === `Term College ${stamp}`)?.currentTerm).toBeNull();
+      expect(overview.colleges.find((c) => c.name === "College of Engineering")?.currentTerm).not.toBeNull();
+    } finally {
+      for (const id of made.years) {
+        await request.delete(`${API}/academic-years/${id}`, { headers: admin });
+        await request.delete(`${API}/academic-years/trash/${id}`, { headers: admin });
+      }
+      if (made.user) {
+        await request.delete(`${API}/users/${made.user}`, { headers: admin });
+        await request.delete(`${API}/users/trash/${made.user}`, { headers: admin });
+      }
+      if (made.college) await request.delete(`${API}/colleges/${made.college}`, { headers: admin });
+    }
+  });
+
+  test("the admin's GE subjects page asks for a college and says plainly when no sheet has been added", async ({ page, request }) => {
+    const admin = { Authorization: `Bearer ${await token(request, "admin@coe.vantage")}` };
+    const col = (await (await request.post(`${API}/colleges`, { headers: admin, data: { name: `GE Probe ${Date.now()}` } })).json()) as Named;
+    try {
+      await login(page, "admin@coe.vantage");
+      await page.getByRole("link", { name: "GE subjects", exact: true }).click();
+      await expect(page.getByLabel("College")).toBeVisible();
+      await page.getByLabel("College").selectOption({ label: col.name });
+      // a college with no sheet is an ordinary empty state, not an error
+      await expect(page.getByText(/No GE subjects have been added for/)).toBeVisible();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    } finally {
+      await request.delete(`${API}/colleges/${col.id}`, { headers: admin });
+    }
+  });
+
+  test("the dean views the GE subjects and their history but cannot add, replace or remove the sheet", async ({ page, request }) => {
+    await login(page, "dean@coe.vantage");
+    await page.getByRole("link", { name: "GE subjects", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "GE subjects" })).toBeVisible();
+    await expect(page.getByLabel("Saved GE schedule")).toBeVisible();
+    await expect(page.getByLabel("Add the GE schedule")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(0);
+    await page.getByRole("button", { name: "History" }).click();
+    await expect(page.getByRole("dialog", { name: "GE subjects history" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // the server agrees: reading is allowed, changing is not
+    const t = await token(request, "dean@coe.vantage");
+    const h = { Authorization: `Bearer ${t}` };
+    const ay = (await (await request.get(`${API}/academic-years/active`, { headers: h })).json()) as { id: string };
+    expect((await request.get(`${API}/ge-import/college?academicYearId=${ay.id}&semester=1`, { headers: h })).status()).toBe(200);
+    expect((await request.put(`${API}/ge-import/college`, { headers: h, data: { academicYearId: ay.id, semester: 1, text: "x" } })).status()).toBe(403);
+    expect((await request.delete(`${API}/ge-import/college?academicYearId=${ay.id}&semester=1`, { headers: h })).status()).toBe(403);
+  });
+
+  test("the dean views the faculty of the whole college, with their history, and cannot add or change anyone", async ({ page, request }) => {
+    await login(page, "dean@coe.vantage");
+    await page.getByRole("link", { name: "Faculty", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Faculty", exact: true })).toBeVisible();
+    // college-wide: a department column, and faculty of more than one department
+    await expect(page.getByRole("columnheader", { name: "Department" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add Faculty" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Copy possible subjects/ })).toHaveCount(0);
+    await expect(page.locator('button[aria-label^="Edit "]')).toHaveCount(0);
+    await expect(page.locator('button[aria-label^="Actions for "]')).toHaveCount(0);
+
+    // possible subjects can be read, not edited
+    await page.locator('button[aria-label^="Manage possible subjects for "]').first().click();
+    const dialog = page.getByRole("dialog", { name: /Possible subjects to teach/ });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Choose subject to add")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Add", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "History" }).click();
+    await expect(page.getByRole("dialog", { name: "Faculty history" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // the server agrees
+    const t = ((await (await request.post(`${API}/auth/login`, { data: { email: "dean@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+    const h = { Authorization: `Bearer ${t}` };
+    const people = (await (await request.get(`${API}/users?role=FACULTY`, { headers: h })).json()) as { id: string; departmentId: string | null }[];
+    expect(new Set(people.map((p) => p.departmentId)).size).toBeGreaterThan(1);
+    expect((await request.post(`${API}/users`, { headers: h, data: { email: `x${Date.now()}@coe.vantage`, password: PASSWORD, name: "x", role: "FACULTY" } })).status()).toBe(403);
+    expect((await request.patch(`${API}/users/${people[0].id}`, { headers: h, data: { maxUnits: 5 } })).status()).toBe(403);
+  });
+
+  test("every role has the college it should: the first college's people belong to it, the admin and president to none", async ({ request }) => {
+    const t = await token(request, "admin@coe.vantage");
+    const users = (await (await request.get(`${API}/users`, { headers: { Authorization: `Bearer ${t}` } })).json()) as { email: string; role: string; collegeId: string | null }[];
+    const dean = users.find((u) => u.email === "dean@coe.vantage")!;
+    expect(dean.collegeId).toBeTruthy();
+    expect(users.find((u) => u.email === "chairman@coe.vantage")!.collegeId).toBe(dean.collegeId);
+    expect(users.find((u) => u.email === "admin@coe.vantage")!.collegeId).toBeNull();
+    expect(users.filter((u) => u.role === "PRESIDENT").every((u) => u.collegeId === null)).toBe(true);
+  });
+});
+
+test.describe("audit log", () => {
+  type Entry = { id: string; actorName: string; actorRole: string; entityType: string; entityId: string | null; entityLabel: string | null; action: string; summary: string; changes: Record<string, { from?: unknown; to?: unknown }> | null };
+  async function token(request: import("@playwright/test").APIRequestContext, email: string, password = PASSWORD) {
+    return ((await (await request.post(`${API}/auth/login`, { data: { email, password } })).json()) as { accessToken: string }).accessToken;
+  }
+
+  test("changes to core records are recorded with who did them, and a later role change leaves old entries intact", async ({ request }) => {
+    const bearer = async (email: string) => ({ Authorization: `Bearer ${await token(request, email)}` });
+    const admin = await bearer("admin@coe.vantage");
+    const stamp = Date.now();
+    const email = `audit${stamp}@coe.vantage`;
+    const ids: { year?: string; user?: string } = {};
+    try {
+      // a college secretary created just for this test makes a change
+      const made = await request.post(`${API}/users`, { headers: admin, data: { email, password: PASSWORD, name: `Audit Tester ${stamp}`, role: "COLLEGE_SECRETARY", collegeId: COE } });
+      expect(made.status()).toBe(201);
+      ids.user = ((await made.json()) as { id: string }).id;
+      const secretary = { Authorization: `Bearer ${await token(request, email)}` };
+      const year = await request.post(`${API}/academic-years`, { headers: secretary, data: { name: `Audit Year ${stamp}` } });
+      expect(year.status()).toBe(201);
+      ids.year = ((await year.json()) as { id: string }).id;
+      await request.patch(`${API}/academic-years/${ids.year}`, { headers: secretary, data: { name: `Audit Year ${stamp} renamed` } });
+
+      // the admin then changes that person's role
+      expect((await request.patch(`${API}/users/${ids.user}`, { headers: admin, data: { role: "DEAN" } })).status()).toBe(200);
+
+      const list = async (query: string) => ((await (await request.get(`${API}/audit?${query}`, { headers: admin })).json()) as { items: Entry[] }).items;
+      const forYear = await list(`entityId=${ids.year}`);
+      expect(forYear.map((e) => e.action).sort()).toEqual(["CREATE", "UPDATE"]);
+      const rename = forYear.find((e) => e.action === "UPDATE")!;
+      expect(rename.changes?.name).toEqual({ from: `Audit Year ${stamp}`, to: `Audit Year ${stamp} renamed` });
+      // the entry keeps the role the person had then, not the one they have now
+      expect(forYear.every((e) => e.actorRole === "COLLEGE_SECRETARY" && e.actorName === `Audit Tester ${stamp}`)).toBe(true);
+
+      const roleChange = (await list(`entityId=${ids.user}&action=UPDATE`))[0];
+      expect(roleChange.actorRole).toBe("ADMIN");
+      expect(roleChange.changes?.role).toEqual({ from: "COLLEGE_SECRETARY", to: "DEAN" });
+      // secrets never reach the history
+      expect(JSON.stringify(await list(`entityId=${ids.user}`))).not.toContain("passwordHash");
+
+      // deleting is recorded, and the history survives the record and the user
+      await request.delete(`${API}/academic-years/${ids.year}`, { headers: admin });
+      expect((await list(`entityId=${ids.year}&action=DELETE`)).length).toBe(1);
+      await request.delete(`${API}/users/${ids.user}`, { headers: admin });
+      expect((await list(`entityId=${ids.year}`)).length).toBe(3);
+    } finally {
+      if (ids.year) await request.delete(`${API}/academic-years/trash/${ids.year}`, { headers: admin });
+      if (ids.user) await request.delete(`${API}/users/trash/${ids.user}`, { headers: admin });
+    }
+  });
+
+  test("only the admin, dean and college secretary can read the history", async ({ request }) => {
+    for (const [who, status] of [["admin", 200], ["dean", 200], ["secretary", 200], ["chairman", 403], ["faculty1", 403], ["officer", 403]] as const) {
+      const t = await token(request, `${who}@coe.vantage`);
+      const res = await request.get(`${API}/audit`, { headers: { Authorization: `Bearer ${t}` } });
+      expect(res.status(), who).toBe(status);
+    }
+    const t = await token(request, "chairman@coe.vantage");
+    expect((await request.get(`${API}/audit/export.csv`, { headers: { Authorization: `Bearer ${t}` } })).status()).toBe(403);
+  });
+
+  test("schedule blocks are logged when added and removed, not when edited; the current term and locks are logged", async ({ request }) => {
+    const bearer = async (email: string) => ({ Authorization: `Bearer ${await token(request, email)}` });
+    const [admin, chair, secretary] = await Promise.all(["admin", "chairman", "secretary"].map((n) => bearer(`${n}@coe.vantage`)));
+    const get = async <T,>(path: string, headers = chair) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string; currentSemester: number }>("/academic-years/active");
+    const teacher = (await get<{ id: string; email: string }[]>("/users?role=FACULTY")).find((u) => u.email === "faculty2@coe.vantage");
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((x) => x.code === "CE101");
+    const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
+    test.skip(!teacher || !cls || !subject || !room, "needs the seeded CE data");
+    const list = async (query: string) => ((await (await request.get(`${API}/audit?${query}`, { headers: admin })).json()) as { items: Entry[] }).items;
+
+    const created = await request.post(`${API}/faculty-loads`, {
+      headers: chair,
+      data: { subjectId: subject!.id, studentClassId: cls!.id, facultyId: teacher!.id, roomId: room!.id, dayOfWeek: 6, startTime: "17:00", endTime: "18:00", semester: 1, academicYearId: ay.id },
+    });
+    test.skip(created.status() !== 201, "needs a free Saturday 5 PM slot");
+    const id = ((await created.json()) as { id: string }).id;
+    await request.patch(`${API}/faculty-loads/${id}`, { headers: chair, data: { startTime: "17:30", endTime: "18:30" } });
+    await request.delete(`${API}/faculty-loads/${id}`, { headers: chair });
+    const entries = await list(`entityId=${id}`);
+    expect(entries.map((e) => e.action).sort()).toEqual(["CREATE", "DELETE"]);
+    expect(entries.every((e) => e.entityType === "SCHEDULE_BLOCK" && e.actorRole === "CHAIRMAN")).toBe(true);
+
+    // the current term (set to what it already is) and a semester lock
+    await request.put(`${API}/academic-years/current-term`, { headers: secretary, data: { academicYearId: ay.id, semester: ay.currentSemester } });
+    const term = (await list("action=SET_CURRENT_TERM"))[0];
+    expect(term.actorRole).toBe("COLLEGE_SECRETARY");
+    expect(term.summary).toMatch(/Set the current term to/);
+    await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secretary, data: { semester: 3, locked: true } });
+    await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secretary, data: { semester: 3, locked: false } });
+    expect((await list("action=LOCK"))[0].summary).toMatch(/Locked Mid Year/);
+    expect((await list("action=UNLOCK"))[0].summary).toMatch(/Unlocked Mid Year/);
+  });
+
+  test("the Audit log page and each page's History panel show entries to the dean, and chairmen see neither", async ({ page }) => {
+    await login(page, "dean@coe.vantage");
+    await page.getByRole("link", { name: "Audit log" }).click();
+    await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    await expect(page.locator("main time").first()).toBeVisible();
+
+    await page.goto("/subjects");
+    await page.getByRole("button", { name: "History" }).click();
+    const dialog = page.getByRole("dialog", { name: "Subjects history" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Action")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.context().clearCookies();
+    await page.evaluate(() => window.localStorage.clear());
+    await login(page, "chairman@coe.vantage");
+    await expect(page.getByRole("link", { name: "Audit log" })).toHaveCount(0);
+    await page.goto("/subjects");
+    await expect(page.getByRole("heading", { name: "Subjects" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "History" })).toHaveCount(0);
+    await page.goto("/audit-log");
+    await page.waitForURL("**/dashboard");
+  });
+});
+
+test.describe("semester lock", () => {
+  async function token(request: import("@playwright/test").APIRequestContext, email: string) {
+    return ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
+  }
+
+  test("the admin, dean and college secretary lock a semester; while locked nobody changes its schedule", async ({ request }) => {
+    const bearer = async (email: string) => ({ Authorization: `Bearer ${await token(request, email)}` });
+    const [admin, dean, secretary, chair, faculty] = await Promise.all(["admin", "dean", "secretary", "chairman", "faculty1"].map((n) => bearer(`${n}@coe.vantage`)));
+    const get = async <T,>(path: string, headers = chair) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const ay = await get<{ id: string }>("/academic-years/active");
+    const users = await get<{ id: string; email: string }[]>("/users?role=FACULTY");
+    const teacher = users.find((u) => u.email === "faculty2@coe.vantage");
+    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((x) => x.code === "CE101");
+    const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
+    test.skip(!teacher || !cls || !subject || !room, "needs the seeded CE data");
+    const lock = (headers: Record<string, string>, locked: boolean) => request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers, data: { semester: 2, locked, collegeId: COE } });
+    const payload = { subjectId: subject!.id, studentClassId: cls!.id, facultyId: teacher!.id, roomId: room!.id, dayOfWeek: 6, startTime: "17:00", endTime: "18:00", semester: 2, academicYearId: ay.id };
+    const made: string[] = [];
+    try {
+      // only the admin, dean and college secretary may lock
+      expect((await lock(chair, true)).status()).toBe(403);
+      expect((await lock(faculty, true)).status()).toBe(403);
+      expect((await lock(dean, true)).status()).toBe(200);
+      const years = await get<{ id: string; termLocks: { semester: number; lockedByName: string }[] }[]>("/academic-years", admin);
+      expect(years.find((y) => y.id === ay.id)?.termLocks.map((l) => l.semester)).toContain(2);
+
+      // a locked semester refuses the chairman's changes
+      const blocked = await request.post(`${API}/faculty-loads`, { headers: chair, data: payload });
+      expect(blocked.status()).toBe(403);
+      expect(((await blocked.json()) as { message: string }).message).toMatch(/is locked by/);
+      expect((await request.post(`${API}/faculty-loads/reset`, { headers: chair, data: { academicYearId: ay.id, semester: 2, studentClassId: cls!.id } })).status()).toBe(403);
+      // another semester of the same year is untouched
+      expect((await request.post(`${API}/faculty-loads/preview`, { headers: chair, data: { ...payload, semester: 1 } })).status()).toBe(200);
+
+      // unlocking (here by the college secretary) lets changes through again
+      expect((await lock(secretary, false)).status()).toBe(200);
+      const open = await request.post(`${API}/faculty-loads`, { headers: chair, data: payload });
+      expect(open.status()).not.toBe(403);
+      if (open.status() === 201) made.push(((await open.json()) as { id: string }).id);
+
+      // locking again also stops edits and deletes of existing blocks
+      if (made.length) {
+        expect((await lock(admin, true)).status()).toBe(200);
+        expect((await request.delete(`${API}/faculty-loads/${made[0]}`, { headers: chair })).status()).toBe(403);
+        await lock(admin, false);
+      }
+    } finally {
+      await lock(admin, false);
+      for (const id of made) await request.delete(`${API}/faculty-loads/${id}`, { headers: chair });
+    }
+  });
+
+  test("the dean locks a semester from Academic years and the scheduler shows it as locked", async ({ page, request }) => {
+    const admin = { Authorization: `Bearer ${await token(request, "admin@coe.vantage")}` };
+    const ay = (await (await request.get(`${API}/academic-years/active`, { headers: admin })).json()) as { id: string; name: string };
+    try {
+      await login(page, "dean@coe.vantage");
+      await page.getByRole("link", { name: "Academic years" }).click();
+      await page.getByRole("button", { name: `Lock 2nd Sem of ${ay.name}` }).click();
+      const dialog = page.getByRole("dialog", { name: "Lock this semester?" });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Lock semester" }).click();
+      await expect(page.getByRole("button", { name: `Unlock 2nd Sem of ${ay.name}` })).toHaveAttribute("aria-pressed", "true");
+
+      // the chairman sees the lock in the scheduler once that semester is selected
+      await page.context().clearCookies();
+      await page.evaluate(() => window.localStorage.clear());
+      await login(page, "chairman@coe.vantage");
+      await page.goto("/scheduler");
+      await page.getByRole("combobox", { name: "Semester" }).click();
+      await page.getByRole("option", { name: "2nd Sem" }).click();
+      await expect(page.getByRole("status").filter({ hasText: /is locked/ })).toBeVisible();
+      await page.getByLabel("Student class").click();
+      await page.getByRole("option").nth(1).click();
+      await expect(page.getByRole("button", { name: "Add load" })).toBeDisabled();
+    } finally {
+      await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: admin, data: { semester: 2, locked: false, collegeId: COE } });
+    }
   });
 });
 
@@ -1008,7 +1516,7 @@ test.describe("GE schedule import", () => {
       await login_(page, "secretary@coe.vantage");
       await page.getByRole("link", { name: "GE subjects", exact: true }).click();
       await expect(page.getByRole("heading", { name: "GE subjects" })).toBeVisible();
-      await expect(page.getByText(/Nothing is saved for this term yet/)).toBeVisible();
+      await expect(page.getByText(/No GE subjects have been added for/)).toBeVisible();
       await page.getByLabel("Pasted GE sheet").fill(fs.readFileSync(tsv, "utf8"));
       await page.getByRole("button", { name: "Check the sheet" }).click();
       await expect(page.getByText("Read 181 rows in 45 sections.")).toBeVisible();
@@ -1246,7 +1754,8 @@ test.describe("notifications", () => {
       // removing a block tells them again, and "read all" clears the count
       await request.delete(`${API}/faculty-loads/${made[0]}`, { headers: chair });
       made.shift();
-      expect((await get<Inbox>("/notifications", mine)).unread).toBeGreaterThan(0);
+      // the notification is written after the response, so wait for it
+      await expect.poll(async () => (await get<Inbox>("/notifications", mine)).unread).toBeGreaterThan(0);
       await request.post(`${API}/notifications/read-all`, { headers: mine });
       expect((await get<Inbox>("/notifications", mine)).unread).toBe(0);
     } finally {
@@ -1302,16 +1811,16 @@ test.describe("subject components", () => {
     const made: string[] = [];
     const stamp = Date.now();
     try {
-      const mixed = (await (await request.post(`${API}/subjects`, { headers, data: { code: `MIX${stamp}`, name: "Mixed e2e", lecUnits: 3, labUnits: 1 } })).json()) as S;
+      const mixed = (await (await request.post(`${API}/subjects`, { headers, data: { code: `MIX${stamp}`, name: "Mixed e2e", lecUnits: 3, labUnits: 1, collegeId: COE } })).json()) as S;
       made.push(mixed.id);
       // 3 lec + 1 lab: 4 units, not a lab-room-only subject
       expect([mixed.units, mixed.lecUnits, mixed.labUnits, mixed.isLab]).toEqual([4, 3, 1, false]);
 
       // the older form: units + isLab sends everything to one component
-      const legacyLab = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LAB${stamp}`, name: "Lab e2e", units: 2, isLab: true } })).json()) as S;
+      const legacyLab = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LAB${stamp}`, name: "Lab e2e", units: 2, isLab: true, collegeId: COE } })).json()) as S;
       made.push(legacyLab.id);
       expect([legacyLab.units, legacyLab.lecUnits, legacyLab.labUnits, legacyLab.isLab]).toEqual([2, 0, 2, true]);
-      const legacyLec = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LEC${stamp}`, name: "Lec e2e", units: 3 } })).json()) as S;
+      const legacyLec = (await (await request.post(`${API}/subjects`, { headers, data: { code: `LEC${stamp}`, name: "Lec e2e", units: 3, collegeId: COE } })).json()) as S;
       made.push(legacyLec.id);
       expect([legacyLec.units, legacyLec.lecUnits, legacyLec.labUnits, legacyLec.isLab]).toEqual([3, 3, 0, false]);
 
@@ -1322,7 +1831,7 @@ test.describe("subject components", () => {
       expect([freed.units, freed.lecUnits, freed.labUnits, freed.isLab]).toEqual([3, 1, 2, false]);
 
       // no unit information at all is refused
-      expect((await request.post(`${API}/subjects`, { headers, data: { code: `NON${stamp}`, name: "No units" } })).status()).toBe(400);
+      expect((await request.post(`${API}/subjects`, { headers, data: { code: `NON${stamp}`, name: "No units", collegeId: COE } })).status()).toBe(400);
     } finally {
       for (const id of made) await request.delete(`${API}/subjects/${id}`, { headers });
     }

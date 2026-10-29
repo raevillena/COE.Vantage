@@ -21,7 +21,9 @@ export function authorize(...allowedRoles: Role[]) {
       next(forbidden("Authentication required"));
       return;
     }
-    if (!allowedRoles.includes(req.user.role)) {
+    // The president views what a dean views across the university, and can change nothing.
+    const presidentViewing = req.user.role === "PRESIDENT" && allowedRoles.includes("DEAN") && ["GET", "HEAD", "OPTIONS"].includes(req.method);
+    if (!allowedRoles.includes(req.user.role) && !presidentViewing) {
       next(forbidden("Insufficient permissions"));
       return;
     }

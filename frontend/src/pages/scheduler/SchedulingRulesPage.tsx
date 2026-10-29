@@ -18,6 +18,7 @@ import { Dialog } from "../../components/ui/dialog";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { useAppSelector } from "../../store/hooks";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { HistoryButton } from "../../components/audit/HistoryButton";
 import { HelpTip } from "../../components/ui/helpTip";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -274,6 +275,7 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
               ? "Rule sets define how auto-schedule runs: working hours, lunch break, excluded days and similar. Assign a set per academic year and class here, or let chairmen do so from the Scheduler."
               : "Rule sets define how auto-schedule runs: working hours, lunch break, MWF preference and similar. Assign a set per academic year and/or class; when you run auto-schedule, the assigned set is used unless you choose another in the dropdown."}
           </HelpTip>
+          <HistoryButton entityType="SCHEDULING_RULE" title="Scheduling rules" />
 </div>
       </div>
 
