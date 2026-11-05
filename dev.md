@@ -1304,6 +1304,13 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - **Flow** (`modules/roomSharing`, mounted at `/room-share`): rooms open for a college once it has a `TermLock` for the term; chairmen draft (checked by `checkConflicts` plus drafts and pending requests), the secretary submits (groups by host college and term), room-department chairmen approve, then the host secretary approves last and the loads are created in one transaction after a re-check. The dean only reads and is notified. `assertNoGuestBookings` blocks unlocking while bookings or pending requests exist.
 - **Frontend**: `pages/roomSharing/RoomSharingPage.tsx` (Available rooms with week strips, Drafts, Requests with the scrollable preview dialog), sidebar item under Scheduling.
 
+### 60. Waiting requests, head-count dashboard and admin Scheduler (v0.7.4)
+
+- **Room requests**: `cancelRequest` now also accepts a guest CHAIRMAN who drafted a block of the request (`actionsFor` returns `canCancel` and `canEdit`); "Edit request" cancels and opens the Drafts tab, since the blocks return to drafts.
+- **Assignment requests** (`modules/assignmentRequests`): `PATCH /:id` (day, time, room; conflict check excludes `replacesLoadId`) and `POST /:id/cancel`, both only for the chairman who asked while PENDING; enum value CANCELLED (migration `20260619000000_assignment_request_cancel`).
+- **Dashboard**: `kpis.curriculum.classesComplete`, `kpis.faculty.withLoad`, `kpis.rooms.roomsInUse` drive the three cards; the hour fields stay in the payload for the exports and projection.
+- **Admin Scheduler**: ADMIN is allowed on POST /faculty-loads, auto-assign, reset and copy; `SchedulerPage` lists all faculty for the admin (`isAdmin`), `groupFacultyByDepartment(..., needsApproval=false)` drops the "requires approval" label. Locked terms still apply.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

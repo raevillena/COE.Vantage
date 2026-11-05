@@ -118,12 +118,16 @@ export async function notifyScheduleChange(
 export async function listNotifications(userId: string, limit: number) {
   const cutoff = new Date(Date.now() - READ_RETENTION_DAYS * 86_400_000);
   await prisma.notification.deleteMany({ where: { userId, readAt: { not: null, lt: cutoff } } });
-  const [items, unread, user] = await Promise.all([
-    prisma.notification.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, take: limit }),
+  // Unread ones come first, newest first: the badge counts every unread one, so none may hide behind newer read ones.
+  const unreadItems = await prisma.notification.findMany({ where: { userId, readAt: null }, orderBy: { updatedAt: "desc" }, take: limit });
+  const [readItems, unread, user] = await Promise.all([
+    unreadItems.length < limit
+      ? prisma.notification.findMany({ where: { userId, readAt: { not: null } }, orderBy: { updatedAt: "desc" }, take: limit - unreadItems.length })
+      : Promise.resolve([]),
     prisma.notification.count({ where: { userId, readAt: null } }),
     prisma.user.findUnique({ where: { id: userId }, select: { lastSeenVersion: true } }),
   ]);
-  return { items, unread, lastSeenVersion: user?.lastSeenVersion ?? null };
+  return { items: [...unreadItems, ...readItems], unread, lastSeenVersion: user?.lastSeenVersion ?? null };
 }
 
 export async function markRead(userId: string, id: string) {

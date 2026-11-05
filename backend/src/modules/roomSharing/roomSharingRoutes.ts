@@ -89,7 +89,7 @@ router.post("/requests/:id/approve", authorize("CHAIRMAN", "COLLEGE_SECRETARY"),
 router.post("/requests/:id/reject", authorize("CHAIRMAN", "COLLEGE_SECRETARY"), validate(decisionBody), async (req: Request, res: Response) => {
   res.json(await svc.decide(who(req), String(req.params.id), "reject", req.body.notes));
 });
-router.post("/requests/:id/cancel", authorize("COLLEGE_SECRETARY"), async (req: Request, res: Response) => {
+router.post("/requests/:id/cancel", authorize("CHAIRMAN", "COLLEGE_SECRETARY"), async (req: Request, res: Response) => {
   await svc.cancelRequest(who(req), String(req.params.id));
   res.status(204).end();
 });

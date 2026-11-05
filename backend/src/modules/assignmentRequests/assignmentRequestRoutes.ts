@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, list, getPendingCount, approve, reject } from "./assignmentRequestController.js";
+import { create, list, getPendingCount, approve, reject, cancel, update } from "./assignmentRequestController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize, readOnly } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -7,6 +7,7 @@ import {
   createAssignmentRequestSchema,
   listAssignmentRequestsQuerySchema,
   respondAssignmentRequestSchema,
+  updateAssignmentRequestSchema,
 } from "./assignmentRequestSchemas.js";
 
 const router = Router();
@@ -20,5 +21,7 @@ router.get("/", list);
 router.post("/", validate(createAssignmentRequestSchema), authorize("CHAIRMAN"), create);
 router.post("/:id/approve", validate(respondAssignmentRequestSchema), approve);
 router.post("/:id/reject", validate(respondAssignmentRequestSchema), reject);
+router.patch("/:id", validate(updateAssignmentRequestSchema), authorize("CHAIRMAN"), update);
+router.post("/:id/cancel", authorize("CHAIRMAN"), cancel);
 
 export const assignmentRequestRoutes = router;

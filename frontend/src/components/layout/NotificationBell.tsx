@@ -58,15 +58,30 @@ export function NotificationBell() {
   const [data, setData] = useState<NotificationList | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const alive = useRef(true);
+  // What this person already read or looked at here but the server may not have confirmed yet. A refresh that was sent
+  // before the click arrives with the old state, so it is laid over with these instead of bringing the badge back.
+  const readLocally = useRef<Set<string>>(new Set());
+  const seenLocally = useRef<string | null>(null);
+
+  const withLocalReads = useCallback((d: NotificationList): NotificationList => {
+    const stale = d.items.filter((i) => !i.readAt && readLocally.current.has(i.id));
+    const seen = seenLocally.current;
+    return {
+      ...d,
+      unread: Math.max(0, d.unread - stale.length),
+      items: d.items.map((i) => (!i.readAt && readLocally.current.has(i.id) ? { ...i, readAt: new Date().toISOString() } : i)),
+      lastSeenVersion: seen && (!d.lastSeenVersion || isNewer(seen, d.lastSeenVersion)) ? seen : d.lastSeenVersion,
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
       const { data: d } = await apiClient.get<NotificationList>("/notifications", { params: { limit: 30 } });
-      if (alive.current) setData(d);
+      if (alive.current) setData(withLocalReads(d));
     } catch {
       // the bell is a convenience: stay quiet when the server is unreachable
     }
-  }, []);
+  }, [withLocalReads]);
 
   useEffect(() => {
     alive.current = true;
@@ -95,7 +110,12 @@ export function NotificationBell() {
   const openItem = (item: NotificationItem) => {
     if (!item.readAt) {
       setData((d) => (d ? { ...d, unread: Math.max(0, d.unread - 1), items: d.items.map((i) => (i.id === item.id ? { ...i, readAt: new Date().toISOString() } : i)) } : d));
-      void apiClient.post(`/notifications/${item.id}/read`).catch(() => undefined);
+      readLocally.current.add(item.id);
+      void apiClient
+        .post(`/notifications/${item.id}/read`)
+        .then(() => readLocally.current.delete(item.id))
+        .catch(() => undefined)
+        .finally(() => void load());
     }
     if (item.link) navigate(item.link);
   };
@@ -105,6 +125,7 @@ export function NotificationBell() {
     setNotesOpen(true);
     if (latest) {
       setData((d) => (d ? { ...d, lastSeenVersion: latest } : d));
+      seenLocally.current = latest;
       void apiClient.post("/notifications/seen-version", { version: latest }).catch(() => undefined);
     }
   };
@@ -112,10 +133,14 @@ export function NotificationBell() {
   const markAllRead = async () => {
     const latest = newReleases[0]?.version;
     setData((d) => (d ? { ...d, unread: 0, lastSeenVersion: latest ?? d.lastSeenVersion, items: d.items.map((i) => ({ ...i, readAt: i.readAt ?? new Date().toISOString() })) } : d));
+    for (const i of data?.items ?? []) if (!i.readAt) readLocally.current.add(i.id);
+    if (latest) seenLocally.current = latest;
     await Promise.all([
       apiClient.post("/notifications/read-all").catch(() => undefined),
       latest ? apiClient.post("/notifications/seen-version", { version: latest }).catch(() => undefined) : Promise.resolve(),
     ]);
+    readLocally.current.clear();
+    void load();
   };
 
   const isEmpty = (data?.items.length ?? 0) === 0 && newReleases.length === 0;

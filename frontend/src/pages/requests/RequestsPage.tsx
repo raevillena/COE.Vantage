@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../api/apiClient";
-import type { AssignmentRequest, FacultyLoad } from "../../types/api";
+import type { AssignmentRequest, FacultyLoad, Room } from "../../types/api";
 import { getApiErrorMessage } from "../../types/api";
 import toast from "react-hot-toast";
 import { Button } from "../../components/ui/button";
@@ -10,6 +10,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { useAppSelector } from "../../store/hooks";
 import { HelpTip } from "../../components/ui/helpTip";
+import { SearchableSelect } from "../../components/ui/searchableSelect";
 
 /** Map a request to a FacultyLoad for the schedule grid (shows as "Awaiting approval" when pending). */
 function requestToDisplayLoad(r: AssignmentRequest): FacultyLoad {
@@ -53,6 +54,98 @@ function roomDisplay(r: AssignmentRequest): string {
   return "—";
 }
 
+const fieldClass =
+  "w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
+
+/** The chairman who asked changes the day, time or room while the request waits. */
+function EditRequestDialog({ request, onClose, onSaved }: { request: AssignmentRequest; onClose: () => void; onSaved: () => void }) {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [day, setDay] = useState(request.dayOfWeek);
+  const [start, setStart] = useState(request.startTime);
+  const [end, setEnd] = useState(request.endTime);
+  const [roomId, setRoomId] = useState(request.roomId ?? "__other__");
+  const [roomName, setRoomName] = useState(request.roomDisplayName ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiClient.get<Room[]>("/rooms").then(({ data }) => setRooms(Array.isArray(data) ? data : [])).catch(() => setRooms([]));
+  }, []);
+
+  const valid = /^\d{1,2}:\d{2}$/.test(start) && /^\d{1,2}:\d{2}$/.test(end);
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await apiClient.patch(`/assignment-requests/${request.id}`, {
+        dayOfWeek: day,
+        startTime: start,
+        endTime: end,
+        roomId: roomId === "__other__" ? null : roomId,
+        roomDisplayName: roomId === "__other__" ? roomName.trim() || null : null,
+      });
+      toast.success("Request updated");
+      onSaved();
+      onClose();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Could not update the request"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Content title="Edit request" className="max-w-md" aria-describedby="edit-request-description">
+        <p id="edit-request-description" className="text-sm text-foreground-muted">
+          {request.faculty?.name} · {request.subject?.code} · {request.studentClass?.name}. The approver is told when you save.
+        </p>
+        <div className="mt-4 space-y-3 text-sm">
+          <label className="block">
+            <span className="mb-1 block text-foreground-muted">Day</span>
+            <select className={fieldClass} value={day} onChange={(e) => setDay(Number(e.target.value))} aria-label="Day">
+              {Object.entries(DAY_NAMES).map(([n, name]) => (
+                <option key={n} value={n}>{name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-foreground-muted">Start</span>
+              <input className={fieldClass} type="time" value={start.padStart(5, "0")} onChange={(e) => setStart(e.target.value)} aria-label="Start time" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-foreground-muted">End</span>
+              <input className={fieldClass} type="time" value={end.padStart(5, "0")} onChange={(e) => setEnd(e.target.value)} aria-label="End time" />
+            </label>
+          </div>
+          <div>
+            <span className="mb-1 block text-foreground-muted">Room</span>
+            <SearchableSelect
+              aria-label="Room"
+              placeholder="Search rooms"
+              value={roomId}
+              options={[{ value: "__other__", label: "Other (off-system)" }, ...rooms.map((r) => ({ value: r.id, label: r.name }))]}
+              onValueChange={setRoomId}
+            />
+          </div>
+          {roomId === "__other__" && (
+            <label className="block">
+              <span className="mb-1 block text-foreground-muted">Room name</span>
+              <input className={fieldClass} value={roomName} onChange={(e) => setRoomName(e.target.value)} maxLength={500} aria-label="Room name" />
+            </label>
+          )}
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button onClick={save} disabled={saving || !valid}>{saving ? <Spinner className="h-4 w-4" /> : "Save changes"}</Button>
+        </div>
+      </Dialog.Content>
+    </Dialog.Root>
+  );
+}
+
 export function RequestsPage() {
   const user = useAppSelector((s) => s.auth.user);
   const canDecide = user?.role !== "COLLEGE_SECRETARY";
@@ -62,6 +155,7 @@ export function RequestsPage() {
   const [scopeFilter, setScopeFilter] = useState<"all" | "mine" | "other">("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editing, setEditing] = useState<AssignmentRequest | null>(null);
   const [previewRequest, setPreviewRequest] = useState<AssignmentRequest | null>(null);
   const [scheduleLoads, setScheduleLoads] = useState<FacultyLoad[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -130,6 +224,20 @@ export function RequestsPage() {
     }
   };
 
+  const handleCancel = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await apiClient.post(`/assignment-requests/${id}/cancel`);
+      toast.success("Request cancelled");
+      await load();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Cancel failed"));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+  const canCancel = (r: AssignmentRequest) => user?.role === "CHAIRMAN" && r.status === "PENDING" && r.requestedBy?.id === user.id;
+
   const searchLower = searchQuery.trim().toLowerCase();
   const filteredList = searchLower
     ? list.filter((r) => {
@@ -192,6 +300,7 @@ export function RequestsPage() {
                 <Select.Item value="PENDING">Pending</Select.Item>
                 <Select.Item value="APPROVED">Approved</Select.Item>
                 <Select.Item value="REJECTED">Rejected</Select.Item>
+                <Select.Item value="CANCELLED">Cancelled</Select.Item>
                 <Select.Item value="__all__">All</Select.Item>
               </Select.Content>
             </Select.Root>
@@ -243,7 +352,7 @@ export function RequestsPage() {
                 <th className="px-3 py-2 text-left font-medium text-foreground">Time</th>
                 <th className="px-3 py-2 text-left font-medium text-foreground">Requested by</th>
                 <th className="px-3 py-2 text-left font-medium text-foreground">Status</th>
-                {scopeFilter !== "mine" && (statusFilter === "PENDING" || statusFilter === "__all__") && (
+                {(statusFilter === "PENDING" || statusFilter === "__all__") && (
                   <th className="px-3 py-2 text-right font-medium text-foreground">Actions</th>
                 )}
                 <th className="px-3 py-2 text-right font-medium text-foreground w-20">Preview</th>
@@ -272,13 +381,15 @@ export function RequestsPage() {
                           ? "text-amber-600"
                           : r.status === "APPROVED"
                             ? "text-green-600"
+                            : r.status === "CANCELLED"
+                            ? "text-foreground-muted"
                             : "text-red-600"
                       }
                     >
                       {r.status}
                     </span>
                   </td>
-                  {scopeFilter !== "mine" && (statusFilter === "PENDING" || statusFilter === "__all__") && (
+                  {(statusFilter === "PENDING" || statusFilter === "__all__") && (
                     <td className="px-3 py-2 text-right">
                       {canDecide && r.status === "PENDING" && r.requestedBy?.id !== user?.id ? (
                         <div className="flex justify-end gap-2">
@@ -295,6 +406,13 @@ export function RequestsPage() {
                             onClick={() => handleReject(r.id)}
                           >
                             {actionLoading === r.id ? <Spinner className="h-4 w-4" /> : "Reject"}
+                          </Button>
+                        </div>
+                      ) : canCancel(r) ? (
+                        <div className="flex justify-end">
+                          <Button variant="secondary" className="mr-2" disabled={actionLoading !== null} onClick={() => setEditing(r)}>Edit</Button>
+                          <Button variant="dangerOutline" disabled={actionLoading !== null} onClick={() => handleCancel(r.id)}>
+                            {actionLoading === r.id ? <Spinner className="h-4 w-4" /> : "Cancel request"}
                           </Button>
                         </div>
                       ) : (
@@ -317,6 +435,8 @@ export function RequestsPage() {
           </table>
         </div>
       )}
+
+      {editing && <EditRequestDialog request={editing} onClose={() => setEditing(null)} onSaved={load} />}
 
       {previewRequest && (
         <Dialog.Root open={!!previewRequest} onOpenChange={(open) => !open && setPreviewRequest(null)}>
@@ -405,7 +525,9 @@ export function RequestsPage() {
                         ? "text-amber-600"
                         : previewRequest.status === "APPROVED"
                           ? "text-green-600"
-                          : "text-red-600"
+                          : previewRequest.status === "CANCELLED"
+                            ? "text-foreground-muted"
+                            : "text-red-600"
                     }
                   >
                     {previewRequest.status}
@@ -443,9 +565,26 @@ export function RequestsPage() {
                   </Button>
                 </>
               ) : (
-                <Dialog.Close asChild>
-                  <Button type="button" variant="secondary">Close</Button>
-                </Dialog.Close>
+                <>
+                  {canCancel(previewRequest) && (
+                    <Button variant="secondary" onClick={() => { setEditing(previewRequest); setPreviewRequest(null); }}>Edit request</Button>
+                  )}
+                  {canCancel(previewRequest) && (
+                    <Button
+                      variant="dangerOutline"
+                      disabled={actionLoading !== null}
+                      onClick={async () => {
+                        await handleCancel(previewRequest.id);
+                        setPreviewRequest(null);
+                      }}
+                    >
+                      {actionLoading === previewRequest.id ? <Spinner className="h-4 w-4" /> : "Cancel request"}
+                    </Button>
+                  )}
+                  <Dialog.Close asChild>
+                    <Button type="button" variant="secondary">Close</Button>
+                  </Dialog.Close>
+                </>
               )}
             </div>
           </Dialog.Content>

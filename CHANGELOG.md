@@ -2,6 +2,17 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.7.4 - 2026-11-05
+
+Edit or cancel waiting requests, and an admin Scheduler
+
+- **New:** Chairmen can edit or cancel a room request, and an assignment request, while it waits for approval. Editing a room request takes it back to drafts; an assignment request can change its day, time and room.
+- **Improved:** The dashboard shows how many classes have complete schedules, how many faculty have a load and how many rooms are in use, instead of hours.
+- **New:** The admin can open the Scheduler and edit, create, move, remove, auto-schedule and reset schedules directly, without approvals, and can also edit blocks from the class and faculty schedule pages.
+- **Improved:** Time rows in the scheduler read as ranges (8:00-9:00 AM), and the faculty selector in the assignment panel is a searchable dropdown grouped by department.
+- **Fixed:** A notification that was already opened no longer stays unread in the bell; unread items are listed first.
+- **Improved:** The app is branded Vantage on the login page, banner, About page and browser title.
+
 ## v0.7.3 - 2026-10-29
 
 Wider room requests and smoother scheduler dragging

@@ -154,7 +154,7 @@ export function AssignmentForm({
   const coIsOffSystemRoom = coRoomId === "__off_system__";
   /** Saved load in DB (not a pending placeholder id). */
   const isEditingSavedLoad = Boolean(editingLoadId && !String(editingLoadId).startsWith("pending-"));
-  const facultyGroups = useMemo(() => groupFacultyByDepartment(faculties, user?.departmentId ?? null), [faculties, user?.departmentId]);
+  const facultyGroups = useMemo(() => groupFacultyByDepartment(faculties, user?.departmentId ?? null, user?.role !== "ADMIN"), [faculties, user?.departmentId, user?.role]);
   const coInstructorFacultyOptions = useMemo(() => {
     const current =
       facultyId && facultyId !== "__others__" && facultyId !== "__none__" && facultyId !== ""
@@ -600,39 +600,24 @@ export function AssignmentForm({
       )}
       <div>
         <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
-        <Select.Root
+        <SearchableSelect
+          aria-label="Faculty"
+          placeholder="Search faculty"
           value={facultyId || "__none__"}
+          noneOption={{ value: "__none__", label: "Select faculty" }}
+          options={[
+            { value: "__others__", label: "Others (off-system)" },
+            ...facultyGroups.flatMap((g) => g.items.map((f) => ({ value: f.id, label: `${f.name}${facultyRoleSuffix(f.role)}`, group: g.label }))),
+          ]}
+          disabled={lockFaculty}
+          inputClassName={facultyEmpty ? requiredFieldClass : ""}
           onValueChange={(v) => {
             if (lockFaculty) return;
             const id = v === "__none__" ? "" : v;
             setFacultyId(id);
             onFacultyIdChange?.(id === "__others__" ? "" : id);
           }}
-        >
-        <Select.Trigger
-          aria-label="Faculty"
-          className={`w-full ${facultyEmpty ? requiredFieldClass : ""}`}
-          disabled={lockFaculty}
-        >
-            <Select.Value placeholder="Select faculty" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="__none__">Select faculty</Select.Item>
-            <Select.Item value="__others__">Others (off-system)</Select.Item>
-            {facultyGroups.map((g) => (
-              <Select.Group key={g.key}>
-                <Select.Label className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-                  {g.label}
-                </Select.Label>
-                {g.items.map((f) => (
-                  <Select.Item key={f.id} value={f.id}>
-                    {f.name}{facultyRoleSuffix(f.role)}
-                  </Select.Item>
-                ))}
-              </Select.Group>
-            ))}
-          </Select.Content>
-        </Select.Root>
+        />
         {isOthersFaculty && (
           <Input
             className="mt-1"

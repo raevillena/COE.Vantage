@@ -92,6 +92,11 @@ Room sharing between colleges
  - a college that locked a semester opens its rooms to the others; chairmen draft blocks, the college secretary submits, the room's chairman approves, then the host college secretary approves last; deans view and are notified; unlock is blocked while other colleges are booked. done (v0.7.0, needs migration 20260618000000_room_sharing)
  - open: no partial approval (whole request only); no way yet for the host to remove one guest block after approval besides the guest college deleting it.
 
+Edit or cancel waiting requests, and an admin Scheduler
+ - a waiting room request can be taken back by the chairman who drafted a block of it (Edit request returns the blocks to drafts); assignment requests get PATCH (day, time, room) and POST cancel for the chairman who asked, new status CANCELLED (migration 20260619000000_assignment_request_cancel)
+ - dashboard cards count classes complete, faculty with a load and rooms in use; the admin may use the Scheduler (create, auto-assign, reset, copy, no approval step). done (v0.7.4, one migration)
+ - open: assignment requests have no in-place change of faculty, subject or class; the Projected completion card and exports still use hours
+
 Room request badges and the raw blocks list
  - count badges (sidebar Requests and Room sharing, the Requests tab) share one CountBadge; room-sharing notifications open the request; opening a request shows each room's week with the requested blocks in place. Scheduler: a Code button lists the view's blocks with exact times (edit or remove, odd hours marked); the grid starts earlier than 7 AM when a block does. done (v0.7.1, no migration)
  - open: the time picker still accepts early times; only the Code list and the grid now surface them.

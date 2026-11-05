@@ -7,6 +7,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { departmentLabel } from "../../utils/departmentLabel";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { RawBlocksEditor } from "../../components/scheduler/RawBlocksEditor";
 import { useAppSelector } from "../../store/hooks";
 
 export function StudentSchedulePage() {
@@ -20,6 +21,7 @@ export function StudentSchedulePage() {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const role = user?.role;
   // A faculty member only sees the classes where they teach, and only through the report endpoints.
   const isFaculty = role === "FACULTY";
@@ -93,11 +95,16 @@ export function StudentSchedulePage() {
     }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), studentClassId: selectedClassId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedClassId, isFaculty]);
+  }, [academicYearId, semester, selectedClassId, isFaculty, reloadKey]);
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-foreground mb-4">Student Class Schedule</h1>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-foreground">Student Class Schedule</h1>
+        {role === "ADMIN" && selectedClassId && academicYearId && (
+          <RawBlocksEditor loads={loads} canEdit semester={semester} academicYearId={academicYearId} onChanged={() => setReloadKey((k) => k + 1)} />
+        )}
+      </div>
       <div className="mb-6 flex flex-wrap items-center gap-4">
         {needsDepartmentFilter && (
           <div className="min-w-[220px]">

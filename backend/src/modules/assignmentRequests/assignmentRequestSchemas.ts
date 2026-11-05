@@ -18,9 +18,20 @@ export const createAssignmentRequestSchema = z.object({
   }),
 });
 
+/** What the chairman who asked may change while the request waits: the day, time and room. */
+export const updateAssignmentRequestSchema = z.object({
+  body: z.object({
+    roomId: z.string().uuid().optional().nullable(),
+    roomDisplayName: z.string().max(500).optional().nullable(),
+    dayOfWeek: z.number().int().min(1).max(7),
+    startTime: timeString,
+    endTime: timeString,
+  }),
+});
+
 export const listAssignmentRequestsQuerySchema = z.object({
   query: z.object({
-    status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+    status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
     /** all = mine + others (default); mine = only my requests; other = only external/others' requests. */
     scope: z.enum(["all", "mine", "other"]).optional(),
     /** When provided with academicYearId and semester, return PENDING requests for this class (for schedule display). */
@@ -37,5 +48,6 @@ export const respondAssignmentRequestSchema = z.object({
 });
 
 export type CreateAssignmentRequestBody = z.infer<typeof createAssignmentRequestSchema>["body"];
+export type UpdateAssignmentRequestBody = z.infer<typeof updateAssignmentRequestSchema>["body"];
 export type ListAssignmentRequestsQuery = z.infer<typeof listAssignmentRequestsQuerySchema>["query"];
 export type RespondAssignmentRequestBody = z.infer<typeof respondAssignmentRequestSchema>["body"];

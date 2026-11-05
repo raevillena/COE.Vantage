@@ -329,6 +329,7 @@ enum CrossDepartmentRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 // Chairman A requests to assign faculty from Dept B; Chairman B approves/rejects

@@ -15,6 +15,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.7.4",
+    date: "2026-11-05",
+    title: "Edit or cancel waiting requests, and an admin Scheduler",
+    changes: [
+      { kind: "new", text: "Chairmen can edit or cancel a room request, and an assignment request, while it waits for approval. Editing a room request takes it back to drafts; an assignment request can change its day, time and room." },
+      { kind: "improved", text: "The dashboard shows how many classes have complete schedules, how many faculty have a load and how many rooms are in use, instead of hours." },
+      { kind: "new", text: "The admin can open the Scheduler and edit, create, move, remove, auto-schedule and reset schedules directly, without approvals, and can also edit blocks from the class and faculty schedule pages." },
+      { kind: "improved", text: "Time rows in the scheduler read as ranges (8:00-9:00 AM), and the faculty selector in the assignment panel is a searchable dropdown grouped by department." },
+      { kind: "fixed", text: "A notification that was already opened no longer stays unread in the bell; unread items are listed first." },
+      { kind: "improved", text: "The app is branded Vantage on the login page, banner, About page and browser title." },
+    ],
+  },
+  {
     version: "v0.7.3",
     date: "2026-10-29",
     title: "Wider room requests and smoother scheduler dragging",

@@ -81,6 +81,15 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
   }
   const classes = progress.classes;
   const classesWithNoSchedule = classes.filter((c) => !c.hasAnyLoad).length;
+  // a class is complete when it has required subjects and every one of them is fully scheduled
+  const perClass = new Map<string, { subjects: number; done: number }>();
+  for (const e of progress.entries) {
+    const c = perClass.get(e.classId) ?? { subjects: 0, done: 0 };
+    c.subjects++;
+    if (e.scheduledMinutes >= e.requiredMinutes) c.done++;
+    perClass.set(e.classId, c);
+  }
+  const classesComplete = [...perClass.values()].filter((c) => c.done === c.subjects).length;
 
   // ---- Faculty load: assigned units against the maximum less deloading (lab units count 3x) ----
   let capped = 0;
@@ -209,6 +218,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
         unscheduledSubjects,
         classes: classes.length,
         classesWithNoSchedule,
+        classesComplete,
       },
       faculty: {
         percent: pct(cappedUnits, cappedMax),
@@ -221,6 +231,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
         unset,
         withoutLoad,
         total: workload.length,
+        withLoad: workload.length - withoutLoad,
       },
       conflicts: conflictCounts,
       rooms: {
@@ -228,6 +239,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
         occupiedHours: round1(occupiedMinutes / 60),
         availableHours: round1(availableMinutes / 60),
         rooms: rooms.length,
+        roomsInUse: rooms.filter((r) => r.occupiedMinutes > 0).length,
       },
       gaps: { count: gaps, noEligibleFaculty, pendingRequests },
     },

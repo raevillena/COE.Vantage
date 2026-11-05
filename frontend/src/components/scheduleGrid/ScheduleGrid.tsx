@@ -19,10 +19,17 @@ const GRID_MIN_WIDTH_PX = 72 + 6 * DAY_COLUMN_MIN_PX; // 4.5rem ≈ 72px
 const DAY_COLUMN_MIN_FLOOR_PX = 72;
 
 /** Format hour (0–23) as 12-hour time e.g. "8:00 AM", "12:00 PM" */
-function formatHour12(hour24: number): string {
-  const h = hour24 % 12 || 12;
-  const ampm = hour24 < 12 ? "AM" : "PM";
-  return `${h}:00 ${ampm}`;
+/** The slot an hour row stands for, as two lines: "8:00–9:00" over "AM" (or "AM–PM" when the slot crosses noon). */
+function formatHourSlot(hour24: number): React.ReactNode {
+  const h = (n: number) => n % 12 || 12;
+  const mer = (n: number) => (n % 24 < 12 ? "AM" : "PM");
+  const end = hour24 + 1;
+  return (
+    <span className="flex flex-col items-center leading-tight" aria-label={`${h(hour24)}:00 ${mer(hour24)} to ${h(end)}:00 ${mer(end)}`}>
+      <span>{h(hour24)}:00–{h(end)}:00</span>
+      <span className="text-[10px] opacity-80">{mer(hour24) === mer(end) ? mer(hour24) : `${mer(hour24)}–${mer(end)}`}</span>
+    </span>
+  );
 }
 
 /** Format full name as "FirstInitial. Surname" e.g. "Maria Santos" → "M. Santos". */
@@ -450,7 +457,7 @@ export function ScheduleGrid({
         {/* Body: single row with time column + 6 day columns so columns align with header */}
         <div className="relative border-r border-border" style={{ height: gridHeight, gridColumn: "1" }}>
           {Array.from({ length: hourEnd - hourStart }, (_, i) => (
-            <div key={i} className="absolute left-0 flex w-[4.5rem] items-center justify-center border-t border-border text-xs text-foreground-muted" style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>{formatHour12(hourStart + i)}</div>
+            <div key={i} className="absolute left-0 flex w-[4.5rem] items-center justify-center border-t border-border text-xs text-foreground-muted" style={{ top: i * SLOT_HEIGHT, height: SLOT_HEIGHT }}>{formatHourSlot(hourStart + i)}</div>
           ))}
         </div>
         {[1, 2, 3, 4, 5, 6].map((dayOfWeek) => {

@@ -71,7 +71,7 @@ interface ShareRequest {
 interface RequestDetail extends Omit<ShareRequest, "blockCount"> {
   blocks: Block[];
   roomBusy: { roomId: string; busy: Busy[] }[];
-  actions: { chairmanDecides: boolean; secretaryDecides: boolean; canCancel: boolean };
+  actions: { chairmanDecides: boolean; secretaryDecides: boolean; canCancel: boolean; canEdit: boolean };
 }
 interface FacultyOption {
   id: string;
@@ -322,7 +322,7 @@ function DraftDialog({
         title={`Draft a block in ${room.name}`}
         description={`${room.collegeName} · ${room.departmentName}. Your college secretary submits the drafts as a request.`}
         className="max-h-[94vh] overflow-y-auto"
-        style={{ width: "96vw", maxWidth: "96vw" }}
+        style={{ width: "80vw", maxWidth: "96vw", minWidth: "min(96vw, 36rem)" }}
       >
         <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(18rem,24rem)_1fr]">
         <div className="space-y-3">
@@ -401,7 +401,7 @@ function DraftDialog({
 
 // ------------------------------------------------------------------ one request, as the approvers see it
 
-function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
+function RequestDialog({ id, onClose, onChanged, onEdit }: { id: string; onClose: () => void; onChanged: () => void; onEdit: () => void }) {
   const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -411,15 +411,16 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
   }, [id]);
   useEffect(load, [load]);
 
-  const act = async (kind: "approve" | "reject" | "cancel") => {
+  const act = async (kind: "approve" | "reject" | "cancel" | "edit") => {
     setBusy(true);
     try {
-      if (kind === "cancel") await apiClient.post(`/room-share/requests/${id}/cancel`);
+      if (kind === "cancel" || kind === "edit") await apiClient.post(`/room-share/requests/${id}/cancel`);
       else await apiClient.post(`/room-share/requests/${id}/${kind}`, { notes: notes.trim() || null });
-      toast.success(kind === "approve" ? "Approved" : kind === "reject" ? "Rejected" : "Request cancelled");
+      toast.success(kind === "approve" ? "Approved" : kind === "reject" ? "Rejected" : kind === "edit" ? "Request taken back. Its blocks are in your drafts." : "Request cancelled");
       window.dispatchEvent(new Event("room-share-changed"));
       onChanged();
       if (kind === "cancel") onClose();
+      else if (kind === "edit") { onClose(); onEdit(); }
       else load();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "That did not work"));
@@ -438,7 +439,7 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content title="Room request" className="max-h-[94vh] overflow-y-auto" style={{ width: "96vw", maxWidth: "96vw" }}>
+      <Dialog.Content title="Room request" className="max-h-[94vh] overflow-y-auto" style={{ width: "80vw", maxWidth: "96vw", minWidth: "min(96vw, 36rem)" }}>
         {!detail ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : (
@@ -504,6 +505,7 @@ function RequestDialog({ id, onClose, onChanged }: { id: string; onClose: () => 
 
             <div className="flex flex-wrap justify-end gap-2">
               {detail.actions.canCancel && <Button variant="dangerOutline" disabled={busy} onClick={() => act("cancel")}>Cancel request</Button>}
+              {detail.actions.canEdit && <Button variant="secondary" disabled={busy} onClick={() => act("edit")}>Edit request</Button>}
               {decides && (
                 <>
                   <Button variant="dangerOutline" disabled={busy || !notes.trim()} onClick={() => act("reject")}>Reject</Button>
@@ -812,7 +814,7 @@ export function RoomSharingPage() {
       )}
 
       {drafting && <DraftDialog room={drafting} term={{ academicYearId: yearId, semester }} onClose={() => setDrafting(null)} onAdded={() => { loadDrafts(); loadRooms(); }} />}
-      {openId && <RequestDialog id={openId} onClose={() => setOpenId(null)} onChanged={() => { loadRequests(); loadRooms(); loadWaiting(); }} />}
+      {openId && <RequestDialog id={openId} onClose={() => setOpenId(null)} onChanged={() => { loadRequests(); loadRooms(); loadWaiting(); }} onEdit={() => { setTab("drafts"); loadDrafts(); }} />}
     </div>
   );
 }

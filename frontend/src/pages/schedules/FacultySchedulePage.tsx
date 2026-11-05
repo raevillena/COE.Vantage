@@ -7,6 +7,7 @@ import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { RawBlocksEditor } from "../../components/scheduler/RawBlocksEditor";
 import { useAppSelector } from "../../store/hooks";
 
 export function FacultySchedulePage() {
@@ -20,6 +21,7 @@ export function FacultySchedulePage() {
   const [selectedFacultyId, setSelectedFacultyId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const role = user?.role;
   const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
 
@@ -81,11 +83,16 @@ export function FacultySchedulePage() {
     setLoading(true);
     const params = new URLSearchParams({ academicYearId, semester: String(semester), facultyId: selectedFacultyId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedFacultyId]);
+  }, [academicYearId, semester, selectedFacultyId, reloadKey]);
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-foreground mb-4">Faculty Schedule</h1>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-foreground">Faculty Schedule</h1>
+        {role === "ADMIN" && selectedFacultyId && academicYearId && (
+          <RawBlocksEditor loads={loads} canEdit semester={semester} academicYearId={academicYearId} onChanged={() => setReloadKey((k) => k + 1)} />
+        )}
+      </div>
       <div className="mb-6 flex flex-wrap items-center gap-4">
         {needsDepartmentFilter && (
           <div className="min-w-[220px]">

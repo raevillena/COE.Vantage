@@ -38,6 +38,7 @@ interface Summary {
       unscheduledSubjects: number;
       classes: number;
       classesWithNoSchedule: number;
+      classesComplete: number;
     };
     faculty: {
       percent: number;
@@ -50,9 +51,10 @@ interface Summary {
       unset: number;
       withoutLoad: number;
       total: number;
+      withLoad: number;
     };
     conflicts: { total: number; faculty: number; room: number; class: number };
-    rooms: { percent: number; occupiedHours: number; availableHours: number; rooms: number };
+    rooms: { percent: number; occupiedHours: number; availableHours: number; rooms: number; roomsInUse: number };
     gaps: { count: number; noEligibleFaculty: number; pendingRequests: number };
   };
   projection?: {
@@ -222,24 +224,20 @@ export function DashboardOverview() {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Kpi
-              label="Curriculum scheduled"
-              value={`${k.curriculum.percent}%`}
-              sub={`${k.curriculum.scheduledHours} of ${k.curriculum.requiredHours} required hrs/week`}
+              label="Classes with complete schedules"
+              value={`${k.curriculum.classesComplete} of ${k.curriculum.classes}`}
+              sub={`${k.curriculum.classes - k.curriculum.classesComplete - k.curriculum.classesWithNoSchedule} in progress · ${k.curriculum.classesWithNoSchedule} with no schedule yet`}
               to={withTerm("/dashboard/details/curriculum-completion")}
             />
             <Link
               to={withTerm("/dashboard/details/faculty-workload")}
               className="block rounded-lg border border-border bg-surface p-4 shadow-sm transition-shadow hover:shadow focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2"
             >
-              <p className="text-sm text-foreground-muted">Faculty load</p>
+              <p className="text-sm text-foreground-muted">Faculty with a load</p>
               <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">
-                {k.faculty.facultyWithCap > 0 ? `${k.faculty.percent}%` : "—"}
+                {k.faculty.withLoad} of {k.faculty.total}
               </p>
-              <p className="mt-1 text-xs text-foreground-muted">
-                {k.faculty.facultyWithCap > 0
-                  ? `${k.faculty.assignedUnits} of ${k.faculty.maxUnits} allowed units (maximum less deloading)`
-                  : "No maximum units set"}
-              </p>
+              <p className="mt-1 text-xs text-foreground-muted">{k.faculty.withoutLoad} without a load yet</p>
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium">
                 <span className={`rounded px-1.5 py-0.5 ${LOAD_STATE_BADGE.over}`}>{k.faculty.over} overload</span>
                 <span className={`rounded px-1.5 py-0.5 ${LOAD_STATE_BADGE.under}`}>{k.faculty.under} underload</span>
@@ -247,9 +245,9 @@ export function DashboardOverview() {
               </div>
             </Link>
             <Kpi
-              label="Room use"
-              value={`${k.rooms.percent}%`}
-              sub={`${k.rooms.occupiedHours} of ${k.rooms.availableHours} room-hrs · ${data.context.roomWindow ?? ""}`}
+              label="Rooms in use"
+              value={`${k.rooms.roomsInUse} of ${k.rooms.rooms}`}
+              sub={`${k.rooms.rooms - k.rooms.roomsInUse} rooms with no class yet`}
               to={withTerm("/dashboard/details/room-utilization")}
             />
             <Kpi

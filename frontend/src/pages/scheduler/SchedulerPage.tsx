@@ -279,7 +279,9 @@ export function SchedulerPage() {
   const currentAcademicYear = academicYears.find((y) => y.id === academicYearId);
   const previousAcademicYears = academicYears.filter((y) => y.id !== academicYearId);
   /** Faculty-view picker: own department only (includes the chairman). */
-  const departmentFaculties = faculties.filter((f) => f.departmentId === user?.departmentId);
+  // The admin is not tied to a department and can work with every faculty member of the college.
+  const isAdmin = user?.role === "ADMIN";
+  const departmentFaculties = isAdmin ? faculties : faculties.filter((f) => f.departmentId === user?.departmentId);
 
 
   /** Map a pending cross-department request to a FacultyLoad-like block for the grid (id prefixed so it doesn't collide). */
@@ -1154,7 +1156,7 @@ export function SchedulerPage() {
   const freeRooms = slotAvailability ? rooms.filter((r) => slotAvailability.roomIds.includes(r.id)) : rooms;
   // Own-department faculty only: changing a load's faculty here does not go through the approval flow.
   const freeFaculties = faculties.filter(
-    (f) => f.departmentId === user?.departmentId && (!slotAvailability || slotAvailability.facultyIds.includes(f.id))
+    (f) => (isAdmin || f.departmentId === user?.departmentId) && (!slotAvailability || slotAvailability.facultyIds.includes(f.id))
   );
 
   const termLock = academicYearId ? findTermLock(academicYears, academicYearId, semester) : undefined;
@@ -1417,7 +1419,7 @@ export function SchedulerPage() {
                 <BlockColorPicker />
                 <RawBlocksEditor
                   loads={loads}
-                  canEdit={user?.role === "CHAIRMAN" && !termLock && !!academicYearId}
+                  canEdit={(user?.role === "CHAIRMAN" || user?.role === "ADMIN") && !termLock && !!academicYearId}
                   semester={semester}
                   academicYearId={academicYearId ?? ""}
                   onChanged={() => {

@@ -187,7 +187,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       scoped: true,
       items: [
         { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, show: !viewer },
-        { to: "/scheduler", label: "Scheduler", icon: CalendarRange, show: is("CHAIRMAN") },
+        { to: "/scheduler", label: "Scheduler", icon: CalendarRange, show: is("CHAIRMAN", "ADMIN") },
         { to: "/requests", label: "Requests", icon: Inbox, show: is("CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"), requests: true },
         { to: "/room-sharing", label: "Room sharing", icon: Share2, show: is("CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"), roomShare: true },
         { to: "/schedules/faculty", label: "Faculty schedule", icon: UserCircle, show: role !== "FACULTY" && unitHas("SCHEDULES") },

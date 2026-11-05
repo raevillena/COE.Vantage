@@ -4,7 +4,8 @@ import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { isTeachingRole } from "../../utils/teachingRoles.js";
 import { chairmenOf, notifyScheduleChange, notifyUsers } from "../notifications/notificationService.js";
 import { assertTermUnlocked } from "../../utils/termLock.js";
-import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
+import { checkConflicts } from "../facultyLoads/conflictService.js";
+import type { UpdateAssignmentRequestBody, CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
 export interface CallerContext {
   role: string;
@@ -199,6 +200,60 @@ export async function approveRequest(id: string, caller: CallerContext, body?: R
   void notifyUsers([request.requestedById], { type: "REQUEST_RESULT", title: "Your assignment request was approved", body: `${what}${body?.notes ? `. ${body.notes}` : ""}`, link: "/requests" }, { exceptUserId: caller.id });
   void notifyScheduleChange(request.facultyId, "assigned", what, { exceptUserId: caller.id });
   return { load, requestId: id };
+}
+
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+
+/** The chairman who asked changes the day, time or room of a request that still waits. */
+export async function updateRequest(id: string, caller: CallerContext, body: UpdateAssignmentRequestBody) {
+  const request = await prisma.crossDepartmentLoadRequest.findUnique({
+    where: { id },
+    include: { faculty: { select: { departmentId: true } }, subject: { select: { code: true } }, studentClass: { select: { name: true } } },
+  });
+  if (!request) throw notFound("Request not found");
+  if (request.requestedById !== caller.id) throw forbidden("Only the chairman who made this request can edit it");
+  if (request.status !== "PENDING") throw badRequest("Request is no longer pending");
+  if (toMinutes(body.startTime) >= toMinutes(body.endTime)) throw badRequest("The end time must be after the start time.");
+  await assertTermUnlocked(request.academicYearId, request.semester, request.collegeId);
+  const roomId = body.roomId ?? null;
+  const c = await checkConflicts({
+    facultyId: request.facultyId,
+    subjectId: request.subjectId,
+    studentClassId: request.studentClassId,
+    roomId: roomId ?? undefined,
+    dayOfWeek: body.dayOfWeek,
+    startTime: body.startTime,
+    endTime: body.endTime,
+    semester: request.semester,
+    academicYearId: request.academicYearId,
+    excludeLoadId: request.replacesLoadId ?? undefined,
+  });
+  if (c.roomConflict) throw badRequest("The room is already booked at that time.");
+  if (c.facultyConflict) throw badRequest("The faculty member is already teaching at that time.");
+  if (c.studentConflict) throw badRequest("The class already has a subject at that time.");
+  const updated = await prisma.crossDepartmentLoadRequest.update({
+    where: { id },
+    data: { roomId, roomDisplayName: roomId ? null : body.roomDisplayName?.trim() || null, dayOfWeek: body.dayOfWeek, startTime: body.startTime, endTime: body.endTime },
+  });
+  void notifyUsers(await chairmenOf(request.faculty.departmentId), { type: "REQUEST", title: "An assignment request was changed", body: `${request.subject.code} · ${request.studentClass.name} has a new day, time or room`, link: "/requests", groupKey: `request-edit-${id}` }, { exceptUserId: caller.id });
+  return updated;
+}
+
+/** The chairman who asked takes a request back while it still waits. */
+export async function cancelRequest(id: string, caller: CallerContext) {
+  const request = await prisma.crossDepartmentLoadRequest.findUnique({
+    where: { id },
+    include: { faculty: { select: { departmentId: true } }, subject: { select: { code: true } }, studentClass: { select: { name: true } } },
+  });
+  if (!request) throw notFound("Request not found");
+  if (request.requestedById !== caller.id) throw forbidden("Only the chairman who made this request can cancel it");
+  if (request.status !== "PENDING") throw badRequest("Request is no longer pending");
+  await prisma.crossDepartmentLoadRequest.update({ where: { id }, data: { status: "CANCELLED", respondedById: caller.id, respondedAt: new Date() } });
+  void notifyUsers(await chairmenOf(request.faculty.departmentId), { type: "REQUEST", title: "An assignment request was cancelled", body: `${request.subject.code} · ${request.studentClass.name}`, link: "/requests" }, { exceptUserId: caller.id });
+  return { requestId: id };
 }
 
 export async function rejectRequest(id: string, caller: CallerContext, body?: RespondAssignmentRequestBody) {

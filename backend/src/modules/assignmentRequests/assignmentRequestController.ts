@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import * as assignmentRequestService from "./assignmentRequestService.js";
-import type { CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
+import type { UpdateAssignmentRequestBody, CreateAssignmentRequestBody, ListAssignmentRequestsQuery, RespondAssignmentRequestBody } from "./assignmentRequestSchemas.js";
 
 function getCaller(req: Request): assignmentRequestService.CallerContext {
   const user = req.user!;
@@ -32,6 +32,14 @@ export async function approve(req: Request, res: Response): Promise<void> {
   const body = req.body as RespondAssignmentRequestBody | undefined;
   const result = await assignmentRequestService.approveRequest(req.params.id, getCaller(req), body);
   res.json(result);
+}
+
+export async function update(req: Request, res: Response): Promise<void> {
+  res.json(await assignmentRequestService.updateRequest(req.params.id, getCaller(req), req.body as UpdateAssignmentRequestBody));
+}
+
+export async function cancel(req: Request, res: Response): Promise<void> {
+  res.json(await assignmentRequestService.cancelRequest(req.params.id, getCaller(req)));
 }
 
 export async function reject(req: Request, res: Response): Promise<void> {

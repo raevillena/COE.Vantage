@@ -456,13 +456,16 @@ async function loadRequest(caller: ShareCaller, id: string) {
 }
 
 /** What this person may do with a request right now. */
-function actionsFor(caller: ShareCaller, r: { status: string; hostCollegeId: string; guestCollegeId: string; approvals: { departmentId: string; status: string }[] }) {
+function actionsFor(caller: ShareCaller, r: { status: string; hostCollegeId: string; guestCollegeId: string; approvals: { departmentId: string; status: string }[]; blocks: { createdById: string }[] }) {
   const host = caller.collegeId === r.hostCollegeId;
   const guest = caller.collegeId === r.guestCollegeId;
+  // the college secretary, or a chairman who drafted a block of it, can take a waiting request back
+  const withdraws = guest && PENDING.includes(r.status) && (caller.role === "COLLEGE_SECRETARY" || (caller.role === "CHAIRMAN" && r.blocks.some((b) => b.createdById === caller.id)));
   return {
     chairmanDecides: host && caller.role === "CHAIRMAN" && r.status === "PENDING_CHAIRMAN" && r.approvals.some((a) => a.departmentId === caller.departmentId && a.status === "PENDING"),
     secretaryDecides: host && caller.role === "COLLEGE_SECRETARY" && r.status === "PENDING_SECRETARY",
-    canCancel: guest && caller.role === "COLLEGE_SECRETARY" && PENDING.includes(r.status),
+    canCancel: withdraws,
+    canEdit: withdraws,
   };
 }
 
@@ -603,7 +606,7 @@ export async function decide(caller: ShareCaller, id: string, kind: "approve" | 
 
 export async function cancelRequest(caller: ShareCaller, id: string) {
   const request = await loadRequest(caller, id);
-  if (!actionsFor(caller, request).canCancel) throw forbidden("Only your college secretary can cancel a request that is still waiting.");
+  if (!actionsFor(caller, request).canCancel) throw forbidden("Only your college secretary, or a chairman who drafted a block of it, can take back a request that is still waiting.");
   await u(() =>
     prisma.$transaction(async (tx) => {
       await tx.roomShareRequest.update({ where: { id }, data: { status: "CANCELLED", decidedById: caller.id, decidedByName: caller.name, decidedAt: new Date() } });
@@ -612,7 +615,10 @@ export async function cancelRequest(caller: ShareCaller, id: string) {
     })
   );
   const names = await collegeNames([request.guestCollegeId, request.hostCollegeId]);
-  void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY", "DEAN"]), { type: "ROOM_SHARE", title: "A room request was cancelled", body: `${names.get(request.guestCollegeId) ?? "A college"} withdrew its request.`, link: shareLink(id, "host") });
+  if (caller.role === "CHAIRMAN") {
+    void notifyUsers(await peopleOf(request.guestCollegeId, ["COLLEGE_SECRETARY"]), { type: "ROOM_SHARE", title: "A chairman took back a room request", body: `${caller.name} withdrew a request to ${names.get(request.hostCollegeId) ?? "another college"}. Its blocks are drafts again.`, link: shareLink(id, "guest") }, { exceptUserId: caller.id });
+  }
+  void notifyUsers(await peopleOf(request.hostCollegeId, ["COLLEGE_SECRETARY", "DEAN", "CHAIRMAN"]), { type: "ROOM_SHARE", title: "A room request was cancelled", body: `${names.get(request.guestCollegeId) ?? "A college"} withdrew its request.`, link: shareLink(id, "host") });
   await audit({ entityType: "ROOM_SHARE", entityId: id, entityLabel: `${names.get(request.guestCollegeId)} → ${names.get(request.hostCollegeId)}`, action: "UPDATE", summary: "Cancelled a room request", academicYearId: request.academicYearId, semester: request.semester, collegeId: request.guestCollegeId });
 }
 

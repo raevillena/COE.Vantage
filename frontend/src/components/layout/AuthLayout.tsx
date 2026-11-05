@@ -7,9 +7,9 @@ import { ChangelogDialog } from "./ChangelogDialog";
  */
 interface AuthLayoutProps {
   children: React.ReactNode;
-  /** Optional title shown under the logo in the form card (e.g. "COE.Vantage") */
+  /** Optional title shown under the logo in the form card (e.g. "Vantage") */
   title?: string;
-  /** Optional short subtitle (e.g. "Faculty Load Scheduling") */
+  /** Optional short subtitle (e.g. "Versatile Academic Navigator for Timetables and Assignment GEneration") */
   subtitle?: string;
   /** Show the "What's new" release notes link next to the version. */
   showChangelog?: boolean;
@@ -87,7 +87,7 @@ export function AuthLayout({ children, title, subtitle, showChangelog = false }:
       <div className="flex shrink-0 items-center justify-center border-b border-border bg-surface p-6 md:w-[min(50%,420px)] md:border-b-0 md:border-r">
         <img
           src={resolvedTheme === "dark" ? "/banner-dark.svg" : "/banner.svg"}
-          alt="COE.Vantage"
+          alt="Vantage"
           className="h-auto w-full max-w-sm object-contain md:max-w-full"
         />
       </div>
@@ -119,7 +119,7 @@ export function AuthLayout({ children, title, subtitle, showChangelog = false }:
             {children}
           </div>
           <p className="flex items-center gap-2 text-xs text-foreground-muted">
-            <span>COE.Vantage • {APP_VERSION}</span>
+            <span>Vantage • {APP_VERSION}</span>
             {showChangelog && (
               <>
                 <span aria-hidden>•</span>

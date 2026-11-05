@@ -65,7 +65,7 @@ function App() {
         <Route path="audit-log" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "COLLEGE_SECRETARY"]}><AuditLogPage /></ProtectedRoute>} />
         <Route path="academic-years" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><AcademicYearsPage /></ProtectedRoute>} />
         <Route path="departments" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><DepartmentsPage /></ProtectedRoute>} />
-        <Route path="scheduler" element={<ProtectedRoute allowedRoles={["CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
+        <Route path="scheduler" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulerPage /></ProtectedRoute>} />
         <Route path="faculty" element={<ProtectedRoute allowedRoles={["CHAIRMAN", "DEAN", "UNIT"]}><ChairmanFacultyPage /></ProtectedRoute>} />
         <Route path="scheduler/rules" element={<ProtectedRoute allowedRoles={["ADMIN", "CHAIRMAN"]}><SchedulingRulesPage backTo="/scheduler" title="Scheduling rule sets" /></ProtectedRoute>} />
         <Route path="admin/scheduling-rules" element={<ProtectedRoute allowedRoles={["ADMIN", "COLLEGE_SECRETARY"]}><SchedulingRulesPage backTo="/dashboard" title="Scheduling rules" isAdminPage /></ProtectedRoute>} />

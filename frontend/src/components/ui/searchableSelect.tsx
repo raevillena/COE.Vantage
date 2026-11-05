@@ -3,6 +3,8 @@ import * as React from "react";
 export interface SearchableSelectOption {
   value: string;
   label: string;
+  /** Heading the option is listed under; a heading shows where the group changes. */
+  group?: string;
 }
 
 export interface SearchableSelectProps {
@@ -16,6 +18,8 @@ export interface SearchableSelectProps {
   noneOption?: SearchableSelectOption;
   /** Input and list use this for consistent height with other form controls */
   className?: string;
+  /** Extra classes for the text box itself (for example the highlight of a required field). */
+  inputClassName?: string;
 }
 
 const baseInputClass =
@@ -34,6 +38,7 @@ export const SearchableSelect = React.forwardRef<HTMLInputElement, SearchableSel
       "aria-label": ariaLabel,
       noneOption,
       className = "",
+      inputClassName = "",
     },
     ref
   ) => {
@@ -142,7 +147,7 @@ export const SearchableSelect = React.forwardRef<HTMLInputElement, SearchableSel
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={placeholder}
-          className={baseInputClass}
+          className={`${baseInputClass} ${inputClassName}`}
         />
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-60" aria-hidden>
           ▼
@@ -159,8 +164,13 @@ export const SearchableSelect = React.forwardRef<HTMLInputElement, SearchableSel
               <li className="px-3 py-2 text-sm text-foreground-muted">No matches</li>
             ) : (
               filtered.map((option, i) => (
+                <React.Fragment key={option.value}>
+                {option.group && option.group !== filtered[i - 1]?.group && (
+                  <li role="presentation" className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+                    {option.group}
+                  </li>
+                )}
                 <li
-                  key={option.value}
                   id={`searchable-select-option-${i}`}
                   data-index={i}
                   role="option"
@@ -176,6 +186,7 @@ export const SearchableSelect = React.forwardRef<HTMLInputElement, SearchableSel
                 >
                   {option.label}
                 </li>
+                </React.Fragment>
               ))
             )}
           </ul>

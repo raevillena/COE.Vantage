@@ -1,7 +1,7 @@
 {
-  "name": "COE.Vantage",
-  "short_name": "COE.Vantage",
-  "description": "Faculty Load Scheduling",
+  "name": "Vantage",
+  "short_name": "Vantage",
+  "description": "Versatile Academic Navigator for Timetables and Assignment GEneration",
   "icons": [
     { "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" }

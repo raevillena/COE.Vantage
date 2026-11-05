@@ -174,7 +174,7 @@ export interface AssignmentRequest {
   endTime: string;
   semester: number;
   academicYearId: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   faculty?: { id: string; name: string; email?: string; department?: { name: string } };
   subject?: { id: string; code: string; name: string; units?: number; isLab?: boolean };
   studentClass?: { id: string; name: string };

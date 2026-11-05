@@ -7,7 +7,7 @@ export interface FacultyGroup {
 }
 
 /** Groups an already-sorted list by department, preserving the server order (own department first). */
-export function groupFacultyByDepartment(list: AssignableFaculty[], ownDepartmentId: string | null): FacultyGroup[] {
+export function groupFacultyByDepartment(list: AssignableFaculty[], ownDepartmentId: string | null, needsApproval = true): FacultyGroup[] {
   const groups: FacultyGroup[] = [];
   const index = new Map<string, number>();
   for (const f of list) {
@@ -19,7 +19,7 @@ export function groupFacultyByDepartment(list: AssignableFaculty[], ownDepartmen
       const deptName = f.department?.name ?? "No department";
       groups.push({
         key,
-        label: ownDepartmentId && f.departmentId === ownDepartmentId ? `${deptName} (your department)` : `${deptName} · requires approval`,
+        label: !needsApproval ? deptName : ownDepartmentId && f.departmentId === ownDepartmentId ? `${deptName} (your department)` : `${deptName} · requires approval`,
         items: [],
       });
     }

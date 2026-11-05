@@ -26,5 +26,5 @@ export const routeTitles: Record<string, string> = {
 
 export function getPageTitle(pathname: string): string {
   const normalized = pathname.replace(/\/$/, "") || "/";
-  return routeTitles[normalized] ?? "COE.Vantage";
+  return routeTitles[normalized] ?? "Vantage";
 }
