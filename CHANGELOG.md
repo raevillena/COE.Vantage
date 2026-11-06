@@ -2,13 +2,26 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.7.5 - 2026-11-06
+
+Schedules appear once a term is locked, and cleaner timetable PDFs
+
+- **New:** Faculty see schedules, reports and room availability only after their college locks (finalises) the term. Until then those pages say "Schedules are not available yet", and the server refuses the data too.
+- **Improved:** A chairman can edit the status and maximum units of anyone with a teaching load in their department: faculty, co-chairmen, the dean and the college secretary.
+- **Improved:** Timetable PDFs have a "Download timetable" button, run from 8 AM to 5 PM (wider only when a block starts earlier or ends later), label each hour row as a range (8:00-9:00 AM) and no longer print the total units line.
+- **Improved:** Blocks in the faculty and room reports, on screen and in the PDF, show the class name; the faculty report no longer repeats the instructor.
+- **Improved:** Downloaded PDFs are named after the person, class or room (for example faculty-Dr. Maria Santos.pdf) instead of a long ID.
+- **Improved:** The scheduler's Code window is about 65% of the screen, and other narrow dialogs are wider on large screens while still fitting on phones.
+- **New:** The About page credits the former system handlers and developers, Willen Mark D. Manzanas and Ben Ezra Apollo.
+- **Fixed:** A subject split between instructors counted its hours twice in the scheduler's x/y hrs label (so it looked over-scheduled), in auto-schedule (which could skip hours still to schedule) and in a room's busy time.
+- **Fixed:** Text in PDF timetable blocks no longer spills out of the block; long text is cut with an ellipsis.
+
 ## v0.7.4 - 2026-11-05
 
 Edit or cancel waiting requests, and an admin Scheduler
 
 - **New:** Chairmen can edit or cancel a room request, and an assignment request, while it waits for approval. Editing a room request takes it back to drafts; an assignment request can change its day, time and room.
 - **Improved:** The dashboard shows how many classes have complete schedules, how many faculty have a load and how many rooms are in use, instead of hours.
-- **New:** The admin can open the Scheduler and edit, create, move, remove, auto-schedule and reset schedules directly, without approvals, and can also edit blocks from the class and faculty schedule pages.
 - **Improved:** Time rows in the scheduler read as ranges (8:00-9:00 AM), and the faculty selector in the assignment panel is a searchable dropdown grouped by department.
 - **Fixed:** A notification that was already opened no longer stays unread in the bell; unread items are listed first.
 - **Improved:** The app is branded Vantage on the login page, banner, About page and browser title.

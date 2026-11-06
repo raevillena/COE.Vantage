@@ -855,7 +855,7 @@ export function AssignmentForm({
         <Dialog.Content
           title="Add co-instructor (same time)"
           description="Adds another faculty for the same subject, class, and time. Defaults to this assignment’s room; change below if the co-instructor meets elsewhere."
-          className="max-w-md"
+          className="!max-w-[min(40rem,calc(100vw-2rem))]"
         >
           <div className="mt-4 space-y-3">
             <div>

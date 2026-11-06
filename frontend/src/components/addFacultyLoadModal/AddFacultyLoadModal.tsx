@@ -156,7 +156,7 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content title="Add Faculty Load" className="max-h-[90vh] overflow-y-auto">
+      <Dialog.Content title="Add Faculty Load" className="!max-w-[min(42rem,calc(100vw-2rem))] max-h-[90vh] overflow-y-auto">
         <div className="mt-4 space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>

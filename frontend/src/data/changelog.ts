@@ -15,13 +15,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.7.5",
+    date: "2026-11-06",
+    title: "Schedules appear once a term is locked, and cleaner timetable PDFs",
+    changes: [
+      { kind: "new", text: "Faculty see schedules, reports and room availability only after their college locks (finalises) the term. Until then those pages say \"Schedules are not available yet\", and the server refuses the data too." },
+      { kind: "improved", text: "A chairman can edit the status and maximum units of anyone with a teaching load in their department: faculty, co-chairmen, the dean and the college secretary." },
+      { kind: "improved", text: "Timetable PDFs have a \"Download timetable\" button, run from 8 AM to 5 PM (wider only when a block starts earlier or ends later), label each hour row as a range (8:00-9:00 AM) and no longer print the total units line." },
+      { kind: "improved", text: "Blocks in the faculty and room reports, on screen and in the PDF, show the class name; the faculty report no longer repeats the instructor." },
+      { kind: "improved", text: "Downloaded PDFs are named after the person, class or room (for example faculty-Dr. Maria Santos.pdf) instead of a long ID." },
+      { kind: "improved", text: "The scheduler's Code window is about 65% of the screen, and other narrow dialogs are wider on large screens while still fitting on phones." },
+      { kind: "new", text: "The About page credits the former system handlers and developers, Willen Mark D. Manzanas and Ben Ezra Apollo." },
+      { kind: "fixed", text: "A subject split between instructors counted its hours twice in the scheduler's x/y hrs label (so it looked over-scheduled), in auto-schedule (which could skip hours still to schedule) and in a room's busy time." },
+      { kind: "fixed", text: "Text in PDF timetable blocks no longer spills out of the block; long text is cut with an ellipsis." },
+    ],
+  },
+  {
     version: "v0.7.4",
     date: "2026-11-05",
     title: "Edit or cancel waiting requests, and an admin Scheduler",
     changes: [
       { kind: "new", text: "Chairmen can edit or cancel a room request, and an assignment request, while it waits for approval. Editing a room request takes it back to drafts; an assignment request can change its day, time and room." },
       { kind: "improved", text: "The dashboard shows how many classes have complete schedules, how many faculty have a load and how many rooms are in use, instead of hours." },
-      { kind: "new", text: "The admin can open the Scheduler and edit, create, move, remove, auto-schedule and reset schedules directly, without approvals, and can also edit blocks from the class and faculty schedule pages." },
       { kind: "improved", text: "Time rows in the scheduler read as ranges (8:00-9:00 AM), and the faculty selector in the assignment panel is a searchable dropdown grouped by department." },
       { kind: "fixed", text: "A notification that was already opened no longer stays unread in the bell; unread items are listed first." },
       { kind: "improved", text: "The app is branded Vantage on the login page, banner, About page and browser title." },

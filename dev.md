@@ -1311,6 +1311,13 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - **Dashboard**: `kpis.curriculum.classesComplete`, `kpis.faculty.withLoad`, `kpis.rooms.roomsInUse` drive the three cards; the hour fields stay in the payload for the exports and projection.
 - **Admin Scheduler**: ADMIN is allowed on POST /faculty-loads, auto-assign, reset and copy; `SchedulerPage` lists all faculty for the admin (`isAdmin`), `groupFacultyByDepartment(..., needsApproval=false)` drops the "requires approval" label. Locked terms still apply.
 
+### 61. Schedule hold, PDF timetables and teaching-role edits (v0.7.5)
+
+- **Schedule hold**: `requireReleasedForFaculty` (reports router, after `GET /reports/my/released`) answers 403 to FACULTY while the college has no `TermLock` for the term; other roles are unaffected. Pages use `useScheduleReleased` and `ScheduleHeldNotice` (Reports, Class schedule, Room availability). The "My workload" dashboard panel is not held.
+- **Teaching-role edits**: `updateUser` lets a CHAIRMAN change status and max units of any `TEACHING_ROLES` user in their department (or themselves); the body is still cut down to those two fields.
+- **PDFs** (`reportService.ts`): `gridRange` gives 8 AM-5 PM widened to whole hours for any earlier or later block; `formatHourSlot` draws two centred lines; block text gets a fixed height with an ellipsis; the class name leads the second line of the faculty and room PDFs; `pdfAttachment` names files `prefix-name.pdf` (Windows-unsafe characters dropped, `filename*` for non-ASCII) and the Reports page saves under the server's name. `ScheduleGrid` takes `showClassName` and `showFaculty` for the report previews.
+- **Hours**: slots shared by co-instructors count once in `CurriculumSubjectTree`, `scheduledBySubject` and the room minutes of the auto-scheduler.
+
 ## Parked / Incomplete Features
 
 ### P1. Resizable Scheduler Panels (2XL Breakpoint) — PARKED

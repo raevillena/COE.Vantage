@@ -1,10 +1,37 @@
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import * as reportService from "./reportService.js";
 import { forbidden, badRequest } from "../../utils/errors.js";
 import * as reportExcel from "./reportExcel.js";
 import { prisma } from "../../prisma/client.js";
 
 type Caller = { role: string; id: string; departmentId?: string | null };
+
+/**
+ * A faculty member sees schedules only once their college has finalised (locked) the term; until then the
+ * blocks may still change. Everyone else works with the live schedule.
+ */
+async function isReleasedFor(user: { role: string; collegeId?: string | null }, academicYearId: string, semester: number): Promise<boolean> {
+  if (user.role !== "FACULTY") return true;
+  if (!user.collegeId) return false;
+  const lock = await prisma.termLock.findFirst({ where: { academicYearId, semester, collegeId: user.collegeId }, select: { id: true } });
+  return Boolean(lock);
+}
+
+export async function requireReleasedForFaculty(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  if (req.user?.role === "FACULTY" && academicYearId && !(await isReleasedFor(req.user, academicYearId, Number(req.query.semester ?? 1)))) {
+    res.status(403).json({ message: "Schedules are shown once your college finalises (locks) this term." });
+    return;
+  }
+  next();
+}
+
+/** Whether the schedules of a term are shown to the signed-in person yet. */
+export async function released(req: Request, res: Response): Promise<void> {
+  const academicYearId = String(req.query.academicYearId ?? "");
+  if (!academicYearId) throw badRequest("academicYearId query is required");
+  res.json({ released: await isReleasedFor(req.user!, academicYearId, Number(req.query.semester ?? 1)) });
+}
 
 /**
  * Faculty report scope: admin, dean and college secretary see anyone; a chairman sees their own department
@@ -33,6 +60,14 @@ export async function facultyReportData(req: Request, res: Response): Promise<vo
   res.json(data);
 }
 
+/** Content-Disposition for a PDF named like "faculty-Maria Santos.pdf": characters Windows rejects are dropped, and non-ASCII names go in filename* too. */
+function pdfAttachment(prefix: string, name: string): string {
+  const base = `${prefix}-${name}`.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim();
+  const file = `${base}.pdf`;
+  const ascii = file.replace(/[^ -~]/g, "_");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file)}`;
+}
+
 export async function facultyReport(req: Request, res: Response): Promise<void> {
   const { facultyId } = req.params;
   const academicYearId = String(req.query.academicYearId ?? "");
@@ -47,7 +82,7 @@ export async function facultyReport(req: Request, res: Response): Promise<void> 
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildFacultyPdf(faculty, loads, academicYear, semester);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="faculty-${facultyId}.pdf"`);
+  res.setHeader("Content-Disposition", pdfAttachment("faculty", faculty.name));
   doc.pipe(res);
   doc.end();
 }
@@ -66,7 +101,7 @@ export async function notaReport(req: Request, res: Response): Promise<void> {
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildNotaPdf(faculty, loads, academicYear, semester);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="NOTA-${facultyId}.pdf"`);
+  res.setHeader("Content-Disposition", pdfAttachment("NOTA", faculty.name));
   doc.pipe(res);
   doc.end();
 }
@@ -152,7 +187,7 @@ export async function studentClassReport(req: Request, res: Response): Promise<v
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildStudentClassPdf(studentClass, loads, academicYear, semester);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="class-${classId}.pdf"`);
+  res.setHeader("Content-Disposition", pdfAttachment("class", studentClass.name));
   doc.pipe(res);
   doc.end();
 }
@@ -183,7 +218,7 @@ export async function roomReport(req: Request, res: Response): Promise<void> {
   const academicYear = loads[0]?.academicYear?.name ?? "";
   const doc = reportService.buildRoomPdf(room, loads, academicYear, semester);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="room-${roomId}.pdf"`);
+  res.setHeader("Content-Disposition", pdfAttachment("room", room.name));
   doc.pipe(res);
   doc.end();
 }

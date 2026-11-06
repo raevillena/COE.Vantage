@@ -112,9 +112,10 @@ export async function updateUser(
 
   if (caller?.role === "CHAIRMAN") {
     const isSelf = caller.id != null && caller.id === user.id;
-    const isDeptFaculty = user.role === Role.FACULTY && user.departmentId === caller.departmentId;
-    if (caller.departmentId == null || !(isDeptFaculty || isSelf)) {
-      throw forbidden("You can only update faculty in your own department, or your own load limits.");
+    // anyone who carries a teaching load in the chairman's department: faculty, co-chairmen, the dean and the college secretary
+    const isDeptTeacher = TEACHING_ROLES.includes(user.role) && user.departmentId === caller.departmentId;
+    if (caller.departmentId == null || !(isDeptTeacher || isSelf)) {
+      throw forbidden("You can only update the load limits of people in your own department.");
     }
     // Chairman may only change status and max units.
     body = { status: body.status, maxUnits: body.maxUnits };

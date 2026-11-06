@@ -9,6 +9,8 @@ import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 import { RawBlocksEditor } from "../../components/scheduler/RawBlocksEditor";
 import { useAppSelector } from "../../store/hooks";
+import { useScheduleReleased } from "../../hooks/useScheduleReleased";
+import { ScheduleHeldNotice } from "../../components/ui/scheduleHeldNotice";
 
 export function StudentSchedulePage() {
   const user = useAppSelector((s) => s.auth.user);
@@ -25,6 +27,8 @@ export function StudentSchedulePage() {
   const role = user?.role;
   // A faculty member only sees the classes where they teach, and only through the report endpoints.
   const isFaculty = role === "FACULTY";
+  const released = useScheduleReleased(isFaculty, academicYearId, semester);
+  const held = isFaculty && released !== true; // nothing until the college locks the term
   const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
 
   useEffect(() => {
@@ -54,7 +58,7 @@ export function StudentSchedulePage() {
   useEffect(() => {
     if (!user) return;
     if (isFaculty) {
-      if (!academicYearId) {
+      if (!academicYearId || held) {
         setClasses([]);
         return;
       }
@@ -76,10 +80,10 @@ export function StudentSchedulePage() {
       .get<StudentClass[]>(`/student-classes${params.toString() ? `?${params}` : ""}`)
       .then(({ data }) => setClasses(data ?? []))
       .catch(() => setClasses([]));
-  }, [user, role, isFaculty, academicYearId, semester, needsDepartmentFilter, departmentId]);
+  }, [user, role, isFaculty, held, academicYearId, semester, needsDepartmentFilter, departmentId]);
 
   useEffect(() => {
-    if (!academicYearId || !selectedClassId) {
+    if (!academicYearId || !selectedClassId || held) {
       setLoads([]);
       return;
     }
@@ -95,7 +99,7 @@ export function StudentSchedulePage() {
     }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), studentClassId: selectedClassId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedClassId, isFaculty, reloadKey]);
+  }, [academicYearId, semester, selectedClassId, isFaculty, held, reloadKey]);
 
   return (
     <div>
@@ -162,7 +166,9 @@ export function StudentSchedulePage() {
           />
         </div>
       </div>
-      {loading ? (
+      {held ? (
+        <ScheduleHeldNotice />
+      ) : loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
         </div>

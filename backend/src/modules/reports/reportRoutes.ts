@@ -11,6 +11,8 @@ import {
   facultyWorkloadsExcel,
   myClasses,
   myRooms,
+  released,
+  requireReleasedForFaculty,
 } from "./reportController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
@@ -20,6 +22,9 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize("ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "COLLEGE_SECRETARY"));
 
+router.get("/my/released", released);
+// a faculty member gets no schedule before the college locks the term
+router.use(requireReleasedForFaculty);
 router.get("/my/classes", myClasses);
 router.get("/my/rooms", myRooms);
 router.get("/faculty/:facultyId/data", facultyReportData);

@@ -96,7 +96,7 @@ function EditRequestDialog({ request, onClose, onSaved }: { request: AssignmentR
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content title="Edit request" className="max-w-md" aria-describedby="edit-request-description">
+      <Dialog.Content title="Edit request" className="!max-w-[min(40rem,calc(100vw-2rem))]" aria-describedby="edit-request-description">
         <p id="edit-request-description" className="text-sm text-foreground-muted">
           {request.faculty?.name} · {request.subject?.code} · {request.studentClass?.name}. The approver is told when you save.
         </p>

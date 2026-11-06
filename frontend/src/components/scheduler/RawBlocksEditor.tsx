@@ -184,7 +184,7 @@ export function RawBlocksEditor({
           <Dialog.Content
             title="Raw blocks"
             description={`The ${rows.length} ${rows.length === 1 ? "block" : "blocks"} in this view, with exact days and times.${canEdit ? "" : " Viewing only."}`}
-            className="max-w-5xl max-h-[90vh] overflow-y-auto"
+            className="!max-w-none !w-[65vw] !min-w-[min(96vw,44rem)] max-h-[90vh] overflow-y-auto"
           >
             {odd.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">

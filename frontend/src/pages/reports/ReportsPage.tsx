@@ -10,6 +10,8 @@ import toast from "react-hot-toast";
 import { Select } from "../../components/ui/select";
 import { Button } from "../../components/ui/button";
 import { HelpTip } from "../../components/ui/helpTip";
+import { useScheduleReleased } from "../../hooks/useScheduleReleased";
+import { ScheduleHeldNotice } from "../../components/ui/scheduleHeldNotice";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { Spinner } from "../../components/ui/spinner";
@@ -57,6 +59,8 @@ export function ReportsPage() {
   const me = useAppSelector((s) => s.auth.user);
   // A faculty member only sees themselves, the classes they teach and the rooms they use.
   const isFaculty = me?.role === "FACULTY";
+  const released = useScheduleReleased(isFaculty, academicYearId, semester);
+  const held = isFaculty && released !== true; // a faculty member sees nothing until the term is locked
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
@@ -84,7 +88,7 @@ export function ReportsPage() {
   useEffect(() => {
     if (!isFaculty) return;
     if (me) setFacultyId(me.id);
-    if (!academicYearId) {
+    if (!academicYearId || held) {
       setClasses([]);
       setRooms([]);
       return;
@@ -104,10 +108,10 @@ export function ReportsPage() {
         setRoomId((cur) => ((data ?? []).some((r) => r.id === cur) ? cur : ""));
       })
       .catch(() => setRooms([]));
-  }, [isFaculty, me, academicYearId, semester]);
+  }, [isFaculty, me, academicYearId, semester, held]);
 
   const fetchFacultyData = useCallback(async () => {
-    if (!academicYearId || !facultyId) {
+    if (!academicYearId || !facultyId || held) {
       setFacultyLoads(null);
       return;
     }
@@ -124,10 +128,10 @@ export function ReportsPage() {
     } finally {
       setFacultyLoadsLoading(false);
     }
-  }, [academicYearId, semester, facultyId]);
+  }, [academicYearId, semester, facultyId, held]);
 
   const fetchClassData = useCallback(async () => {
-    if (!academicYearId || !classId) {
+    if (!academicYearId || !classId || held) {
       setClassLoads(null);
       return;
     }
@@ -144,10 +148,10 @@ export function ReportsPage() {
     } finally {
       setClassLoadsLoading(false);
     }
-  }, [academicYearId, semester, classId]);
+  }, [academicYearId, semester, classId, held]);
 
   const fetchRoomData = useCallback(async () => {
-    if (!academicYearId || !roomId) {
+    if (!academicYearId || !roomId || held) {
       setRoomLoads(null);
       return;
     }
@@ -164,7 +168,7 @@ export function ReportsPage() {
     } finally {
       setRoomLoadsLoading(false);
     }
-  }, [academicYearId, semester, roomId]);
+  }, [academicYearId, semester, roomId, held]);
 
   useEffect(() => {
     fetchFacultyData();
@@ -222,10 +226,19 @@ export function ReportsPage() {
     }
     const params = new URLSearchParams({ academicYearId, semester: String(semester) });
     try {
-      const { data } = await apiClient.get<Blob>(`${url}?${params}`, { responseType: "blob" });
+      const res = await apiClient.get<Blob>(`${url}?${params}`, { responseType: "blob" });
+      // The server names the file after the person, class or room; the id-based name is only a fallback.
+      const disposition = String(res.headers?.["content-disposition"] ?? "");
+      const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+      let serverName: string | undefined;
+      try {
+        serverName = encoded ? decodeURIComponent(encoded) : /filename="?([^";]+)"?/.exec(disposition)?.[1];
+      } catch {
+        serverName = undefined;
+      }
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(data);
-      a.download = filename;
+      a.href = URL.createObjectURL(res.data);
+      a.download = serverName ?? filename;
       a.click();
       URL.revokeObjectURL(a.href);
       toast.success("Download started");
@@ -278,7 +291,8 @@ export function ReportsPage() {
         </div>
       </div>
 
-      <div className="space-y-8">
+      {held && <ScheduleHeldNotice />}
+      <div className={held ? "hidden" : "space-y-8"}>
         {/* College workload: registrar forms (class schedules + faculty workload) */}
         {canExportOfficial && (
           <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
@@ -331,7 +345,7 @@ export function ReportsPage() {
               disabled={!facultyId || !academicYearId}
               onClick={() => downloadReport(`/reports/faculty/${facultyId}`, `faculty-${facultyId}.pdf`)}
             >
-              Download PDF
+              Download timetable
             </Button>
             <Button
               type="button"
@@ -362,6 +376,8 @@ export function ReportsPage() {
                     hourEnd={HOUR_END}
                     draggableIdPrefix="report-faculty"
                     fitWidth
+                    showClassName
+                    showFaculty={false}
                   />
                 ) : facultyId && academicYearId ? (
                   <div className="flex items-center justify-center py-12 text-foreground-muted">
@@ -402,7 +418,7 @@ export function ReportsPage() {
               disabled={!classId || !academicYearId}
               onClick={() => downloadReport(`/reports/student-class/${classId}`, `class-${classId}.pdf`)}
             >
-              Download PDF
+              Download timetable
             </Button>
           </div>
           {classLoadsLoading ? (
@@ -468,7 +484,7 @@ export function ReportsPage() {
               disabled={!roomId || !academicYearId}
               onClick={() => downloadReport(`/reports/room/${roomId}`, `room-${roomId}.pdf`)}
             >
-              Download PDF
+              Download timetable
             </Button>
           </div>
           {roomLoadsLoading ? (
@@ -491,6 +507,7 @@ export function ReportsPage() {
                     hourEnd={HOUR_END}
                     draggableIdPrefix="report-room"
                     fitWidth
+                    showClassName
                   />
                 ) : roomId && academicYearId ? (
                   <div className="flex items-center justify-center py-12 text-foreground-muted">

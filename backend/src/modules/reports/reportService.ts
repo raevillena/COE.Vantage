@@ -7,8 +7,9 @@ import type { Request } from "express";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const SLOT_HEIGHT = 26;
-const HOUR_START = 7;
-const HOUR_END = 21;
+/** Default timetable window (8 AM to 5 PM); it grows only when a block starts earlier or ends later. */
+const DEFAULT_HOUR_START = 8;
+const DEFAULT_HOUR_END = 17;
 const BLOCK_PADDING = 4;
 const BLOCK_STROKE = "#94a3b8";
 const GRID_STROKE = "#cbd5e1";
@@ -21,14 +22,28 @@ const PDF_PALETTE = [
 const BLOCK_TEXT_COLOR = "#1e293b";
 const BLOCK_LINE2_COLOR = "#475569";
 
-/** Format hour (7–20) as 12-hour time e.g. "7:00 AM", "12:00 PM", "8:00 PM". */
-function formatHour12(hour24: number): string {
-  const h = hour24 % 12 || 12;
-  const ampm = hour24 < 12 ? "AM" : "PM";
-  return `${h}:00 ${ampm}`;
+/** The slot an hour row stands for, as two lines: "8:00–9:00" over "AM" (or "AM–PM" when the slot crosses noon). */
+function formatHourSlot(hour24: number): [string, string] {
+  const h = (n: number) => n % 12 || 12;
+  const mer = (n: number) => (n % 24 < 12 ? "AM" : "PM");
+  const end = hour24 + 1;
+  return [`${h(hour24)}:00–${h(end)}:00`, mer(hour24) === mer(end) ? mer(hour24) : `${mer(hour24)}–${mer(end)}`];
 }
 
-function timeToRow(startTime: string, endTime: string): { top: number; height: number } {
+/** Hours shown on the timetable: 8 AM to 5 PM, widened to whole hours to include any earlier or later block. */
+function gridRange(loads: Array<{ startTime: string; endTime: string }>): { hourStart: number; hourEnd: number } {
+  let hourStart = DEFAULT_HOUR_START;
+  let hourEnd = DEFAULT_HOUR_END;
+  for (const l of loads) {
+    const [sh] = l.startTime.split(":").map(Number);
+    const [eh, em] = l.endTime.split(":").map(Number);
+    if (Number.isFinite(sh)) hourStart = Math.min(hourStart, sh);
+    if (Number.isFinite(eh)) hourEnd = Math.max(hourEnd, em > 0 ? eh + 1 : eh);
+  }
+  return { hourStart: Math.max(0, hourStart), hourEnd: Math.min(24, hourEnd) };
+}
+
+function timeToRow(startTime: string, endTime: string, HOUR_START: number): { top: number; height: number } {
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
   const startMins = (sh - HOUR_START) * 60 + sm;
@@ -170,9 +185,9 @@ function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: DrawGridOpts) {
   const colWidth = (doc.page.width - margin * 2 - timeColWidth) / 6;
   const headerRowHeight = 22;
   const gridTop = 118;
+  const { hourStart: HOUR_START, hourEnd: HOUR_END } = gridRange(loads);
   const totalHeight = (HOUR_END - HOUR_START) * SLOT_HEIGHT;
   const gridWidth = colWidth * 6;
-  const timeLabelYOffset = (SLOT_HEIGHT - LINE_HEIGHT) / 2;
 
   // --- Header ---
   doc.fontSize(16).font("Helvetica-Bold").text(opts.title, margin, 36);
@@ -187,11 +202,13 @@ function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: DrawGridOpts) {
     const colLeft = gridLeft + d * colWidth;
     doc.text(DAYS[d], colLeft, gridTop - headerRowHeight, { align: "center", width: colWidth });
   }
-  // --- Time labels: right-aligned in time column, vertically centered in each hour row ---
+  // --- Time labels: two centered lines (range over AM/PM) in each hour row ---
   for (let h = HOUR_START; h < HOUR_END; h++) {
     const rowTop = gridTop + (h - HOUR_START) * SLOT_HEIGHT;
-    const timeY = rowTop + timeLabelYOffset;
-    doc.text(formatHour12(h), margin, timeY, { width: timeColWidth - 6, align: "right" });
+    const [range, meridiem] = formatHourSlot(h);
+    doc.fontSize(7.5).fillColor("black").text(range, margin, rowTop + 5, { width: timeColWidth, align: "center", lineBreak: false });
+    doc.fontSize(6.5).fillColor("#64748b").text(meridiem, margin, rowTop + 14, { width: timeColWidth, align: "center", lineBreak: false });
+    doc.fillColor("black");
   }
 
   // --- Grid lines: time column left edge, then day columns; horizontal every hour ---
@@ -214,7 +231,7 @@ function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: DrawGridOpts) {
   loads.forEach((load) => {
     const dayIndex = load.dayOfWeek >= 1 && load.dayOfWeek <= 6 ? load.dayOfWeek - 1 : 0;
     if (dayIndex < 0) return;
-    const { top, height } = timeToRow(load.startTime, load.endTime);
+    const { top, height } = timeToRow(load.startTime, load.endTime, HOUR_START);
     const x = gridLeft + dayIndex * colWidth + 1;
     const y = gridTop + top + 1;
     const w = colWidth - 2;
@@ -230,16 +247,17 @@ function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: DrawGridOpts) {
     const textX = x + BLOCK_PADDING;
     const secondLine = line2 ? line2(load) : "";
     const hasTwoLines = secondLine && h >= 22;
-    const totalTextLines = hasTwoLines ? 2 : 1;
-    const totalTextHeight = totalTextLines * LINE_HEIGHT;
+    // The second line wraps only into the space the block has left; the rest is cut off with an ellipsis.
+    const line2Lines = hasTwoLines ? Math.max(1, Math.floor((h - BLOCK_PADDING * 2 - LINE_HEIGHT) / LINE_HEIGHT)) : 0;
+    const totalTextHeight = (1 + line2Lines) * LINE_HEIGHT;
     let textY = y + Math.max(BLOCK_PADDING, (h - totalTextHeight) / 2);
 
     doc.fontSize(8).font("Helvetica-Bold").fillColor(BLOCK_TEXT_COLOR);
-    doc.text(load.subject.code, textX, textY, { width: innerW, ellipsis: true });
+    doc.text(load.subject.code, textX, textY, { width: innerW, height: LINE_HEIGHT, ellipsis: true });
     textY += LINE_HEIGHT;
     if (hasTwoLines) {
       doc.fontSize(7).font("Helvetica").fillColor(BLOCK_LINE2_COLOR);
-      doc.text(secondLine, textX, textY, { width: innerW, ellipsis: true });
+      doc.text(secondLine, textX, textY, { width: innerW, height: line2Lines * LINE_HEIGHT, ellipsis: true });
     }
     doc.fillColor("black");
   });
@@ -248,9 +266,9 @@ function drawGrid(doc: PDFDoc, loads: GridLoad[], opts: DrawGridOpts) {
 }
 
 /** Y position for content below the grid (summary, footer). */
-function gridBottom(doc: PDFDoc): number {
-  const margin = 50;
+function gridBottom(loads: Array<{ startTime: string; endTime: string }>): number {
   const gridTop = 118;
+  const { hourStart: HOUR_START, hourEnd: HOUR_END } = gridRange(loads);
   return gridTop + (HOUR_END - HOUR_START) * SLOT_HEIGHT;
 }
 
@@ -274,13 +292,10 @@ export function buildFacultyPdf(
   drawGrid(doc, loads, {
     title: `Faculty Load: ${faculty.name}`,
     subTitle,
-    getBlockLine2: (l) => [roomLabel(l), l.studentClass?.name].filter(Boolean).join(" · ") || "",
+    getBlockLine2: (l) => [l.studentClass?.name, roomLabel(l)].filter(Boolean).join(" · ") || "",
   });
-  const totalUnits = loads.reduce((s, l) => s + l.subject.units, 0);
-  const bottom = gridBottom(doc);
-  doc.fontSize(10).font("Helvetica").fillColor("black");
-  doc.text(`Total units: ${totalUnits}  ·  ${loads.length} block${loads.length !== 1 ? "s" : ""}`, 50, bottom + 14);
-  doc.fontSize(8).fillColor("#64748b").text(`Generated on ${new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}`, 50, bottom + 30);
+  const bottom = gridBottom(loads);
+  doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(`Generated on ${new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}`, 50, bottom + 14);
   return doc;
 }
 
@@ -307,11 +322,8 @@ export function buildStudentClassPdf(
     subTitle,
     getBlockLine2: (l) => [roomLabel(l), facultyLabel(l)].filter(Boolean).join(" · ") || "",
   });
-  const totalUnits = loads.reduce((s, l) => s + l.subject.units, 0);
-  const bottom = gridBottom(doc);
-  doc.fontSize(10).font("Helvetica").fillColor("black");
-  doc.text(`Total units: ${totalUnits}  ·  ${loads.length} block${loads.length !== 1 ? "s" : ""}`, 50, bottom + 14);
-  doc.fontSize(8).fillColor("#64748b").text(`Generated on ${new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}`, 50, bottom + 30);
+  const bottom = gridBottom(loads);
+  doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(`Generated on ${new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}`, 50, bottom + 14);
   return doc;
 }
 
@@ -335,9 +347,9 @@ export function buildRoomPdf(
   drawGrid(doc, loads, {
     title: `Room: ${room.name}`,
     subTitle,
-    getBlockLine2: (l) => [facultyLabel(l), l.studentClass?.name].filter(Boolean).join(" · ") || "",
+    getBlockLine2: (l) => [l.studentClass?.name, facultyLabel(l)].filter(Boolean).join(" · ") || "",
   });
-  const bottom = gridBottom(doc);
+  const bottom = gridBottom(loads);
   doc.fontSize(10).font("Helvetica").fillColor("black");
   doc.text(`${loads.length} block${loads.length !== 1 ? "s" : ""}`, 50, bottom + 14);
   doc.fontSize(8).fillColor("#64748b").text(`Generated on ${new Date().toLocaleDateString("en-PH", { dateStyle: "medium" })}`, 50, bottom + 30);

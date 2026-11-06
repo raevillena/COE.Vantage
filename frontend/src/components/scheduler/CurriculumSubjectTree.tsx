@@ -112,10 +112,15 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
   const minutesBySubject = useMemo(() => {
     const map = new Map<string, number>();
     if (!classLoads) return map;
+    // Co-instructor rows share one class slot, so each slot counts once.
+    const seenSlots = new Set<string>();
     for (const l of classLoads) {
       const start = l.startTime;
       const end = l.endTime;
       if (!start || !end) continue;
+      const slot = `${l.subjectId}|${l.dayOfWeek}|${start}|${end}`;
+      if (seenSlots.has(slot)) continue;
+      seenSlots.add(slot);
       const [sh, sm] = start.split(":").map((v) => parseInt(v, 10));
       const [eh, em] = end.split(":").map((v) => parseInt(v, 10));
       if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) continue;

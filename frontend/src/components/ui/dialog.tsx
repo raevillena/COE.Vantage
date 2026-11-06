@@ -37,7 +37,7 @@ const Content = React.forwardRef(function DialogContentInner(
       <Overlay />
       <DialogPrimitive.Content
         ref={ref}
-        className={`fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-6 shadow-xl focus:outline-none ${className}`}
+        className={`fixed left-1/2 top-1/2 z-50 w-full max-w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-6 shadow-xl focus:outline-none ${className}`}
         {...props}
         {...(description == null ? noDescriptionProps : {})}
       >

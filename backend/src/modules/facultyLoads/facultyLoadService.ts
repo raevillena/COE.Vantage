@@ -799,7 +799,12 @@ export async function autoAssignForClass(
   }
 
   const scheduledBySubject = new Map<string, number>();
+  // Co-instructor rows share one class slot, so each slot counts once.
+  const seenClassSlots = new Set<string>();
   for (const l of classLoads) {
+    const slot = `${l.subjectId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
+    if (seenClassSlots.has(slot)) continue;
+    seenClassSlots.add(slot);
     const mins = timeToMinutes(l.endTime) - timeToMinutes(l.startTime);
     scheduledBySubject.set(l.subjectId, (scheduledBySubject.get(l.subjectId) ?? 0) + mins);
   }
@@ -855,6 +860,7 @@ export async function autoAssignForClass(
   const facultyMinutes = new Map<string, number>();
   const roomMinutes = new Map<string, number>();
 
+  const seenRoomSlots = new Set<string>();
   for (const l of allLoads) {
     const start = timeToMinutes(l.startTime);
     const end = timeToMinutes(l.endTime);
@@ -866,7 +872,12 @@ export async function autoAssignForClass(
     }
     if (l.roomId != null) {
       addInterval(roomBusy, l.roomId, interval);
-      roomMinutes.set(l.roomId, (roomMinutes.get(l.roomId) ?? 0) + mins);
+      // Co-instructor rows share one room booking, so it counts once.
+      const roomSlot = `${l.roomId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
+      if (!seenRoomSlots.has(roomSlot)) {
+        seenRoomSlots.add(roomSlot);
+        roomMinutes.set(l.roomId, (roomMinutes.get(l.roomId) ?? 0) + mins);
+      }
     }
     addInterval(classBusy, l.studentClassId, interval);
   }

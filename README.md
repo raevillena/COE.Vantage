@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.7.4-197fa1)
+![Version](https://img.shields.io/badge/version-v0.7.5-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -133,6 +133,7 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.7.5** | Schedules shown to faculty once a term is locked, cleaner named timetable PDFs, chairmen edit units of their department's teaching people |
 | **v0.7.4** | Edit or cancel waiting room and assignment requests, head-count dashboard cards, admin Scheduler |
 | **v0.7.3** | Wider room requests with a placement preview while drafting, scheduler block text wrapping and drag fixes |
 | **v0.7.1** | Room request badges and placement preview, raw blocks list in the Scheduler |

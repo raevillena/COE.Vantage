@@ -721,7 +721,7 @@ export function ChairmanFacultyPage() {
       {facultyForm && (
         <UserFormDialog
           mode={facultyForm.id ? "edit" : "create"}
-          title={facultyForm.id ? (facultyForm.initial.role === "CHAIRMAN" ? "Edit chairman load limits" : "Edit faculty") : "Add faculty"}
+          title={facultyForm.id ? (facultyForm.initial.role === "FACULTY" ? "Edit faculty" : `Edit ${ROLE_LABEL[facultyForm.initial.role].toLowerCase()} load limits`) : "Add faculty"}
           initial={facultyForm.initial}
           departments={ownDepartment ? [ownDepartment] : []}
           allowedRoles={[facultyForm.initial.role]}

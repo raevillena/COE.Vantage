@@ -36,6 +36,14 @@ export function AboutPage() {
           </a>
           <p className="text-sm text-foreground-muted mt-0.5">Computer Engineering Department</p>
         </div>
+        <div className="pt-2 border-t border-border">
+          <h3 className="text-sm font-medium text-foreground mb-1">Additional credits</h3>
+          <p className="text-sm text-foreground-muted mb-1">Former system handlers and developers</p>
+          <ul className="space-y-0.5 text-foreground font-medium">
+            <li>Willen Mark D. Manzanas</li>
+            <li>Ben Ezra Apollo</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

@@ -176,7 +176,7 @@ export function UserFormDialog({
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content title={title ?? (isCreate ? "Add User" : "Edit User")} className="max-h-[90vh] overflow-y-auto">
+      <Dialog.Content title={title ?? (isCreate ? "Add User" : "Edit User")} className="!max-w-[min(40rem,calc(100vw-2rem))] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <div>
             <label htmlFor="uf-name" className={labelClass}>Name</label>

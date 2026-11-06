@@ -168,6 +168,10 @@ interface ScheduleBlockProps {
   onLoadResizeEnd?: (load: FacultyLoad) => void;
   /** When true, block fills a team-teaching flex cell (parent provides slot position/size). */
   embeddedInTeamSlot?: boolean;
+  /** Reports: also show the class name on the block. */
+  showClassName?: boolean;
+  /** Reports: false leaves the instructor off the block (a faculty report is already about one person). */
+  showFaculty?: boolean;
 }
 
 function ScheduleBlock({
@@ -185,6 +189,8 @@ function ScheduleBlock({
   onLoadResizeStart,
   onLoadResizeEnd,
   embeddedInTeamSlot = false,
+  showClassName = false,
+  showFaculty = true,
 }: ScheduleBlockProps) {
   const { palette } = useSchedulePalette();
   const pending = Boolean(load.pendingApproval);
@@ -273,9 +279,10 @@ function ScheduleBlock({
   const positionStyle = embeddedInTeamSlot ? undefined : ({ top, height } as const);
   const timeTooltip = `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`;
   const facultyName = load.faculty?.name ?? load.facultyDisplayName ?? "";
-  const facultyShort = formatFacultyShortName(facultyName);
+  const facultyShort = showFaculty ? formatFacultyShortName(facultyName) : "";
+  const className = showClassName ? load.studentClass?.name ?? "" : "";
   const roomName = load.room?.name ?? load.roomDisplayName ?? "";
-  const titleParts = [load.subject?.code ?? "—", load.subject?.name, load.isSplit ? "Split" : "", roomName, facultyShort, timeTooltip].filter(Boolean);
+  const titleParts = [load.subject?.code ?? "—", load.subject?.name, load.isSplit ? "Split" : "", roomName, className, facultyShort, timeTooltip].filter(Boolean);
 
   return (
     <div
@@ -301,7 +308,7 @@ function ScheduleBlock({
         {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
       </div>
       <div className="truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
-        {pending ? "Cross-dept · " : ""}{[facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
+        {pending ? "Cross-dept · " : ""}{[className, facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}
       </div>
       </div>
         {onLoadResize && !pending && !locked && height >= 24 && !embeddedInTeamSlot && (
@@ -409,6 +416,10 @@ interface ScheduleGridProps {
   minWidth?: number;
   /** When true, grid fits container width (no minWidth) so it doesn't cause horizontal scroll; use in footer panes. */
   fitWidth?: boolean;
+  /** Reports: also show the class name on each block. */
+  showClassName?: boolean;
+  /** Reports: false leaves the instructor off each block. */
+  showFaculty?: boolean;
 }
 
 export function ScheduleGrid({
@@ -426,6 +437,8 @@ export function ScheduleGrid({
   draggableIdPrefix,
   minWidth: minWidthProp,
   fitWidth = false,
+  showClassName = false,
+  showFaculty = true,
 }: ScheduleGridProps) {
   const subjectIds = [...new Set(loads.map((l) => l.subjectId))];
   const hourStart = hourStartProp ?? HOUR_START;
@@ -500,6 +513,8 @@ export function ScheduleGrid({
                           onLoadResize={onLoadResize}
                           onLoadResizeStart={onLoadResizeStart}
                           onLoadResizeEnd={onLoadResizeEnd}
+                          showClassName={showClassName}
+                          showFaculty={showFaculty}
                         />
                       );
                     }
@@ -526,6 +541,8 @@ export function ScheduleGrid({
                               onLoadResizeStart={onLoadResizeStart}
                               onLoadResizeEnd={onLoadResizeEnd}
                               embeddedInTeamSlot
+                              showClassName={showClassName}
+                              showFaculty={showFaculty}
                             />
                           </div>
                         ))}

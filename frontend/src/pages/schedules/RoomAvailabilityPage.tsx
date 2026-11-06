@@ -7,6 +7,8 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
 import { useAppSelector } from "../../store/hooks";
+import { useScheduleReleased } from "../../hooks/useScheduleReleased";
+import { ScheduleHeldNotice } from "../../components/ui/scheduleHeldNotice";
 
 export function RoomAvailabilityPage() {
   // A faculty member only sees the rooms they teach in, and only through the report endpoints.
@@ -18,6 +20,8 @@ export function RoomAvailabilityPage() {
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const released = useScheduleReleased(isFaculty, academicYearId, semester);
+  const held = isFaculty && released !== true; // nothing until the college locks the term
 
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
@@ -35,7 +39,7 @@ export function RoomAvailabilityPage() {
 
   useEffect(() => {
     if (!isFaculty) return;
-    if (!academicYearId) {
+    if (!academicYearId || held) {
       setRooms([]);
       return;
     }
@@ -47,10 +51,10 @@ export function RoomAvailabilityPage() {
         setSelectedRoomId((cur) => ((data ?? []).some((r) => r.id === cur) ? cur : ""));
       })
       .catch(() => setRooms([]));
-  }, [isFaculty, academicYearId, semester]);
+  }, [isFaculty, held, academicYearId, semester]);
 
   useEffect(() => {
-    if (!academicYearId || !selectedRoomId) {
+    if (!academicYearId || !selectedRoomId || held) {
       setLoads([]);
       return;
     }
@@ -66,7 +70,7 @@ export function RoomAvailabilityPage() {
     }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: selectedRoomId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedRoomId, isFaculty]);
+  }, [academicYearId, semester, selectedRoomId, isFaculty, held]);
 
   const room = rooms.find((r) => r.id === selectedRoomId);
 
@@ -111,7 +115,9 @@ export function RoomAvailabilityPage() {
         </div>
       </div>
       {room && <p className="text-foreground-muted mb-2">{room.name} — Capacity: {room.capacity} {room.isLab ? "— Lab" : ""}</p>}
-      {loading ? (
+      {held ? (
+        <ScheduleHeldNotice />
+      ) : loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
         </div>
