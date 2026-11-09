@@ -112,3 +112,7 @@ Grades module upgrades, MMSU Grade Push and experimental access
  - grade subjects have an academic year and semester (filters, latest semester on the student lookup), INC for blank formula items, MMSU portal defaults, missing items on the student lookup. done (v0.8.0, needs migration 20260620000000_grade_subject_term)
  - MMSU Grade Push browser extension (experimental, off by default). done (v0.8.0)
  - admin chooses which users may use each experimental feature; Users page filters; the scheduler allows overload. done (v0.8.0)
+
+Current and Scheduling Semester, curriculum specializations
+ - two terms per college (Scheduling = what is being scheduled, Current = what is running); faculty pages follow Current. done (v0.8.1, needs migration 20260621000000_college_calendar_term)
+ - curriculum specializations (common / unique / shared subjects), class option, build page. done (v0.8.1, needs migration 20260622000000_curriculum_specializations)

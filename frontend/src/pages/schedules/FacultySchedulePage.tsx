@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { calendarTerm, schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, Department } from "../../types/api";
 import { departmentLabel } from "../../utils/departmentLabel";
@@ -29,7 +29,7 @@ export function FacultySchedulePage() {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const term = currentTerm(data);
+        const term = role === "FACULTY" ? calendarTerm(data) : schedulingTerm(data);
         if (term) {
           setAcademicYearId(term.academicYearId);
           setSemester(term.semester);
@@ -114,7 +114,7 @@ export function FacultySchedulePage() {
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
           <SearchableSelect
-            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            options={academicYears.map((y) => ({ value: y.id, label: yearLabel(y, role === "FACULTY" ? "current" : "scheduling") }))}
             value={academicYearId || "__none__"}
             onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Academic Year" }}
@@ -123,9 +123,9 @@ export function FacultySchedulePage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">{role === "FACULTY" ? "Current Semester" : "Scheduling Semester"}</label>
           <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-            <Select.Trigger aria-label="Semester" className="w-[100px]">
+            <Select.Trigger aria-label={role === "FACULTY" ? "Current Semester" : "Scheduling Semester"} className="w-[100px]">
               <Select.Value />
             </Select.Trigger>
             <Select.Content>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { calendarTerm, schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear } from "../../types/api";
 import type { UserListItem } from "../../types/api";
@@ -66,7 +66,7 @@ export function ReportsPage() {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const term = currentTerm(data);
+        const term = me?.role === "FACULTY" ? calendarTerm(data) : schedulingTerm(data);
         if (term) {
           setAcademicYearId(term.academicYearId);
           setSemester(term.semester);
@@ -263,7 +263,7 @@ export function ReportsPage() {
           <SearchableSelect
             options={academicYears.map((y) => ({
               value: y.id,
-              label: y.isActive ? `${y.name} (current)` : y.name,
+              label: yearLabel(y, me?.role === "FACULTY" ? "current" : "scheduling"),
             }))}
             value={academicYearId || "__none__"}
             onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
@@ -273,9 +273,9 @@ export function ReportsPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">{me?.role === "FACULTY" ? "Current Semester" : "Scheduling Semester"}</label>
           <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-            <Select.Trigger aria-label="Semester" className="w-[100px]">
+            <Select.Trigger aria-label={me?.role === "FACULTY" ? "Current Semester" : "Scheduling Semester"} className="w-[100px]">
               <Select.Value />
             </Select.Trigger>
             <Select.Content>

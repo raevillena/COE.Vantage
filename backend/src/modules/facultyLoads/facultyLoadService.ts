@@ -4,6 +4,7 @@ import { checkConflicts, assertNoConflicts } from "./conflictService.js";
 import { notifyScheduleChange } from "../notifications/notificationService.js";
 import { creditedLoadUnits, type SubjectComponents } from "../../utils/workload.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
+import { classSubjectFilter } from "../../utils/specializationSubjects.js";
 import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 
 export interface CallerContext {
@@ -693,6 +694,8 @@ export async function autoAssignForClass(
       curriculumId,
       yearLevel: studentClass.yearLevel,
       OR: [{ semester: null }, { semester }],
+      // a class with a specialization takes the common subjects plus its own
+      AND: [classSubjectFilter(studentClass.specializationId)],
     },
   });
   if (!subjects.length) {

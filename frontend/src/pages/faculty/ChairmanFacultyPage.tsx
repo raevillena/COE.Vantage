@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, UserListItem } from "../../types/api";
 import type { Subject } from "../../types/api";
@@ -94,7 +94,7 @@ export function ChairmanFacultyPage() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data }) => {
         setAcademicYears(data);
-        const term = currentTerm(data);
+        const term = schedulingTerm(data);
         setAcademicYearId(term?.academicYearId ?? "");
         if (term) setSemester(term.semester);
       })
@@ -364,7 +364,7 @@ export function ChairmanFacultyPage() {
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic year</label>
           <SearchableSelect
-            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            options={academicYears.map((y) => ({ value: y.id, label: yearLabel(y, "scheduling") }))}
             value={academicYearId || "__none__"}
             onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Academic year" }}
@@ -373,9 +373,9 @@ export function ChairmanFacultyPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">Scheduling Semester</label>
           <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-            <Select.Trigger aria-label="Semester" className="w-[120px]">
+            <Select.Trigger aria-label="Scheduling Semester" className="w-[120px]">
               <Select.Value />
             </Select.Trigger>
             <Select.Content>

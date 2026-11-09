@@ -118,6 +118,7 @@ Numbered sections of the scheduler / platform notes and the file that holds each
 - 60. Waiting requests, head-count dashboard and admin Scheduler (v0.7.4)
 - 61. Schedule hold, PDF timetables and teaching-role edits (v0.7.5)
 - 62. Grades terms, INC, MMSU Grade Push and experimental access (v0.8.0)
+- 63. Current and Scheduling Semester, curriculum specializations (v0.8.1)
 
 **parked.md**
 

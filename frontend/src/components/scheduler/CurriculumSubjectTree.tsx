@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { classTakesSubject } from "../../utils/specializationSubjects";
 import { useDraggable } from "@dnd-kit/core";
 import { MoreVertical } from "lucide-react";
 import type { Curriculum, Subject, FacultyLoad } from "../../types/api";
@@ -114,6 +115,9 @@ const SEMESTER_LABELS: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3:
 
 export interface CurriculumSubjectTreeProps {
   curriculumId?: string;
+  /** The class's specialization: it takes the common subjects plus the ones of its own (none = every subject). */
+  specializationId?: string;
+  specializationName?: string;
   yearLevel?: number;
   /** When set with curriculumId + yearLevel, filters subjects to this semester (1, 2, or 3). Schedule differs per semester. */
   semester?: number;
@@ -158,7 +162,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
 }
 
 function SubjectTreeBody(props: SubjectTreeBodyProps) {
-  const { curriculumId, yearLevel, semester, classLoads, onManage, reloadKey } = props;
+  const { curriculumId, specializationId, specializationName, yearLevel, semester, classLoads, onManage, reloadKey } = props;
   const [curricula, setCurricula] = useState<Curriculum[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -228,7 +232,7 @@ function SubjectTreeBody(props: SubjectTreeBodyProps) {
 
   // When curriculumId and yearLevel are provided (class view), show a focused tree for that curriculum and semester:
   if (selectedCurriculum && yearLevel != null) {
-    const allForCurriculum = byCurriculum.get(selectedCurriculum.id) ?? [];
+    const allForCurriculum = (byCurriculum.get(selectedCurriculum.id) ?? []).filter((s) => classTakesSubject(specializationId, s));
     // Filter by semester when set: show subjects for this semester, or subjects with no semester (show in all)
     const forSemester = (s: Subject) =>
       semester == null || s.semester == null || s.semester === semester;
@@ -243,7 +247,7 @@ function SubjectTreeBody(props: SubjectTreeBodyProps) {
       <div className="flex flex-col h-full min-h-0">
         <div className="mb-2 flex items-start justify-between gap-2 px-1">
           <h2 className="text-sm font-semibold text-foreground">
-            Subjects · {selectedCurriculum.name} ({formatYearLabel(yearLevel)}
+            Subjects · {selectedCurriculum.name}{specializationName ? ` — ${specializationName}` : ""} ({formatYearLabel(yearLevel)}
             {semesterLabel ? ` · ${semesterLabel}` : ""})
           </h2>
           <SubjectStatusLegend />

@@ -9,7 +9,7 @@ export async function listColleges() {
   return prisma.college.findMany({
     where: { isDeleted: false, ...(mine ? { id: mine } : actor?.allowedCollegeIds ? { id: { in: actor.allowedCollegeIds } } : {}) },
     orderBy: { name: "asc" },
-    select: { id: true, universityId: true, name: true, code: true, currentAcademicYearId: true, currentSemester: true, image: { select: { updatedAt: true } } },
+    select: { id: true, universityId: true, name: true, code: true, currentAcademicYearId: true, currentSemester: true, calendarAcademicYearId: true, calendarSemester: true, image: { select: { updatedAt: true } } },
   }).then((rows) => rows.map(({ image, ...c }) => ({ ...c, imageVersion: image?.updatedAt.getTime() ?? null })));
 }
 
@@ -102,6 +102,9 @@ export async function universityOverview() {
       colleges.map(async (c) => {
         const year = years.find((y) => y.id === c.currentAcademicYearId);
         const term = year && c.currentSemester ? { academicYearId: year.id, name: year.name, semester: c.currentSemester } : null;
+        const calYear = years.find((y) => y.id === (c.calendarAcademicYearId ?? c.currentAcademicYearId));
+        const calSem = c.calendarAcademicYearId ? c.calendarSemester : c.currentSemester;
+        const calendarTerm = calYear && calSem ? { academicYearId: calYear.id, name: calYear.name, semester: calSem } : null;
         const [blocks, locks] = term
           ? await Promise.all([
               prisma.facultyLoad.count({ where: { collegeId: c.id, academicYearId: term.academicYearId, semester: term.semester } }),
@@ -114,6 +117,7 @@ export async function universityOverview() {
           code: c.code,
           imageVersion: c.image?.updatedAt.getTime() ?? null,
           currentTerm: term,
+          calendarTerm,
           departments: departments.get(c.id) ?? 0,
           users: users.get(c.id) ?? 0,
           studentClasses: classes.get(c.id) ?? 0,

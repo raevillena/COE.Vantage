@@ -22,7 +22,10 @@ interface CollegeSummary {
   curricula: number;
   blocksThisTerm: number;
   lockedSemesters: number[];
+  /** The Scheduling Semester. */
   currentTerm: { academicYearId: string; name: string; semester: number } | null;
+  /** The Current Semester (follows the Scheduling Semester until set). */
+  calendarTerm?: { academicYearId: string; name: string; semester: number } | null;
 }
 
 interface Overview {
@@ -60,7 +63,7 @@ export function UniversityPage() {
     <div>
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-semibold text-foreground">{data.university.name}</h1>
-        <HelpTip>An overview of every college in the university. Each college has its own current term (or has not started), and blocks are counted for it. A lock means that college has finished its schedule for that semester.</HelpTip>
+        <HelpTip>An overview of every college in the university. Each college has its own Scheduling Semester (or has not started) and Current Semester, and blocks are counted for the Scheduling Semester. A lock means that college has finished its schedule for that semester.</HelpTip>
         {role === "ADMIN" && (
           <Link to="/colleges" className="ml-auto text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 rounded">
             Manage colleges
@@ -68,7 +71,7 @@ export function UniversityPage() {
         )}
       </div>
       <p className="mb-6 text-sm text-foreground-muted">
-        Each college sets its own current term.
+        Each college sets its own Scheduling and Current Semester.
         {(role === "PRESIDENT" || role === "UNIT") && " You can view everything here and change nothing."}
       </p>
 
@@ -84,8 +87,11 @@ export function UniversityPage() {
                 <div className="min-w-0">
                   <h2 className="truncate font-semibold text-foreground">{c.name}</h2>
                   <p className="text-xs text-foreground-muted">
-                    {c.currentTerm ? `${c.currentTerm.name}, ${SEMESTER_NAME[c.currentTerm.semester]}` : "Not started"}
+                    {c.currentTerm ? `Scheduling: ${c.currentTerm.name}, ${SEMESTER_NAME[c.currentTerm.semester]}` : "Scheduling: not started"}
                     {c.code ? ` · ${c.code}` : ""}
+                  </p>
+                  <p className="text-xs text-foreground-muted">
+                    {c.calendarTerm ? `Current: ${c.calendarTerm.name}, ${SEMESTER_NAME[c.calendarTerm.semester]}` : "Current: not set"}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-1">

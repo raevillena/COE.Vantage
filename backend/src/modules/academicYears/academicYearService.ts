@@ -10,25 +10,43 @@ import type { CreateAcademicYearBody, SetCurrentTermBody, SetTermLockBody, Updat
 const SEM_NAME = ["", "1st Sem", "2nd Sem", "Mid Year"];
 
 type YearRow = { id: string; isActive: boolean; currentSemester: number };
+type CollegeTerms = { currentAcademicYearId: string | null; currentSemester: number | null; calendarAcademicYearId: string | null; calendarSemester: number | null };
+
+/** The Current Semester of a college; the Scheduling Semester stands in for it until one is set. */
+function calendarOf(c: CollegeTerms): { academicYearId: string | null; semester: number | null } {
+  return c.calendarAcademicYearId ? { academicYearId: c.calendarAcademicYearId, semester: c.calendarSemester } : { academicYearId: c.currentAcademicYearId, semester: c.currentSemester };
+}
 
 /**
- * Academic years are shared by every college, but each college picks its own current term. This sets `isActive` and
- * `currentSemester` as the signed-in person's college sees them. The admin and president, who belong to no college,
- * see a year as current when any college is on it.
+ * Academic years are shared by every college, but each college picks two terms of its own:
+ *  - the Scheduling Semester: `isActive` and `currentSemester` (the names are older than the distinction), and
+ *  - the Current Semester: `isCalendar` and `calendarSemester`, what is running now (faculty pages, grades).
+ * This sets them as the signed-in person's college sees them. The admin and president, who belong to no college,
+ * see a year as marked when any college is on it.
  */
-async function withCurrent<T extends YearRow>(years: T[]): Promise<T[]> {
+async function withCurrent<T extends YearRow>(years: T[]): Promise<(T & { isCalendar: boolean; calendarSemester: number })[]> {
+  const select = { currentAcademicYearId: true, currentSemester: true, calendarAcademicYearId: true, calendarSemester: true } as const;
   const mine = scopeCollegeId();
   if (mine) {
-    const c = await prisma.college.findUnique({ where: { id: mine }, select: { currentAcademicYearId: true, currentSemester: true } });
+    const c = await prisma.college.findUnique({ where: { id: mine }, select });
+    const cal = c ? calendarOf(c) : { academicYearId: null, semester: null };
     return years.map((y) => {
       const on = c?.currentAcademicYearId === y.id;
-      return { ...y, isActive: on, currentSemester: on ? c?.currentSemester ?? 1 : y.currentSemester };
+      const calOn = cal.academicYearId === y.id;
+      return { ...y, isActive: on, currentSemester: on ? c?.currentSemester ?? 1 : y.currentSemester, isCalendar: calOn, calendarSemester: calOn ? cal.semester ?? 1 : y.currentSemester };
     });
   }
-  const colleges = await prisma.college.findMany({ where: { isDeleted: false, currentAcademicYearId: { not: null } }, orderBy: { name: "asc" }, select: { currentAcademicYearId: true, currentSemester: true } });
+  const colleges = await prisma.college.findMany({ where: { isDeleted: false }, orderBy: { name: "asc" }, select });
   return years.map((y) => {
     const c = colleges.find((x) => x.currentAcademicYearId === y.id);
-    return { ...y, isActive: Boolean(c), currentSemester: c?.currentSemester ?? y.currentSemester };
+    const calCollege = colleges.find((x) => calendarOf(x).academicYearId === y.id);
+    return {
+      ...y,
+      isActive: Boolean(c),
+      currentSemester: c?.currentSemester ?? y.currentSemester,
+      isCalendar: Boolean(calCollege),
+      calendarSemester: (calCollege ? calendarOf(calCollege).semester : null) ?? y.currentSemester,
+    };
   });
 }
 
@@ -51,7 +69,7 @@ export async function listAcademicYears() {
 /** Only the academic years the signed-in person's college is on (for schedules/reports). */
 export async function listActiveAcademicYears() {
   const years = await prisma.academicYear.findMany({ where: { isDeleted: false }, orderBy: { name: "desc" } });
-  return (await withCurrent(years)).filter((y) => y.isActive);
+  return (await withCurrent(years)).filter((y) => y.isActive || y.isCalendar);
 }
 
 export async function getAcademicYearById(id: string) {
@@ -146,35 +164,39 @@ export async function setCurrentTerm(body: SetCurrentTermBody) {
   const collegeId = await resolveCollegeId(prisma, mine ?? body.collegeId);
   const college = await prisma.college.findUnique({ where: { id: collegeId } });
   if (!college || college.isDeleted) throw notFound("College not found");
-  const before = college.currentAcademicYearId
-    ? await prisma.academicYear.findUnique({ where: { id: college.currentAcademicYearId }, select: { name: true } })
-    : null;
-  const from = before ? `${before.name}, ${SEM_NAME[college.currentSemester ?? 1]}` : null;
+  // "scheduling" = the Scheduling Semester (older columns named current*); "current" = the Current Semester (calendar*).
+  const kind = body.kind ?? "scheduling";
+  const label = kind === "current" ? "Current Semester" : "Scheduling Semester";
+  const yearField = kind === "current" ? "calendarAcademicYearId" : "currentAcademicYearId";
+  const semField = kind === "current" ? "calendarSemester" : "currentSemester";
+  const beforeYearId = college[yearField];
+  const before = beforeYearId ? await prisma.academicYear.findUnique({ where: { id: beforeYearId }, select: { name: true } }) : null;
+  const from = before ? `${before.name}, ${SEM_NAME[college[semField] ?? 1]}` : null;
 
   if (body.academicYearId === null) {
-    await prisma.college.update({ where: { id: collegeId }, data: { currentAcademicYearId: null, currentSemester: null } });
+    await prisma.college.update({ where: { id: collegeId }, data: { [yearField]: null, [semField]: null } });
     await audit({
       entityType: "ACADEMIC_YEAR",
       entityLabel: college.name,
       action: "SET_CURRENT_TERM",
-      summary: `Marked ${college.name} as not started: no current term`,
-      changes: { currentTerm: { from, to: null } },
+      summary: kind === "current" ? `Cleared the ${label} of ${college.name} (it follows the Scheduling Semester)` : `Marked ${college.name} as not started: no ${label}`,
+      changes: { [kind === "current" ? "currentSemester" : "schedulingSemester"]: { from, to: null } },
       collegeId,
     });
-    return { collegeId, academicYearId: null, semester: null };
+    return { collegeId, kind, academicYearId: null, semester: null };
   }
   if (!body.semester) throw badRequest("Choose the semester");
   const y = await prisma.academicYear.findUnique({ where: { id: body.academicYearId } });
   if (!y || y.isDeleted) throw notFound("Academic year not found");
-  await prisma.college.update({ where: { id: collegeId }, data: { currentAcademicYearId: y.id, currentSemester: body.semester } });
+  await prisma.college.update({ where: { id: collegeId }, data: { [yearField]: y.id, [semField]: body.semester } });
   const to = `${y.name}, ${SEM_NAME[body.semester]}`;
   await audit({
     entityType: "ACADEMIC_YEAR",
     entityId: y.id,
     entityLabel: y.name,
     action: "SET_CURRENT_TERM",
-    summary: `Set the current term to ${to} for ${college.name}`,
-    changes: { currentTerm: { from, to } },
+    summary: `Set the ${label} to ${to} for ${college.name}`,
+    changes: { [kind === "current" ? "currentSemester" : "schedulingSemester"]: { from, to } },
     collegeId,
   });
   void (async () => {
@@ -182,11 +204,11 @@ export async function setCurrentTerm(body: SetCurrentTermBody) {
     const people = await runUnscoped(() => prisma.user.findMany({ where: { collegeId, isDeleted: false }, select: { id: true } }));
     await notifyUsers(
       people.map((u) => u.id),
-      { type: "TERM", title: "The current term changed", body: to, link: "/dashboard", groupKey: "term" },
+      { type: "TERM", title: `The ${label} changed`, body: to, link: "/dashboard", groupKey: `term-${kind}` },
       { exceptUserId: currentActor()?.id }
     );
   })();
-  return { collegeId, academicYearId: y.id, semester: body.semester };
+  return { collegeId, kind, academicYearId: y.id, semester: body.semester };
 }
 
 export async function softDeleteAcademicYear(id: string) {
@@ -199,6 +221,7 @@ export async function softDeleteAcademicYear(id: string) {
   });
   // colleges that were on this year are no longer on any
   await prisma.college.updateMany({ where: { currentAcademicYearId: id }, data: { currentAcademicYearId: null, currentSemester: null } });
+  await prisma.college.updateMany({ where: { calendarAcademicYearId: id }, data: { calendarAcademicYearId: null, calendarSemester: null } });
 }
 
 export async function listTrashAcademicYears() {
@@ -225,4 +248,5 @@ export async function permanentDeleteAcademicYear(id: string) {
   await prisma.academicYear.delete({ where: { id } });
   // colleges that were on this year are no longer on any
   await prisma.college.updateMany({ where: { currentAcademicYearId: id }, data: { currentAcademicYearId: null, currentSemester: null } });
+  await prisma.college.updateMany({ where: { calendarAcademicYearId: id }, data: { calendarAcademicYearId: null, calendarSemester: null } });
 }

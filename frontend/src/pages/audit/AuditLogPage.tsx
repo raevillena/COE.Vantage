@@ -8,7 +8,7 @@ export function AuditLogPage() {
       <div className="mb-4 flex items-center gap-2">
         <h1 className="text-2xl font-semibold text-foreground">Audit log</h1>
         <HelpTip>
-          A record of who changed what: academic years and the current term, curricula, subjects, classes, departments, rooms, users, scheduling rules, GE sheets, deloading, and schedules being added or removed. Entries cannot be edited or deleted, and each keeps the name and role the person had at the time.
+          A record of who changed what: academic years and the Scheduling and Current Semester, curricula, subjects, classes, departments, rooms, users, scheduling rules, GE sheets, deloading, and schedules being added or removed. Entries cannot be edited or deleted, and each keeps the name and role the person had at the time.
         </HelpTip>
       </div>
       <AuditList kindFilter />

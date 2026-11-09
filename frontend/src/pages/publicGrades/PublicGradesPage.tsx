@@ -20,6 +20,8 @@ type PublicRecord = {
   maxScores?: Record<string, number> | null;
   /** Every item the subject expects, in the grading formula's order: includes the ones this student has no score for. */
   items?: string[];
+  /** The subject's term is a college's Current Semester: the lookup opens on it. */
+  isCurrentTerm?: boolean;
   computedGrade?: {
     /** null when the grade is INC: an item has no score yet. */
     finalGrade?: number | null;
@@ -88,8 +90,10 @@ export function PublicGradesPage() {
       }
       const data = (await response.json()) as PublicRecord[];
       setRecords(data);
-      // Open on the latest semester that has grades; a student with no dated subjects sees everything.
-      const latest = latestTerm(data.map(termOf));
+      // Open on the Current Semester when the student has grades in it, otherwise on the latest semester that has grades;
+      // a student with no dated subjects sees everything.
+      const now = data.find((record) => record.isCurrentTerm && record.subject.academicYear);
+      const latest = now ? termOf(now) : latestTerm(data.map(termOf));
       setYearFilter(latest?.yearId ?? ALL);
       setSemesterFilter(latest ? semesterValue(latest.semester) : ALL);
     } catch (err) {

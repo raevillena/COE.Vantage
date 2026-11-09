@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.8.0-197fa1)
+![Version](https://img.shields.io/badge/version-v0.8.1-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -54,7 +54,6 @@ Build conflict-free teaching loads, see what's left to schedule, and print the r
 - 🔐 JWT access and refresh tokens (HTTP-only cookie), password reset by email, six roles enforced on the server.
 - 🌗 Light, dark and system themes, per-user schedule colour palettes.
 - 🧭 *What's new* release notes on the login page.
-- 🧪 Experimental **grade module** with a public, access-code grade lookup.
 
 ## 🧰 Tech stack
 
@@ -133,9 +132,10 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
-| **v0.8.0** | Grades module upgrades (terms, INC, missing items), MMSU Grade Push extension, per-user experimental access, user filters, overload allowed in the scheduler |
+| **v0.8.1** | Current and Scheduling Semester, curriculum specializations, college name on dashboard exports and registrar forms |
+| **v0.8.0** | Overload allowed in the scheduler, a subject menu in the scheduler list, clearer sign-in errors |
 | **v0.7.5** | Schedules shown to faculty once a term is locked, cleaner named timetable PDFs, chairmen edit units of their department's teaching people |
-| **v0.7.4** | Edit or cancel waiting room and assignment requests, head-count dashboard cards, admin Scheduler |
+| **v0.7.4** | Edit or cancel waiting room and assignment requests, head-count dashboard cards |
 | **v0.7.3** | Wider room requests with a placement preview while drafting, scheduler block text wrapping and drag fixes |
 | **v0.7.1** | Room request badges and placement preview, raw blocks list in the Scheduler |
 | **v0.7.0** | Room sharing between colleges (chairman, then host college secretary approve) |

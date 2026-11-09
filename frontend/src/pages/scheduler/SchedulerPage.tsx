@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { RefreshCw } from "lucide-react";
 import { HelpTip } from "../../components/ui/helpTip";
 import { useNavigate } from "react-router-dom";
@@ -470,7 +470,7 @@ export function SchedulerPage() {
   useEffect(() => {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
-      const term = currentTerm(data);
+      const term = schedulingTerm(data);
       if (term) {
         setAcademicYearId(term.academicYearId);
         setSemester(term.semester);
@@ -1205,16 +1205,16 @@ export function SchedulerPage() {
                 <Select.Item value="__none__">Academic Year</Select.Item>
                 {academicYears.map((y) => (
                   <Select.Item key={y.id} value={y.id}>
-                    {y.isActive ? `${y.name} (current)` : y.name}
+                    {yearLabel(y, "scheduling")}
                   </Select.Item>
                 ))}
               </Select.Content>
             </Select.Root>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Scheduling Semester</label>
             <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-              <Select.Trigger aria-label="Semester" className="w-[100px]">
+              <Select.Trigger aria-label="Scheduling Semester" className="w-[100px]">
                 <Select.Value />
               </Select.Trigger>
               <Select.Content>
@@ -1406,6 +1406,8 @@ export function SchedulerPage() {
               <CurriculumSubjectTree
                 {...({
                   curriculumId: viewMode === "class" ? currentCurriculumId ?? undefined : undefined,
+                  specializationId: viewMode === "class" ? currentClass?.specializationId ?? undefined : undefined,
+                  specializationName: viewMode === "class" ? currentClass?.specialization?.name : undefined,
                   yearLevel: viewMode === "class" ? currentYearLevel : undefined,
                   semester: viewMode === "class" ? semester : undefined,
                   classLoads: viewMode === "class" ? loads : undefined,

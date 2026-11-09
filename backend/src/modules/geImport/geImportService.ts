@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { classSubjectFilter, classTakesSubject } from "../../utils/specializationSubjects.js";
 import { prisma } from "../../prisma/client.js";
 import { badRequest, conflict, forbidden, notFound } from "../../utils/errors.js";
 import { assertRoomAssignable, assertStudentClassInDepartment, requiredMinutesForSubject, timeToMinutes } from "../facultyLoads/facultyLoadService.js";
@@ -24,7 +25,7 @@ export async function classSubjects(studentClassId: string, academicYearId: stri
   await assertStudentClassInDepartment(studentClassId, caller);
   const [subjects, loads] = await Promise.all([
     prisma.subject.findMany({
-      where: { isDeleted: false, curriculumId: cls.curriculumId, yearLevel: cls.yearLevel, OR: [{ semester: null }, { semester }] },
+      where: { isDeleted: false, curriculumId: cls.curriculumId, yearLevel: cls.yearLevel, OR: [{ semester: null }, { semester }], AND: [classSubjectFilter(cls.specializationId)] },
       select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true },
       orderBy: { code: "asc" },
     }),
@@ -82,7 +83,7 @@ export async function previewImport(body: ImportBody, caller: CallerContext, tx?
   await assertStudentClassInDepartment(studentClassId, caller);
 
   const subjectIds = [...new Set(body.blocks.map((b) => b.subjectId))];
-  const subjects = await db.subject.findMany({ where: { id: { in: subjectIds }, isDeleted: false } });
+  const subjects = await db.subject.findMany({ where: { id: { in: subjectIds }, isDeleted: false }, include: { specializations: { select: { specializationId: true } } } });
   const subjectById = new Map(subjects.map((s) => [s.id, s]));
 
   const existingClass = await db.facultyLoad.findMany({ where: { studentClassId, academicYearId, semester } });
@@ -105,6 +106,7 @@ export async function previewImport(body: ImportBody, caller: CallerContext, tx?
     const subject = subjectById.get(b.subjectId);
     if (!subject) result.blocking.push("Subject not found");
     else if (subject.curriculumId !== cls.curriculumId) result.blocking.push(`${subject.code} is not in this class's curriculum`);
+    else if (!classTakesSubject(cls.specializationId, subject)) result.blocking.push(`${subject.code} belongs to another specialization than this class's`);
     if (!/^\d{1,2}:\d{2}$/.test(b.startTime) || !/^\d{1,2}:\d{2}$/.test(b.endTime)) result.blocking.push("Enter a start and an end time");
     else if (timeToMinutes(b.endTime) <= timeToMinutes(b.startTime)) result.blocking.push("The end time is not after the start time; check AM and PM");
     if (!b.facultyDisplayName?.trim()) result.blocking.push("Enter the faculty name");

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
-import type { Curriculum, ExtractedSubject } from "../../types/api";
+import type { Curriculum, CurriculumSpecialization, ExtractedSubject } from "../../types/api";
+import { SpecializationsManager, SubjectSpecializationEditor } from "../../components/curriculum/SpecializationDialogs";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
@@ -33,7 +34,13 @@ export function CurriculumPage() {
 
   // Curriculum viewer (read-only subjects list)
   const [viewerCurriculum, setViewerCurriculum] = useState<Curriculum | null>(null);
-  const [viewerSubjects, setViewerSubjects] = useState<{ id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number; yearLevel: number | null; semester: number | null }[]>([]);
+  type ViewerSubject = { id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number; yearLevel: number | null; semester: number | null; specializations: { id: string; name: string }[] };
+  const [viewerSubjects, setViewerSubjects] = useState<ViewerSubject[]>([]);
+  const [viewerSpecs, setViewerSpecs] = useState<CurriculumSpecialization[]>([]);
+  /** "" = every subject, "common" = subjects with no specialization, otherwise a specialization id (common + its own). */
+  const [viewerFilter, setViewerFilter] = useState("");
+  const [specManager, setSpecManager] = useState<Curriculum | null>(null);
+  const [specSubject, setSpecSubject] = useState<ViewerSubject | null>(null);
   const [viewerLoading, setViewerLoading] = useState(false);
 
   // Import: IUSIS HTML or clipboard text — shared two-phase flow
@@ -79,15 +86,23 @@ export function CurriculumPage() {
     setModalOpen(true);
   };
 
+  const loadViewer = async (c: Curriculum) => {
+    const [subjects, specs] = await Promise.all([
+      apiClient.get<ViewerSubject[]>(`/curriculum/${c.id}/subjects`),
+      apiClient.get<CurriculumSpecialization[]>(`/curriculum/${c.id}/specializations`).catch(() => ({ data: [] as CurriculumSpecialization[] })),
+    ]);
+    setViewerSubjects(subjects.data ?? []);
+    setViewerSpecs(specs.data ?? []);
+  };
+
   const openViewer = async (c: Curriculum) => {
     setViewerCurriculum(c);
     setViewerSubjects([]);
+    setViewerSpecs([]);
+    setViewerFilter("");
     setViewerLoading(true);
     try {
-      const { data } = await apiClient.get<{ id: string; code: string; name: string; units: number; isLab: boolean; lecUnits?: number; labUnits?: number; yearLevel: number | null; semester: number | null }[]>(
-        `/curriculum/${c.id}/subjects`
-      );
-      setViewerSubjects(data ?? []);
+      await loadViewer(c);
     } catch {
       toast.error("Failed to load curriculum subjects");
       setViewerCurriculum(null);
@@ -95,6 +110,10 @@ export function CurriculumPage() {
       setViewerLoading(false);
     }
   };
+
+  /** What the viewer's filter keeps: everything, only common subjects, or what a class of one specialization takes. */
+  const matchesViewerFilter = (s: ViewerSubject) =>
+    viewerFilter === "" ? true : viewerFilter === "common" ? s.specializations.length === 0 : s.specializations.length === 0 || s.specializations.some((sp) => sp.id === viewerFilter);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,6 +394,7 @@ export function CurriculumPage() {
                                   <Link to={`/curriculum/${c.id}/build`}>Build</Link>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Item onSelect={() => openEdit(c)}>Edit</DropdownMenu.Item>
+                                <DropdownMenu.Item onSelect={() => setSpecManager(c)}>Specializations</DropdownMenu.Item>
                                 <DropdownMenu.Item onSelect={() => handleClearClick(c)}>Clear curriculum</DropdownMenu.Item>
                                 <DropdownMenu.Item
                                   onSelect={() => handleDeleteClick(c.id)}
@@ -436,6 +456,32 @@ export function CurriculumPage() {
           description={viewerCurriculum ? (viewerCurriculum.department?.name ? `Department: ${viewerCurriculum.department.name}` : undefined) : undefined}
           className="!max-w-[min(80rem,95vw)] w-[95vw] max-h-[85vh] overflow-hidden flex flex-col"
         >
+          {!viewerLoading && viewerCurriculum && (viewerSpecs.length > 0 || canEdit) && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {viewerSpecs.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-foreground-muted">
+                  Show
+                  <select
+                    aria-label="Filter by specialization"
+                    value={viewerFilter}
+                    onChange={(e) => setViewerFilter(e.target.value)}
+                    className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm text-foreground"
+                  >
+                    <option value="">All subjects</option>
+                    <option value="common">Common subjects only</option>
+                    {viewerSpecs.map((sp) => (
+                      <option key={sp.id} value={sp.id}>{sp.name}: common + its own</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {canEdit && (
+                <Button type="button" variant="secondary" onClick={() => setSpecManager(viewerCurriculum)}>
+                  {viewerSpecs.length === 0 ? "Add specializations" : "Manage specializations"}
+                </Button>
+              )}
+            </div>
+          )}
           <div className="overflow-y-auto min-h-0 mt-2">
             {viewerLoading ? (
               <div className="flex justify-center py-8" aria-busy="true">
@@ -454,10 +500,11 @@ export function CurriculumPage() {
                       <th className="px-3 py-2 text-left font-medium text-foreground">Name</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Units</th>
                       <th className="px-3 py-2 text-left font-medium text-foreground">Hrs/week</th>
+                      {viewerSpecs.length > 0 && <th className="px-3 py-2 text-left font-medium text-foreground">Specialization</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {viewerSubjects.map((s) => (
+                    {viewerSubjects.filter(matchesViewerFilter).map((s) => (
                       <tr key={s.id}>
                         <td className="px-3 py-2 text-foreground-muted">{s.yearLevel ?? "—"}</td>
                         <td className="px-3 py-2 text-foreground-muted">{s.semester === 1 ? "1st Sem" : s.semester === 2 ? "2nd Sem" : s.semester === 3 ? "Mid Year" : "—"}</td>
@@ -465,6 +512,24 @@ export function CurriculumPage() {
                         <td className="px-3 py-2 text-foreground">{s.name}</td>
                         <td className="px-3 py-2 text-foreground-muted">{unitsLabel(s)}</td>
                         <td className="px-3 py-2 text-foreground-muted">{weeklyHours(s)}</td>
+                        {viewerSpecs.length > 0 && (
+                          <td className="px-3 py-2 text-foreground-muted">
+                            <span className="inline-flex flex-wrap items-center gap-1.5">
+                              {s.specializations.length === 0 ? (
+                                <span>Common</span>
+                              ) : (
+                                s.specializations.map((sp) => (
+                                  <span key={sp.id} className="rounded-full bg-primary-muted px-2 py-0.5 text-xs font-medium text-primary">{sp.name}</span>
+                                ))
+                              )}
+                              {canEdit && (
+                                <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setSpecSubject(s)} aria-label={`Set specializations of ${s.code}`}>
+                                  Edit
+                                </button>
+                              )}
+                            </span>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -479,6 +544,25 @@ export function CurriculumPage() {
           </div>
         </Dialog.Content>
       </Dialog.Root>
+
+      {specManager && (
+        <SpecializationsManager
+          curriculum={specManager}
+          onClose={() => setSpecManager(null)}
+          onChanged={() => {
+            if (viewerCurriculum && viewerCurriculum.id === specManager.id) void loadViewer(viewerCurriculum);
+          }}
+        />
+      )}
+      {specSubject && viewerCurriculum && (
+        <SubjectSpecializationEditor
+          curriculumId={viewerCurriculum.id}
+          subject={specSubject}
+          specializations={viewerSpecs}
+          onClose={() => setSpecSubject(null)}
+          onSaved={() => void loadViewer(viewerCurriculum)}
+        />
+      )}
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <Dialog.Content title="Move curriculum to trash" description="This curriculum will be moved to Trash. An admin can restore it or permanently delete it from the Trash page.">

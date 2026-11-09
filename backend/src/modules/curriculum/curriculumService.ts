@@ -1,5 +1,5 @@
 import { prisma } from "../../prisma/client.js";
-import { badRequest, notFound, forbidden } from "../../utils/errors.js";
+import { badRequest, conflict, notFound, forbidden } from "../../utils/errors.js";
 import { codeFromName } from "../../utils/codeFromName.js";
 import type { CreateCurriculumBody, UpdateCurriculumBody } from "./curriculumSchemas.js";
 
@@ -121,8 +121,81 @@ export async function clearCurriculum(id: string, caller?: CurriculumCaller) {
   if (caller?.role === "CHAIRMAN" && c.departmentId !== caller.departmentId) {
     throw forbidden("You can only clear curricula for your own department.");
   }
+  await prisma.subjectSpecialization.deleteMany({ where: { subject: { curriculumId: id } } });
   await prisma.subject.updateMany({
     where: { curriculumId: id, isDeleted: false },
     data: { curriculumId: null, yearLevel: null },
   });
+}
+
+// ---- specializations ------------------------------------------------------------------------------------------
+
+function assertOwnDepartment(c: { departmentId: string | null }, caller?: CurriculumCaller) {
+  if (caller?.role === "CHAIRMAN" && c.departmentId !== caller.departmentId) {
+    throw forbidden("You can only change curricula for your own department.");
+  }
+}
+
+async function loadCurriculum(id: string, caller?: CurriculumCaller, forEdit = false) {
+  const c = await prisma.curriculum.findUnique({ where: { id } });
+  if (!c || c.isDeleted) throw notFound("Curriculum not found");
+  if (forEdit || caller?.role === "CHAIRMAN") assertOwnDepartment(c, caller);
+  return c;
+}
+
+/** The specializations of a curriculum, each with how many subjects are tagged with it and how many classes follow it. */
+export async function listSpecializations(curriculumId: string, caller?: CurriculumCaller) {
+  await loadCurriculum(curriculumId, caller);
+  const rows = await prisma.curriculumSpecialization.findMany({
+    where: { curriculumId },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { subjects: true, studentClasses: true } } },
+  });
+  return rows.map(({ _count, ...r }) => ({ ...r, subjectCount: _count.subjects, classCount: _count.studentClasses }));
+}
+
+export async function createSpecialization(curriculumId: string, body: { name: string }, caller?: CurriculumCaller) {
+  await loadCurriculum(curriculumId, caller, true);
+  const name = body.name.trim();
+  if (!name) throw badRequest("Name the specialization");
+  const dup = await prisma.curriculumSpecialization.findFirst({ where: { curriculumId, name: { equals: name, mode: "insensitive" } } });
+  if (dup) throw conflict("This curriculum already has a specialization with that name.");
+  return prisma.curriculumSpecialization.create({ data: { curriculumId, name } });
+}
+
+export async function updateSpecialization(id: string, body: { name: string }, caller?: CurriculumCaller) {
+  const spec = await prisma.curriculumSpecialization.findUnique({ where: { id } });
+  if (!spec) throw notFound("Specialization not found");
+  await loadCurriculum(spec.curriculumId, caller, true);
+  const name = body.name.trim();
+  if (!name) throw badRequest("Name the specialization");
+  const dup = await prisma.curriculumSpecialization.findFirst({ where: { curriculumId: spec.curriculumId, id: { not: id }, name: { equals: name, mode: "insensitive" } } });
+  if (dup) throw conflict("This curriculum already has a specialization with that name.");
+  return prisma.curriculumSpecialization.update({ where: { id }, data: { name } });
+}
+
+/** Deleting one frees its subjects (a subject left with no specialization becomes common) and its classes (no specialization). */
+export async function deleteSpecialization(id: string, caller?: CurriculumCaller) {
+  const spec = await prisma.curriculumSpecialization.findUnique({ where: { id } });
+  if (!spec) throw notFound("Specialization not found");
+  await loadCurriculum(spec.curriculumId, caller, true);
+  await prisma.curriculumSpecialization.delete({ where: { id } });
+  return spec;
+}
+
+/** Sets which specializations a subject belongs to; none = common to all. Only specializations of the subject's own curriculum. */
+export async function setSubjectSpecializations(curriculumId: string, subjectId: string, specializationIds: string[], caller?: CurriculumCaller) {
+  await loadCurriculum(curriculumId, caller, true);
+  const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
+  if (!subject || subject.isDeleted || subject.curriculumId !== curriculumId) throw notFound("Subject not found in this curriculum");
+  const unique = Array.from(new Set(specializationIds));
+  if (unique.length > 0) {
+    const found = await prisma.curriculumSpecialization.count({ where: { id: { in: unique }, curriculumId } });
+    if (found !== unique.length) throw badRequest("A specialization does not belong to this curriculum");
+  }
+  await prisma.$transaction([
+    prisma.subjectSpecialization.deleteMany({ where: { subjectId } }),
+    ...(unique.length > 0 ? [prisma.subjectSpecialization.createMany({ data: unique.map((specializationId) => ({ subjectId, specializationId })) })] : []),
+  ]);
+  return { subjectId, specializationIds: unique };
 }

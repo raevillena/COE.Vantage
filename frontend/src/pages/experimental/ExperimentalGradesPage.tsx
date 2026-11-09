@@ -6,7 +6,7 @@ import { apiClient } from "../../api/apiClient";
 import { Dialog } from "../../components/ui/dialog";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import type { AcademicYear } from "../../types/api";
-import { currentTerm } from "../../utils/currentTerm";
+import { calendarTerm, yearLabel } from "../../utils/currentTerm";
 import { SEMESTER_LABEL, compareTermsNewestFirst, distinctTerms, termLabel, type GradeTerm } from "../../utils/gradeTerm";
 import { GradingSystemSettingsPanel } from "../../features/experimental/GradingSystemSettingsPanel";
 import { collectGradeKeys, DEFAULT_PASSING_PERCENT, normalizeGradingSystemFromUnknown } from "../../features/experimental/gradingSystemModel";
@@ -815,7 +815,7 @@ export function ExperimentalGradesPage() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data }) => {
         setAcademicYears(data);
-        const current = currentTerm(data);
+        const current = calendarTerm(data);
         if (current) {
           setNewSubjectYear(current.academicYearId);
           setNewSubjectSemester(String(current.semester));
@@ -1631,7 +1631,7 @@ export function ExperimentalGradesPage() {
                         )}
                         {academicYears.map((year) => (
                           <option key={year.id} value={year.id}>
-                            {year.isActive ? `${year.name} (current)` : year.name}
+                            {yearLabel(year, "current")}
                           </option>
                         ))}
                       </select>

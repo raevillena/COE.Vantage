@@ -285,6 +285,13 @@ test.describe("grade terms", () => {
     const STUDENT = "99-777001";
     const CODE = "TERMCODE1";
     const made: string[] = [];
+    // The student page opens on the college's Current Semester when the student has grades in it, otherwise on the latest
+    // term. This test is about the latest term, so the Current Semester is moved to one the student has nothing in.
+    const COE_ID = "00000000-0000-0000-0000-0000000000a2";
+    const collegesNow = (await (await request.get(`${API}/colleges`, { headers })).json()) as { id: string; calendarAcademicYearId: string | null; calendarSemester: number | null }[];
+    const calendarBefore = collegesNow.find((c) => c.id === COE_ID)!;
+    const setCurrent = (academicYearId: string | null, semester?: number) =>
+      request.put(`${API}/academic-years/current-term`, { headers, data: { kind: "current", academicYearId, semester, collegeId: COE_ID } });
     const subject = async (name: string, term: { academicYearId: string; semester: number } | null) => {
       const created = await request.post(`${API}/grade-subjects`, { headers, data: { name, ...(term ?? {}) } });
       expect(created.status(), await created.text()).toBe(201);
@@ -298,6 +305,7 @@ test.describe("grade terms", () => {
     };
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
+      expect((await setCurrent(years[years.length - 1].id, 1)).status()).toBe(200);
       const olderSecond = await subject("QA Term Older 2nd", { academicYearId: older.id, semester: 2 });
       const newestFirst = await subject("QA Term Newest 1st", { academicYearId: newest.id, semester: 1 });
       const newestSecond = await subject("QA Term Newest 2nd", { academicYearId: newest.id, semester: 2 });
@@ -405,6 +413,7 @@ test.describe("grade terms", () => {
     } finally {
       for (const id of made) await request.delete(`${API}/grade-subjects/${id}`, { headers });
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: prefs.enabled, features: prefs.features } });
+      await setCurrent(calendarBefore.calendarAcademicYearId, calendarBefore.calendarSemester ?? undefined);
     }
   });
 });

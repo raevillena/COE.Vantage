@@ -17,6 +17,8 @@ export const setCurrentTermSchema = z.object({
     /** null = this college has not started. */
     academicYearId: z.string().uuid().nullable(),
     semester: z.number().int().min(1).max(3).optional(),
+    /** Which term: the Scheduling Semester (default) or the Current Semester. */
+    kind: z.enum(["scheduling", "current"]).optional(),
     /** The admin says which college; a college secretary always means their own. */
     collegeId: z.string().uuid().optional(),
   }),

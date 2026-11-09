@@ -45,3 +45,7 @@
 - Grades: see `docs/dev/grades-module.md` (terms migration `20260620000000_grade_subject_term`, INC rule, MMSU defaults, import header detection, layout).
 - MMSU Grade Push extension: `docs/dev/mmsu-grade-push.md`. Experimental grants (`granted` in the prefs JSON, admin dialog on the Users page): `docs/dev/experimental-features.md`.
 - Scheduler: manual assignment no longer stops at maximum units (overload allowed); auto-assign still respects the cap. Users page filters. Login form reads autofilled values.
+
+### 63. Current and Scheduling Semester, curriculum specializations (v0.8.1)
+- Semesters and specializations: see the last sections of `docs/dev/terms-users-search-nav.md` and `docs/dev/curriculum-and-subjects.md` (migrations `20260621000000_college_calendar_term`, `20260622000000_curriculum_specializations`).
+- Release notes policy: experimental features (the grade module, MMSU Grade Push, experimental access) and admin-only capabilities are NOT listed in `CHANGELOG.md` / `changelog.ts` / the README table.

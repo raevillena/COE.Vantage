@@ -1,6 +1,7 @@
 import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { AppError, badRequest, forbidden, notFound } from "../../utils/errors.js";
+import { runUnscoped } from "../../utils/auditContext.js";
 import { env } from "../../config/env.js";
 import { sendGradeAccessEmail } from "../../utils/email.js";
 import type {
@@ -561,13 +562,29 @@ function formulaGradeKeys(gradingSystem: unknown): string[] {
  * Items the grading formula names come first, in its order, then the rest. A formula key that is not an item at all is a
  * settings problem, not something the student lacks, so it is left out. Only item names are returned, never the formula.
  */
-async function attachExpectedItems<T extends { subjectId: string }>(records: T[]): Promise<(T & { items: string[] })[]> {
+/** "year|semester" of every college's Current Semester (its Scheduling Semester stands in until one is set). */
+async function currentTermKeys(): Promise<Set<string>> {
+  const colleges = await runUnscoped(() =>
+    prisma.college.findMany({ where: { isDeleted: false }, select: { currentAcademicYearId: true, currentSemester: true, calendarAcademicYearId: true, calendarSemester: true } })
+  );
+  const keys = new Set<string>();
+  for (const c of colleges) {
+    const year = c.calendarAcademicYearId ?? c.currentAcademicYearId;
+    const semester = c.calendarAcademicYearId ? c.calendarSemester : c.currentSemester;
+    if (year && semester) keys.add(`${year}|${semester}`);
+  }
+  return keys;
+}
+
+async function attachExpectedItems<T extends { subjectId: string }>(records: T[]): Promise<(T & { items: string[]; isCurrentTerm: boolean })[]> {
   const subjectIds = Array.from(new Set(records.map((record) => record.subjectId)));
   if (subjectIds.length === 0) return [];
-  const [subjects, rows] = await Promise.all([
-    prisma.gradeSubject.findMany({ where: { id: { in: subjectIds } }, select: { id: true, gradingSystem: true } }),
+  const [subjects, rows, currentKeys] = await Promise.all([
+    prisma.gradeSubject.findMany({ where: { id: { in: subjectIds } }, select: { id: true, gradingSystem: true, academicYearId: true, semester: true } }),
     prisma.gradeRecord.findMany({ where: { subjectId: { in: subjectIds } }, select: { subjectId: true, grades: true, maxScores: true } }),
+    currentTermKeys(),
   ]);
+  const currentBySubject = new Map(subjects.map((subject) => [subject.id, subject.academicYearId !== null && subject.semester !== null && currentKeys.has(`${subject.academicYearId}|${subject.semester}`)]));
   const itemsBySubject = new Map<string, string[]>();
   for (const subject of subjects) {
     const others = new Set<string>();
@@ -583,7 +600,7 @@ async function attachExpectedItems<T extends { subjectId: string }>(records: T[]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
     itemsBySubject.set(subject.id, [...formula, ...rest]);
   }
-  return records.map((record) => ({ ...record, items: itemsBySubject.get(record.subjectId) ?? [] }));
+  return records.map((record) => ({ ...record, items: itemsBySubject.get(record.subjectId) ?? [], isCurrentTerm: currentBySubject.get(record.subjectId) ?? false }));
 }
 
 const PUBLIC_COMPUTE_NOT_AVAILABLE = "Unable to compute grades for this record.";

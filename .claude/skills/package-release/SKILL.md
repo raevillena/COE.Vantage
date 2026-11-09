@@ -9,6 +9,7 @@ Only when asked. Changelog and version files are deliberately NOT updated during
 
 ## Decide the content first
 - Summarise what changed since the last version commit: `git log --oneline`, `git diff --stat <last version commit>`, and `docs/HANDOFF.md` "Built since".
+- **Leave out of every release note** (changelog.ts, CHANGELOG.md, README table): experimental features (grade module, MMSU Grade Push, experimental access) and admin-only capabilities (Users page admin tools, admin-only pages and powers). The user asked for this explicitly (2026-11-09).
 - One entry: a title, the date, and a short list of user-visible items. Do not mention internal or admin-only pages that users cannot reach unless they asked.
 
 ## Files to keep in sync (previous releases touched all of these)

@@ -7,7 +7,7 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Spinner } from "../../components/ui/spinner";
 import { HelpTip } from "../../components/ui/helpTip";
 import { LOAD_STATE_BADGE } from "../../utils/loadState";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { downloadFromApi } from "../../utils/downloadFile";
 import { MyWorkloadPanel } from "../../components/dashboard/MyWorkloadPanel";
 import { useAppSelector } from "../../store/hooks";
@@ -123,7 +123,7 @@ export function DashboardOverview() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data: ys }) => {
         setYears(ys);
-        const term = currentTerm(ys);
+        const term = schedulingTerm(ys);
         if (term) {
           setAcademicYearId(term.academicYearId);
           setSemester(term.semester);
@@ -170,7 +170,7 @@ export function DashboardOverview() {
           <div className="min-w-[180px]">
             <label className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
             <SearchableSelect
-              options={years.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+              options={years.map((y) => ({ value: y.id, label: yearLabel(y, "scheduling") }))}
               value={academicYearId || "__none__"}
               onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
               noneOption={{ value: "__none__", label: "Academic year" }}
@@ -179,9 +179,9 @@ export function DashboardOverview() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Scheduling Semester</label>
             <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-              <Select.Trigger aria-label="Semester" className="w-[120px]">
+              <Select.Trigger aria-label="Scheduling Semester" className="w-[120px]">
                 <Select.Value />
               </Select.Trigger>
               <Select.Content>

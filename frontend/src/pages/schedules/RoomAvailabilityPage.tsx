@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, Room } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
@@ -27,7 +27,7 @@ export function RoomAvailabilityPage() {
     apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => {
       setAcademicYears(data);
       if (data.length >= 1) {
-        const term = currentTerm(data);
+        const term = schedulingTerm(data);
         if (term) {
           setAcademicYearId(term.academicYearId);
           setSemester(term.semester);
@@ -81,7 +81,7 @@ export function RoomAvailabilityPage() {
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>
           <SearchableSelect
-            options={academicYears.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+            options={academicYears.map((y) => ({ value: y.id, label: yearLabel(y, "scheduling") }))}
             value={academicYearId || "__none__"}
             onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
             noneOption={{ value: "__none__", label: "Academic Year" }}
@@ -90,9 +90,9 @@ export function RoomAvailabilityPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-foreground">Semester</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">Scheduling Semester</label>
           <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-            <Select.Trigger aria-label="Semester" className="w-[100px]">
+            <Select.Trigger aria-label="Scheduling Semester" className="w-[100px]">
               <Select.Value />
             </Select.Trigger>
             <Select.Content>

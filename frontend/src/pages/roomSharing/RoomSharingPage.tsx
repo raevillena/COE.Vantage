@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { classTakesSubject } from "../../utils/specializationSubjects";
 import { useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
@@ -252,7 +253,7 @@ function DraftDialog({
 
   const cls = classes.find((c) => c.id === classId);
   const subjectChoices = useMemo(
-    () => subjects.filter((s) => !cls || (s as Subject & { curriculumId?: string | null }).curriculumId === cls.curriculumId),
+    () => subjects.filter((s) => !cls || ((s as Subject & { curriculumId?: string | null }).curriculumId === cls.curriculumId && classTakesSubject(cls.specializationId, s))),
     [subjects, cls]
   );
   const body = {
@@ -678,7 +679,7 @@ export function RoomSharingPage() {
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-foreground-muted">Semester</span>
+              <span className="mb-1 block text-foreground-muted">Scheduling Semester</span>
               <select className={selectClass} value={semester} onChange={(e) => setSemester(Number(e.target.value))}>
                 {SEMESTERS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>

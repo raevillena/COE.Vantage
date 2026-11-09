@@ -35,7 +35,7 @@ const ACTION_LABEL: Record<string, string> = {
   PERMANENT_DELETE: "Permanently deleted",
   LOCK: "Locked",
   UNLOCK: "Unlocked",
-  SET_CURRENT_TERM: "Current term",
+  SET_CURRENT_TERM: "Semester setting",
   OPEN: "Opened",
   CLOSE: "Closed",
   IMPORT: "Imported",
@@ -93,7 +93,9 @@ const FIELD_LABEL: Record<string, string> = {
   departmentId: "department",
   curriculumId: "curriculum",
   maxUnits: "maximum units",
-  currentTerm: "current term",
+  currentTerm: "scheduling semester",
+  schedulingSemester: "Scheduling Semester",
+  currentSemester: "Current Semester",
 };
 
 function ChangeList({ changes }: { changes: NonNullable<AuditEntry["changes"]> }) {

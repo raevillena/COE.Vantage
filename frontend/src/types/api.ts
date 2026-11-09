@@ -4,11 +4,23 @@ export interface College {
   id: string;
   name: string;
   code: string | null;
-  /** The term this college is scheduling now; null when it has not started. */
+  /** The SCHEDULING semester: the term this college is scheduling now; null when it has not started. (The names are older than the Current Semester.) */
   currentAcademicYearId?: string | null;
   currentSemester?: number | null;
+  /** The CURRENT semester (what is running now); null = not set, and the scheduling semester stands in. */
+  calendarAcademicYearId?: string | null;
+  calendarSemester?: number | null;
   /** Changes when the college's card picture does; null when it has none. */
   imageVersion?: number | null;
+}
+
+/** A track inside a curriculum. A subject with none is common to every specialization. */
+export interface CurriculumSpecialization {
+  id: string;
+  curriculumId: string;
+  name: string;
+  subjectCount: number;
+  classCount: number;
 }
 
 export interface Department {
@@ -72,6 +84,8 @@ export interface Subject {
   /** 1 = 1st sem, 2 = 2nd sem, 3 = mid year; nullable when not set. */
   semester?: number | null;
   curriculumId: string | null;
+  /** The specializations that take this subject; empty = common to every class of its curriculum. */
+  specializationIds?: string[];
   departmentId: string | null;
   curriculum?: {
     id: string;
@@ -90,6 +104,9 @@ export interface StudentClass {
   name: string;
   yearLevel: number;
   curriculumId: string;
+  /** One of the curriculum's specializations; null = none (the class takes every subject of the curriculum). */
+  specializationId?: string | null;
+  specialization?: { id: string; name: string } | null;
   studentCount: number;
   curriculum?: {
     id: string;
@@ -103,9 +120,14 @@ export interface StudentClass {
 export interface AcademicYear {
   id: string;
   name: string;
+  /** This year is the college's SCHEDULING semester year ("isActive"/"currentSemester" are the older names for it). */
   isActive: boolean;
-  /** 1 = 1st, 2 = 2nd, 3 = Mid Year: the semester filters open on while this year is the active one. */
+  /** 1 = 1st, 2 = 2nd, 3 = Mid Year: the scheduling semester while this year is the scheduling year. */
   currentSemester?: number;
+  /** This year is the college's CURRENT semester year (what is running now). */
+  isCalendar?: boolean;
+  /** The Current Semester while this year is the current year. */
+  calendarSemester?: number;
   /** Semesters locked against scheduling changes. */
   termLocks?: { semester: number; collegeId?: string; lockedByName: string; lockedAt: string }[];
   deletedAt?: string | null;

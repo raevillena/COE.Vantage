@@ -174,3 +174,11 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - Keep icon size at 18px for consistency with existing sidebar density.
 
 ---
+
+### Current Semester vs Scheduling Semester (v0.8.0)
+- Two terms per college. **Scheduling Semester** = the old term (`College.currentAcademicYearId/currentSemester`, API `isActive`/`currentSemester` on academic years; the column names are older than the split). **Current Semester** = what is running now (`College.calendarAcademicYearId/calendarSemester`, API `isCalendar`/`calendarSemester`). Migration `20260621000000_college_calendar_term` copies scheduling into current, so nothing changes until someone separates them. Unset current = follows scheduling (`calendarOf` in `academicYearService.ts`).
+- Set via `PUT /academic-years/current-term` with `kind: "scheduling" | "current"` (default scheduling); same people (admin, college secretary). `GET /academic-years/for-schedules` returns both flags. `/colleges/overview` returns `currentTerm` (scheduling) and `calendarTerm`.
+- Frontend helpers in `utils/currentTerm.ts`: `schedulingTerm(years)`, `calendarTerm(years)`, `yearLabel(y, kind)` (`currentTerm` no longer exists). **Scheduling** (pages that plan or look at schedules): dashboard overview, Scheduler, rooms, room sharing, schedules, reports (staff), faculty page, GE subjects, subject faculty dialog, deloading. **Current**: Faculty dashboard / My workload, Faculty schedule and Reports when the role is FACULTY, Grades module, public grade lookup (`isCurrentTerm` flag on each public record; opens on it, else on the latest term).
+- (An app-bar badge showing both semesters was tried and removed at the user's request.) The Academic years page has two cards and two table columns.
+- Test: `tests/e2e/semesters.spec.ts`.
+- Labels: the semester select on scheduling pages is labelled "Scheduling Semester" (dashboard, Scheduler, rooms, room sharing, schedules, GE subjects, faculty page, deloading, prioritization); on the faculty dashboard it is "Current Semester"; on Faculty schedule and Reports it depends on the role (FACULTY = Current). The Grades module and the student lookup pick a subject's own term, so their selects stay "Semester" (they open on the Current Semester).

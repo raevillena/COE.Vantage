@@ -12,7 +12,7 @@ export function AboutPage() {
         <div>
           <h3 className="text-sm font-medium text-foreground mb-1">Features</h3>
           <ul className="list-disc list-inside text-foreground-muted space-y-0.5 text-sm">
-            <li>University with many colleges: each college keeps its own people, rooms, curriculum, schedules, current term and semester lock</li>
+            <li>University with many colleges: each college keeps its own people, rooms, curriculum, schedules, Scheduling Semester, Current Semester and semester lock</li>
             <li>Role-based access for the admin, president, university viewers (UNIT), dean, college secretary, chairman, officer and faculty, with a college switcher for those who look across colleges</li>
             <li>Manage rooms, departments, curriculum, subjects (lecture and laboratory units), student classes and GE subjects</li>
             <li>Scheduler for assigning faculty loads, with conflict checks, scheduling rules and automatic scheduling</li>

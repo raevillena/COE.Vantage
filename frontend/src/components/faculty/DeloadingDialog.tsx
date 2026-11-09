@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { yearLabel } from "../../utils/currentTerm";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
@@ -100,12 +101,12 @@ export function DeloadingDialog({ person, years, academicYearId, semester, canEd
               className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
             >
               {years.map((y) => (
-                <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+                <option key={y.id} value={y.id}>{yearLabel(y, "scheduling")}</option>
               ))}
             </select>
           </div>
           <div>
-            <label htmlFor="dl-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+            <label htmlFor="dl-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Scheduling Semester</label>
             <select
               id="dl-sem"
               value={sem}

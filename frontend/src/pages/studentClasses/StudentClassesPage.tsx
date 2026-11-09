@@ -20,7 +20,9 @@ export function StudentClassesPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<{ name: string; yearLevel: number | ""; curriculumId: string; studentCount: number | "" }>({ name: "", yearLevel: 1, curriculumId: "", studentCount: 0 });
+  const [form, setForm] = useState<{ name: string; yearLevel: number | ""; curriculumId: string; specializationId: string; studentCount: number | "" }>({ name: "", yearLevel: 1, curriculumId: "", specializationId: "", studentCount: 0 });
+  // The specializations of the curriculum chosen in the form (none = the curriculum has none).
+  const [specializations, setSpecializations] = useState<{ id: string; name: string }[]>([]);
   const [curricula, setCurricula] = useState<{ id: string; name: string }[]>([]);
   // What the typed name says about the class, to warn when the year level field disagrees.
   const nameParts = parseClassName(form.name);
@@ -49,15 +51,35 @@ export function StudentClassesPage() {
     apiClient.get("/curriculum").then(({ data }) => setCurricula(data));
   }, []);
 
+  useEffect(() => {
+    if (!form.curriculumId) {
+      setSpecializations([]);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get<{ id: string; name: string }[]>(`/curriculum/${form.curriculumId}/specializations`)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSpecializations(data);
+        // a specialization of another curriculum does not carry over
+        setForm((f) => (f.specializationId && !data.some((s) => s.id === f.specializationId) ? { ...f, specializationId: "" } : f));
+      })
+      .catch(() => !cancelled && setSpecializations([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.curriculumId]);
+
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: "", yearLevel: 1, curriculumId: curricula[0]?.id ?? "", studentCount: 0 });
+    setForm({ name: "", yearLevel: 1, curriculumId: curricula[0]?.id ?? "", specializationId: "", studentCount: 0 });
     setModalOpen(true);
   };
 
   const openEdit = (c: StudentClass) => {
     setEditingId(c.id);
-    setForm({ name: c.name, yearLevel: c.yearLevel, curriculumId: c.curriculumId, studentCount: c.studentCount });
+    setForm({ name: c.name, yearLevel: c.yearLevel, curriculumId: c.curriculumId, specializationId: c.specializationId ?? "", studentCount: c.studentCount });
     setModalOpen(true);
   };
 
@@ -85,10 +107,10 @@ export function StudentClassesPage() {
     }
     try {
       if (editingId) {
-        await apiClient.patch(`/student-classes/${editingId}`, { ...form, yearLevel, studentCount, name: nameTrimmed });
+        await apiClient.patch(`/student-classes/${editingId}`, { ...form, specializationId: form.specializationId || null, yearLevel, studentCount, name: nameTrimmed });
         toast.success("Student class updated");
       } else {
-        await apiClient.post("/student-classes", { ...form, yearLevel, studentCount, name: nameTrimmed });
+        await apiClient.post("/student-classes", { ...form, specializationId: form.specializationId || null, yearLevel, studentCount, name: nameTrimmed });
         toast.success("Student class created");
       }
       setModalOpen(false);
@@ -124,6 +146,7 @@ export function StudentClassesPage() {
           String(c.yearLevel).includes(searchLower) ||
           String(c.studentCount).includes(searchLower) ||
           (c.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
+          (c.specialization?.name ?? "").toLowerCase().includes(searchLower) ||
           (c.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
       )
     : list;
@@ -262,7 +285,7 @@ export function StudentClassesPage() {
                   <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.yearLevel}</td>
                   <td className="px-4 py-2 text-foreground-muted">{c.studentCount}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.name ?? "—"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{c.curriculum?.name ?? "—"}{c.specialization ? <span className="ml-2 rounded-full bg-primary-muted px-2 py-0.5 text-xs font-medium text-primary">{c.specialization.name}</span> : null}</td>
                   {!readOnly && (<td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
@@ -338,6 +361,23 @@ export function StudentClassesPage() {
                 </Select.Content>
               </Select.Root>
             </div>
+            {specializations.length > 0 && (
+              <div>
+                <label htmlFor="student-class-specialization" className="mb-1 block text-sm font-medium text-foreground">Specialization</label>
+                <select
+                  id="student-class-specialization"
+                  value={form.specializationId}
+                  onChange={(e) => setForm((f) => ({ ...f, specializationId: e.target.value }))}
+                  className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                >
+                  <option value="">No specialization (takes every subject)</option>
+                  {specializations.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-foreground-muted">A class with a specialization takes the curriculum's common subjects plus the subjects of that specialization.</p>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">Cancel</Button>

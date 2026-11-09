@@ -75,9 +75,14 @@ model College {
   universityId          String
   name                  String
   code                  String?
-  /// The term this college is scheduling now; both null = it has not started. Academic years are shared, each college picks its own.
+  /// The SCHEDULING semester (shown to people as "Scheduling Semester"): the term this college is scheduling now; both null = it has not started.
+  /// Despite the "current" in the column names these are the scheduling term. Academic years are shared, each college picks its own.
   currentAcademicYearId String?
   currentSemester       Int?
+  /// The CURRENT semester (shown as "Current Semester"): the term that is running now, used by faculty-facing pages and grades.
+  /// Both null = not set, and the scheduling term stands in for it.
+  calendarAcademicYearId String?
+  calendarSemester       Int?
   isDeleted             Boolean   @default(false)
   deletedAt             DateTime?
   createdAt             DateTime  @default(now())
@@ -85,6 +90,7 @@ model College {
 
   university          University                   @relation(fields: [universityId], references: [id])
   currentAcademicYear AcademicYear?                @relation("CollegeCurrentYear", fields: [currentAcademicYearId], references: [id], onDelete: SetNull)
+  calendarAcademicYear AcademicYear?               @relation("CollegeCalendarYear", fields: [calendarAcademicYearId], references: [id], onDelete: SetNull)
   users               User[]
   departments         Department[]
   curricula           Curriculum[]
@@ -234,6 +240,7 @@ model AcademicYear {
   geOfferingSets               GeOfferingSet[]
   termLocks                    TermLock[]
   collegesCurrent              College[]                     @relation("CollegeCurrentYear")
+  collegesCalendar             College[]                     @relation("CollegeCalendarYear")
   gradeSubjects                GradeSubject[]
 
   @@index([isDeleted])
@@ -250,13 +257,42 @@ model Curriculum {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  department     Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  subjects       Subject[]
-  studentClasses StudentClass[]
-  college        College?       @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+  department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  subjects        Subject[]
+  studentClasses  StudentClass[]
+  specializations CurriculumSpecialization[]
+  college         College?                 @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([isDeleted])
   @@index([collegeId])
+}
+
+/// A track inside one curriculum (e.g. "Software", "Networks"). A subject with no specialization is common to every
+/// class of the curriculum; a subject tagged with one or more is taken only by classes of those specializations.
+model CurriculumSpecialization {
+  id           String   @id @default(uuid())
+  curriculumId String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  curriculum     Curriculum              @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  subjects       SubjectSpecialization[]
+  studentClasses StudentClass[]
+
+  @@unique([curriculumId, name])
+  @@index([curriculumId])
+}
+
+model SubjectSpecialization {
+  subjectId        String
+  specializationId String
+
+  subject        Subject                  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  specialization CurriculumSpecialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([subjectId, specializationId])
+  @@index([specializationId])
 }
 
 model Subject {
@@ -284,6 +320,7 @@ model Subject {
   subjectRooms                SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
   college                     College?                     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+  specializations             SubjectSpecialization[]
 
   @@unique([curriculumId, code])
   @@index([isDeleted])
@@ -296,6 +333,8 @@ model StudentClass {
   name         String // e.g. BSCE-3A
   yearLevel    Int
   curriculumId String
+  /// The curriculum specialization this class follows (null = none / the curriculum has none). Not used by the screens yet.
+  specializationId String?
   studentCount Int
   isDeleted    Boolean   @default(false)
   deletedAt    DateTime?
@@ -303,12 +342,14 @@ model StudentClass {
   updatedAt    DateTime  @updatedAt
 
   curriculum                   Curriculum                    @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  specialization               CurriculumSpecialization?     @relation(fields: [specializationId], references: [id], onDelete: SetNull)
   facultyLoads                 FacultyLoad[]
   crossDepartmentLoadRequests  CrossDepartmentLoadRequest[]
   schedulingRuleSetAssignments SchedulingRuleSetAssignment[]
   college                      College?                      @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([curriculumId])
+  @@index([specializationId])
   @@index([isDeleted])
   @@index([collegeId])
 }

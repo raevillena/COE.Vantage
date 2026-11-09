@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
 import type { AcademicYear, College } from "../../types/api";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { useAppSelector } from "../../store/hooks";
 import { Button } from "../../components/ui/button";
 import { HelpTip } from "../../components/ui/helpTip";
@@ -86,7 +86,7 @@ export function GeSubjectsPage() {
       .get<AcademicYear[]>("/academic-years")
       .then(({ data: ys }) => {
         setYears(ys);
-        const term = currentTerm(ys);
+        const term = schedulingTerm(ys);
         if (term) {
           setYearId(term.academicYearId);
           setSemester(term.semester === 2 ? 2 : 1);
@@ -227,12 +227,12 @@ export function GeSubjectsPage() {
           <label htmlFor="ge-year" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
           <select id="ge-year" value={yearId} onChange={(e) => setYearId(e.target.value)} className={fieldClass}>
             {years.map((y) => (
-              <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+              <option key={y.id} value={y.id}>{yearLabel(y, "scheduling")}</option>
             ))}
           </select>
         </div>
         <div>
-          <label htmlFor="ge-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+          <label htmlFor="ge-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Scheduling Semester</label>
           <select id="ge-sem" value={semester} onChange={(e) => setSemester(Number(e.target.value))} className={fieldClass}>
             {SEMESTERS.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>

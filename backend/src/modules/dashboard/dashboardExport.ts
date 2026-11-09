@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { z } from "zod";
 import { badRequest } from "../../utils/errors.js";
 import { analyticsQuerySchema, getDashboardAnalytics, type AnalyticsQuery } from "./dashboardAnalytics.js";
-import { getDashboardSummary, type DashboardCaller } from "./dashboardService.js";
+import { getDashboardSummary, scopeLabel, type DashboardCaller } from "./dashboardService.js";
 
 const METRICS = ["faculty-workload", "room-utilization", "curriculum-completion", "scheduling-gaps", "projection", "conflicts"] as const;
 type Metric = (typeof METRICS)[number];
@@ -274,7 +274,7 @@ export async function buildDashboardExport(caller: DashboardCaller, query: Expor
   const loaded = new Map<Metric, Awaited<ReturnType<typeof loadRows>>>();
   for (const m of metrics) loaded.set(m, await loadRows(caller, m, query));
   const ctx = loaded.get(metrics[0])!.context;
-  const scope = caller.role === "CHAIRMAN" ? "Your department" : "College of Engineering";
+  const scope = await scopeLabel(caller);
   const caption = sheetCaption({ academicYear: ctx.academicYear.name, semester: ctx.semester, scope });
   const base = `${ctx.academicYear.name}-S${ctx.semester}`.replace(/[^\w.-]+/g, "_");
 

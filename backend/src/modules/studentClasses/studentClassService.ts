@@ -17,6 +17,16 @@ const curriculumInclude = {
   },
 } as const;
 
+/** Includes the specialization's name in every class response. */
+const specializationInclude = { select: { id: true, name: true } } as const;
+
+/** A class's specialization must be one of its own curriculum's; null / undefined means none. */
+async function assertSpecializationOf(specializationId: string | null | undefined, curriculumId: string) {
+  if (!specializationId) return;
+  const spec = await prisma.curriculumSpecialization.findUnique({ where: { id: specializationId }, select: { curriculumId: true } });
+  if (!spec || spec.curriculumId !== curriculumId) throw badRequest("That specialization does not belong to the class's curriculum");
+}
+
 export async function listStudentClasses(
   caller?: StudentClassCaller,
   opts?: { departmentId?: string }
@@ -33,7 +43,7 @@ export async function listStudentClasses(
   }
   return prisma.studentClass.findMany({
     where,
-    include: { curriculum: curriculumInclude },
+    include: { curriculum: curriculumInclude, specialization: specializationInclude },
     orderBy: [{ yearLevel: "asc" }, { name: "asc" }],
   });
 }
@@ -41,7 +51,7 @@ export async function listStudentClasses(
 export async function getStudentClassById(id: string, caller?: StudentClassCaller) {
   const c = await prisma.studentClass.findUnique({
     where: { id },
-    include: { curriculum: { select: { id: true, name: true, code: true, departmentId: true, department: { select: { id: true, name: true, code: true } } } } },
+    include: { curriculum: { select: { id: true, name: true, code: true, departmentId: true, department: { select: { id: true, name: true, code: true } } } }, specialization: specializationInclude },
   });
   if (!c || c.isDeleted) throw notFound("Student class not found");
   if (caller?.role === "CHAIRMAN" && caller.departmentId != null && c.curriculum.departmentId !== caller.departmentId) {
@@ -57,9 +67,10 @@ export async function createStudentClass(body: CreateStudentClassBody, caller?: 
   if (caller?.role === "CHAIRMAN" && caller.departmentId != null && curr.departmentId !== caller.departmentId) {
     throw forbidden("You can only create student classes for curricula in your department.");
   }
+  await assertSpecializationOf(body.specializationId, body.curriculumId);
   return prisma.studentClass.create({
     data: body,
-    include: { curriculum: curriculumInclude },
+    include: { curriculum: curriculumInclude, specialization: specializationInclude },
   });
 }
 
@@ -80,10 +91,15 @@ export async function updateStudentClass(id: string, body: UpdateStudentClassBod
       throw forbidden("You can only assign a student class to curricula in your department.");
     }
   }
+  // The specialization belongs to a curriculum: moving the class to another curriculum clears it unless a new one is named.
+  const data: UpdateStudentClassBody = { ...body };
+  const movedCurriculum = body.curriculumId !== undefined && body.curriculumId !== c.curriculumId;
+  if (body.specializationId !== undefined) await assertSpecializationOf(body.specializationId, body.curriculumId ?? c.curriculumId);
+  else if (movedCurriculum) data.specializationId = null;
   return prisma.studentClass.update({
     where: { id },
-    data: body,
-    include: { curriculum: curriculumInclude },
+    data,
+    include: { curriculum: curriculumInclude, specialization: specializationInclude },
   });
 }
 
@@ -110,7 +126,7 @@ export async function listTrashStudentClasses(caller?: StudentClassCaller) {
   }
   return prisma.studentClass.findMany({
     where,
-    include: { curriculum: curriculumInclude },
+    include: { curriculum: curriculumInclude, specialization: specializationInclude },
     orderBy: { deletedAt: "desc" },
   });
 }

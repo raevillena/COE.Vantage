@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, Subject } from "../../types/api";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import {
   PrioritizedFacultyModal,
   type FacultyWithDepartment,
@@ -65,7 +65,7 @@ export function SubjectFacultyDialog({ subject, defaultTerm, onClose }: SubjectF
         if (cancelled) return;
         setAcademicYears(years);
       }
-      const current = currentTerm(years);
+      const current = schedulingTerm(years);
       if (!defaultTerm && !current) {
         toast.error("No academic year available");
         onClose();
@@ -125,12 +125,12 @@ export function SubjectFacultyDialog({ subject, defaultTerm, onClose }: SubjectF
                 className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
               >
                 {academicYears.map((y) => (
-                  <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+                  <option key={y.id} value={y.id}>{yearLabel(y, "scheduling")}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label htmlFor="pf-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+              <label htmlFor="pf-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Scheduling Semester</label>
               <select
                 id="pf-sem"
                 value={term.semester}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { ClipboardList, Mail, MoreVertical, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
 import type { UserListItem } from "../../types/api";
@@ -196,7 +196,7 @@ export function UsersPage() {
     try {
       const { data: years } = await apiClient.get<{ id: string; name: string; isActive: boolean; currentSemester?: number }[]>("/academic-years");
       setPrioritizationYears(years);
-      const term = currentTerm(years);
+      const term = schedulingTerm(years);
       if (!term) {
         setPrioritizationTerm(null);
         setPrioritizationLoading(false);
@@ -657,7 +657,7 @@ export function UsersPage() {
           person={{ id: deloadTarget.id, name: deloadTarget.name, maxUnits: deloadTarget.maxUnits }}
           years={deloadYears}
           academicYearId={(deloadYears.find((y) => y.isActive) ?? deloadYears[0]).id}
-          semester={currentTerm(deloadYears)?.semester ?? 1}
+          semester={schedulingTerm(deloadYears)?.semester ?? 1}
           canEdit
           onClose={() => setDeloadTarget(null)}
         />
@@ -701,12 +701,12 @@ export function UsersPage() {
                     className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
                   >
                     {prioritizationYears.map((y) => (
-                      <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
+                      <option key={y.id} value={y.id}>{yearLabel(y, "scheduling")}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="up-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+                  <label htmlFor="up-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Scheduling Semester</label>
                   <select
                     id="up-sem"
                     value={prioritizationTerm.semester}

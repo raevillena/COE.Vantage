@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma/client.js";
+import { classTakesSubject } from "../../utils/specializationSubjects.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
 import { requiredMinutesForSubject, timeToMinutes } from "../facultyLoads/facultyLoadService.js";
 
@@ -33,7 +34,7 @@ export interface ProgressClass {
 export async function loadCurriculumProgress(scopeDeptId: string | null, academicYearId: string, semester: number) {
   const classes = await prisma.studentClass.findMany({
     where: { isDeleted: false, ...(scopeDeptId ? { curriculum: { departmentId: scopeDeptId } } : {}) },
-    select: { id: true, name: true, yearLevel: true, curriculumId: true, curriculum: { select: { name: true } } },
+    select: { id: true, name: true, yearLevel: true, curriculumId: true, specializationId: true, curriculum: { select: { name: true } } },
     orderBy: [{ name: "asc" }],
   });
   const classIds = classes.map((c) => c.id);
@@ -43,7 +44,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
     curriculumIds.length
       ? prisma.subject.findMany({
           where: { isDeleted: false, curriculumId: { in: curriculumIds }, OR: [{ semester: null }, { semester }] },
-          select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, curriculumId: true },
+          select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, curriculumId: true, specializations: { select: { specializationId: true } } },
         })
       : [],
     classIds.length
@@ -71,6 +72,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
   for (const cls of classes) {
     for (const s of subjects) {
       if (s.curriculumId !== cls.curriculumId || s.yearLevel !== cls.yearLevel) continue;
+      if (!classTakesSubject(cls.specializationId, s)) continue; // a subject of another specialization is not this class's
       const required = requiredMinutesForSubject(s);
       if (required <= 0) continue;
       entries.push({

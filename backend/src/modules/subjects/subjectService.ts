@@ -18,7 +18,7 @@ export async function listSubjects(caller?: SubjectListCaller) {
       { curriculumId: null, departmentId: caller.departmentId },
     ];
   }
-  return prisma.subject.findMany({
+  const rows = await prisma.subject.findMany({
     where,
     include: {
       curriculum: {
@@ -31,18 +31,35 @@ export async function listSubjects(caller?: SubjectListCaller) {
       },
       department: { select: { id: true, name: true, code: true } },
       subjectRooms: { select: { roomId: true, room: { select: { name: true } } } },
+      specializations: { select: { specializationId: true } },
     },
     orderBy: { code: "asc" },
   });
+  // `specializationIds` empty = common to every class of the curriculum
+  return rows.map(({ specializations, ...s }) => ({ ...s, specializationIds: specializations.map((row) => row.specializationId) }));
 }
 
-/** List subjects for a curriculum (for curriculum viewer). */
-export async function listSubjectsByCurriculumId(curriculumId: string) {
-  return prisma.subject.findMany({
-    where: { curriculumId, isDeleted: false },
+/** A subject's specializations as a flat list; empty = common to every specialization of its curriculum. */
+const SPECIALIZATIONS_SELECT = { specializations: { select: { specialization: { select: { id: true, name: true } } } } } as const;
+export function flattenSpecializations<T extends { specializations: { specialization: { id: string; name: string } }[] }>(subject: T) {
+  return { ...subject, specializations: subject.specializations.map((row) => row.specialization).sort((a, b) => a.name.localeCompare(b.name)) };
+}
+
+/**
+ * List subjects for a curriculum (for curriculum viewer). With `specializationId` only the subjects a class of that
+ * specialization takes: the common ones plus those tagged with it.
+ */
+export async function listSubjectsByCurriculumId(curriculumId: string, specializationId?: string) {
+  const rows = await prisma.subject.findMany({
+    where: {
+      curriculumId,
+      isDeleted: false,
+      ...(specializationId ? { OR: [{ specializations: { none: {} } }, { specializations: { some: { specializationId } } }] } : {}),
+    },
     orderBy: [{ yearLevel: "asc" }, { semester: "asc" }, { code: "asc" }],
-    select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, semester: true },
+    select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true, yearLevel: true, semester: true, ...SPECIALIZATIONS_SELECT },
   });
+  return rows.map(flattenSpecializations);
 }
 
 export async function getSubjectById(id: string) {
@@ -115,6 +132,10 @@ export async function updateSubject(id: string, body: UpdateSubjectBody) {
     if (existing) throw conflict("A subject with this code already exists in this curriculum.");
   }
   const unitFields = resolveSubjectUnits(body, s);
+  // Tags belong to the curriculum they were made in: moving the subject elsewhere drops them.
+  if (body.curriculumId !== undefined && body.curriculumId !== s.curriculumId) {
+    await prisma.subjectSpecialization.deleteMany({ where: { subjectId: id } });
+  }
   return prisma.subject.update({
     where: { id },
     data: {

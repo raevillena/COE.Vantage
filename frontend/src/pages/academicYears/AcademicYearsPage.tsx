@@ -17,7 +17,7 @@ const SEMESTER_LABEL: Record<number, string> = { 1: "1st Sem", 2: "2nd Sem", 3: 
 
 export function AcademicYearsPage() {
   const role = useAppSelector((s) => s.auth.user?.role);
-  // The college secretary adds and edits academic years and sets the current term; only the admin moves them to the trash.
+  // The college secretary adds and edits academic years and sets the Scheduling and Current Semester; only the admin moves them to the trash.
   const isAdmin = role === "ADMIN";
   const canManage = isAdmin || role === "COLLEGE_SECRETARY";
   // The dean can lock and unlock semesters too, but changes nothing else here.
@@ -37,6 +37,9 @@ export function AcademicYearsPage() {
   const [termYearId, setTermYearId] = useState("");
   const [termSemester, setTermSemester] = useState(1);
   const [termSaving, setTermSaving] = useState(false);
+  const [calYearId, setCalYearId] = useState("");
+  const [calSemester, setCalSemester] = useState(1);
+  const [calSaving, setCalSaving] = useState(false);
   const [list, setList] = useState<AcademicYear[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -119,21 +122,26 @@ export function AcademicYearsPage() {
     }
   };
 
-  const saveCurrentTerm = async () => {
-    setTermSaving(true);
+  /** Saves one of the two terms: the Scheduling Semester or the Current Semester. */
+  const saveTerm = async (kind: "scheduling" | "current") => {
+    const yearId = kind === "current" ? calYearId : termYearId;
+    const semester = kind === "current" ? calSemester : termSemester;
+    const label = kind === "current" ? "Current Semester" : "Scheduling Semester";
+    (kind === "current" ? setCalSaving : setTermSaving)(true);
     try {
       await apiClient.put("/academic-years/current-term", {
-        academicYearId: termYearId || null,
-        ...(termYearId ? { semester: termSemester } : {}),
+        kind,
+        academicYearId: yearId || null,
+        ...(yearId ? { semester } : {}),
         ...(role === "ADMIN" && lockCollegeId ? { collegeId: lockCollegeId } : {}),
       });
-      toast.success(termYearId ? "Current term saved" : "Marked as not started");
+      toast.success(yearId ? `${label} saved` : kind === "current" ? "Current Semester cleared" : "Marked as not started");
       await load();
       if (spansColleges) setColleges((await apiClient.get<College[]>("/colleges")).data);
     } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not save the current term");
+      toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? `Could not save the ${label}`);
     } finally {
-      setTermSaving(false);
+      (kind === "current" ? setCalSaving : setTermSaving)(false);
     }
   };
 
@@ -146,10 +154,23 @@ export function AcademicYearsPage() {
   const isCurrentRow = (y: AcademicYear) => (spansColleges && lockCollegeId ? y.id === currentYearId : y.isActive);
   const currentSemOf = (y: AcademicYear) => (spansColleges && lockCollegeId ? currentSem : y.currentSemester ?? 1);
 
+  // The Current Semester: what is running now. Until one is set the Scheduling Semester stands in for it.
+  const calendarSet = spansColleges ? Boolean(shownCollege?.calendarAcademicYearId) : true;
+  const calYearNow = spansColleges ? shownCollege?.calendarAcademicYearId ?? currentYearId : list.find((y) => y.isCalendar)?.id ?? "";
+  const calSemNow = spansColleges ? (shownCollege?.calendarAcademicYearId ? shownCollege.calendarSemester ?? 1 : currentSem) : list.find((y) => y.isCalendar)?.calendarSemester ?? 1;
+  const calYear = list.find((y) => y.id === calYearNow);
+  const calChanged = calYearId !== calYearNow || (!!calYearId && calSemester !== calSemNow);
+  const isCalendarRow = (y: AcademicYear) => (spansColleges && lockCollegeId ? y.id === calYearNow : Boolean(y.isCalendar));
+  const calendarSemOf = (y: AcademicYear) => (spansColleges && lockCollegeId ? calSemNow : y.calendarSemester ?? 1);
+
   useEffect(() => {
     setTermYearId(currentYearId);
     setTermSemester(currentSem);
   }, [currentYearId, currentSem]);
+  useEffect(() => {
+    setCalYearId(calYearNow);
+    setCalSemester(calSemNow);
+  }, [calYearNow, calSemNow]);
 
   const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
 
@@ -232,56 +253,75 @@ export function AcademicYearsPage() {
 
       {needsCollege && (
         <p role="status" className="mb-4 rounded border border-border bg-surface px-4 py-3 text-sm text-foreground-muted">
-          Choose a college in the sidebar to see or change its current term and semester locks.
+          Choose a college in the sidebar to see or change its Scheduling Semester, Current Semester and semester locks.
         </p>
       )}
 
       {list.length > 0 && !needsCollege && (
-        <section className="mb-5 rounded border border-border bg-surface p-4" aria-label="Current term">
-          <div className="flex items-center gap-1.5">
-            <h2 className="text-sm font-semibold text-foreground">Current term</h2>
-            <HelpTip>
-              The academic year and semester this college is scheduling now. Filters such as the dashboard, schedules, scheduler, rooms and reports open on it, and people can still pick another term. Each college sets its own, and can leave it as not started. Academic years themselves are shared.
-            </HelpTip>
-          </div>
-          <p className="mt-1 text-sm text-foreground-muted">
-            {shownCollege ? `${shownCollege.name}: ` : ""}{activeYear ? `${activeYear.name}, ${SEMESTER_LABEL[currentSem]}` : "Not started: no current term."}
-          </p>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div>
-              <label htmlFor="term-year" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
-              <select
-                id="term-year"
-                value={termYearId}
-                onChange={(e) => setTermYearId(e.target.value)}
-                disabled={termSaving}
-                className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-              >
-                <option value="">Not started</option>
-                {list.map((y) => (
-                  <option key={y.id} value={y.id}>{y.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="term-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
-              <select
-                id="term-sem"
-                value={termSemester}
-                onChange={(e) => setTermSemester(Number(e.target.value))}
-                disabled={termSaving || !termYearId}
-                className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-              >
-                {[1, 2, 3].map((n) => (
-                  <option key={n} value={n}>{SEMESTER_LABEL[n]}</option>
-                ))}
-              </select>
-            </div>
-            <Button type="button" onClick={saveCurrentTerm} disabled={termSaving || !termChanged}>
-              {termSaving ? "Saving…" : termYearId ? "Set as current term" : "Mark as not started"}
-            </Button>
-          </div>
-        </section>
+        <div className="mb-5 grid gap-4 lg:grid-cols-2">
+          {([
+            {
+              kind: "scheduling" as const,
+              title: "Scheduling Semester",
+              help: "The academic year and semester this college is scheduling now. The Scheduler, room and schedule pages, reports and the dashboard open on it, and people can still pick another term. Each college sets its own, and can leave it as not started.",
+              summary: activeYear ? `${activeYear.name}, ${SEMESTER_LABEL[currentSem]}` : "Not started: no Scheduling Semester.",
+              yearId: termYearId, setYearId: setTermYearId, semester: termSemester, setSemester: setTermSemester, saving: termSaving, changed: termChanged,
+              button: termYearId ? "Set as Scheduling Semester" : "Mark as not started", idp: "term",
+            },
+            {
+              kind: "current" as const,
+              title: "Current Semester",
+              help: "The semester that is running now, which can differ from the one being scheduled. Faculty pages (My schedule, My workload, My dashboard) and the Grades module open on it. Until it is set, it follows the Scheduling Semester.",
+              summary: calYear ? `${calYear.name}, ${SEMESTER_LABEL[calSemNow]}${calendarSet ? "" : " (follows the Scheduling Semester)"}` : "Not set.",
+              yearId: calYearId, setYearId: setCalYearId, semester: calSemester, setSemester: setCalSemester, saving: calSaving, changed: calChanged,
+              button: calYearId ? "Set as Current Semester" : "Clear (follow Scheduling)", idp: "cal",
+            },
+          ]).map((t) => (
+            <section key={t.kind} className="rounded border border-border bg-surface p-4" aria-label={t.title}>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-semibold text-foreground">{t.title}</h2>
+                <HelpTip>{t.help}</HelpTip>
+              </div>
+              <p className="mt-1 text-sm text-foreground-muted">
+                {shownCollege ? `${shownCollege.name}: ` : ""}{t.summary}
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label htmlFor={`${t.idp}-year`} className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
+                  <select
+                    id={`${t.idp}-year`}
+                    value={t.yearId}
+                    onChange={(e) => t.setYearId(e.target.value)}
+                    disabled={t.saving}
+                    className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  >
+                    <option value="">{t.kind === "current" ? "Follow the Scheduling Semester" : "Not started"}</option>
+                    {list.map((y) => (
+                      <option key={y.id} value={y.id}>{y.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor={`${t.idp}-sem`} className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+                  <select
+                    id={`${t.idp}-sem`}
+                    value={t.semester}
+                    onChange={(e) => t.setSemester(Number(e.target.value))}
+                    disabled={t.saving || !t.yearId}
+                    className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+                  >
+                    {[1, 2, 3].map((n) => (
+                      <option key={n} value={n}>{SEMESTER_LABEL[n]}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button type="button" onClick={() => void saveTerm(t.kind)} disabled={t.saving || !t.changed}>
+                  {t.saving ? "Saving…" : t.button}
+                </Button>
+              </div>
+            </section>
+          ))}
+        </div>
       )}
 
 
@@ -346,7 +386,8 @@ export function AcademicYearsPage() {
                   </th>
                 )}
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Current term</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Scheduling Semester</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Current Semester</th>
                 {showLocks && (
                   <th className="px-4 py-2 text-left text-sm font-medium text-foreground">
                     <span className="inline-flex items-center gap-1.5">
@@ -374,6 +415,7 @@ export function AcademicYearsPage() {
                   )}
                   <td className="px-4 py-2 text-foreground">{y.name}</td>
                   <td className="px-4 py-2 text-foreground-muted">{isCurrentRow(y) ? `Yes, ${SEMESTER_LABEL[currentSemOf(y)]}` : "No"}</td>
+                  <td className="px-4 py-2 text-foreground-muted">{isCalendarRow(y) ? `Yes, ${SEMESTER_LABEL[calendarSemOf(y)]}` : "No"}</td>
                   {showLocks && (
                     <td className="px-4 py-2">
                       <div className="flex flex-wrap gap-1.5">
@@ -439,7 +481,7 @@ export function AcademicYearsPage() {
         <Dialog.Content title={editingId ? "Edit Academic Year" : "Add Academic Year"}>
           <form onSubmit={handleSubmit} className="mt-4 space-y-3">
             <input placeholder="Name (e.g. 2025-2026)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <p className="text-xs text-foreground-muted">Academic years are shared by every college, so each name exists once. Each college chooses its own current term.</p>
+            <p className="text-xs text-foreground-muted">Academic years are shared by every college, so each name exists once. Each college chooses its own Scheduling Semester and Current Semester.</p>
             <div className="flex justify-end gap-2 pt-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">Cancel</Button>

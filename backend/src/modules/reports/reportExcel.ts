@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "../../prisma/client.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
+import { currentCollegeName } from "../../utils/collegeLabel.js";
 import { effectiveMaxUnits, loadDeloadings } from "../../utils/deloading.js";
 
 /** Institutional form header used by the registrar's workload and class schedule sheets. */
@@ -11,7 +12,6 @@ const FORM_HEADER = {
   documentCode: "URO-FRM-012B",
   revisionNo: "0",
   effectivity: "September 2019",
-  college: "College of Engineering",
 };
 
 export interface ExcelCaller {
@@ -83,7 +83,7 @@ const GREY_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { 
 const YELLOW_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
 
 /** Writes the registrar form header (rows 1-6) and returns the first free row. */
-function addFormHeader(sheet: ExcelJS.Worksheet, lastCol: number, academicYearName: string, semester: number): number {
+function addFormHeader(sheet: ExcelJS.Worksheet, lastCol: number, academicYearName: string, semester: number, collegeName: string): number {
   const metaCol = Math.max(lastCol - 2, 3);
   for (let row = 1; row <= 3; row++) sheet.mergeCells(row, 1, row, metaCol - 1);
   sheet.getCell(1, 1).value = FORM_HEADER.university;
@@ -103,7 +103,7 @@ function addFormHeader(sheet: ExcelJS.Worksheet, lastCol: number, academicYearNa
     sheet.getCell(i + 1, metaCol + 1).font = { size: 9 };
   });
   sheet.getCell(5, 1).value = "College:";
-  sheet.getCell(5, 2).value = FORM_HEADER.college;
+  sheet.getCell(5, 2).value = collegeName;
   sheet.getCell(6, 1).value = "Semester:";
   sheet.getCell(6, 2).value = semesterLabel(semester, academicYearName);
   sheet.getCell(5, 1).font = { bold: true };
@@ -184,7 +184,7 @@ export async function buildClassSchedulesWorkbook(
   const widths = [14, 44, 8, 26, 12, 24, 36];
   widths.forEach((w, i) => (sheet.getColumn(i + 1).width = w));
   const LAST = widths.length;
-  let r = addFormHeader(sheet, LAST, data.academicYearName, semester);
+  let r = addFormHeader(sheet, LAST, data.academicYearName, semester, await currentCollegeName());
   const firstBlockRow = r;
 
   const classes = [...data.classes].sort((a, b) => a.yearLevel - b.yearLevel || a.name.localeCompare(b.name));
@@ -335,7 +335,7 @@ export async function buildFacultyWorkloadWorkbook(
   const widths = [32, 14, 40, 16, 9, 22, 10, 18, 9, 10, 10, 10, 10, 40];
   widths.forEach((w, i) => (sheet.getColumn(i + 1).width = w));
   const LAST = widths.length;
-  addFormHeader(sheet, LAST, data.academicYearName, semester);
+  addFormHeader(sheet, LAST, data.academicYearName, semester, await currentCollegeName());
   const headerRow = 7;
   let r = headerRow;
   WORKLOAD_HEADERS.forEach((h, i) => {

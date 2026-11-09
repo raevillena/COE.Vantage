@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma/client.js";
+import { currentCollegeName } from "../../utils/collegeLabel.js";
 import { badRequest } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { simulateProjection } from "./dashboardProjection.js";
@@ -29,8 +30,8 @@ export type DashboardAlert = {
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-function scopeLabel(caller: DashboardCaller) {
-  return caller.role === "CHAIRMAN" ? "Your department" : "College of Engineering";
+export async function scopeLabel(caller: DashboardCaller): Promise<string> {
+  return caller.role === "CHAIRMAN" ? "Your department" : currentCollegeName();
 }
 
 /**
@@ -46,7 +47,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
   const academicYear = academicYearId
     ? await prisma.academicYear.findFirst({ where: { id: academicYearId, isDeleted: false } })
     : await getActiveAcademicYear();
-  if (!academicYear) return { empty: true as const, context: { academicYear: null, semester, scope: scopeLabel(caller) } };
+  if (!academicYear) return { empty: true as const, context: { academicYear: null, semester, scope: await scopeLabel(caller) } };
   const ayId = academicYear.id;
 
   const [progress, workload, conflictList, roomRows, simulation, pendingRequests] = await Promise.all([
@@ -204,7 +205,7 @@ export async function getDashboardSummary(caller: DashboardCaller, academicYearI
     context: {
       academicYear: { id: academicYear.id, name: academicYear.name },
       semester,
-      scope: scopeLabel(caller),
+      scope: await scopeLabel(caller),
       roomWindow: "Mon-Sat, 7:00 AM-7:00 PM",
     },
     kpis: {

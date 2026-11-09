@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { currentTerm } from "../../utils/currentTerm";
+import { calendarTerm, yearLabel } from "../../utils/currentTerm";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, FacultyLoad } from "../../types/api";
@@ -24,7 +24,7 @@ export function FacultyDashboard() {
       .get<AcademicYear[]>("/academic-years/for-schedules")
       .then(({ data }) => {
         setYears(data);
-        const term = currentTerm(data);
+        const term = calendarTerm(data);
         if (term) {
           setAcademicYearId(term.academicYearId);
           setSemester(term.semester);
@@ -60,7 +60,7 @@ export function FacultyDashboard() {
           <div className="min-w-[180px]">
             <label className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
             <SearchableSelect
-              options={years.map((y) => ({ value: y.id, label: y.isActive ? `${y.name} (current)` : y.name }))}
+              options={years.map((y) => ({ value: y.id, label: yearLabel(y, "current") }))}
               value={academicYearId || "__none__"}
               onValueChange={(v) => setAcademicYearId(v === "__none__" ? "" : v)}
               noneOption={{ value: "__none__", label: "Academic year" }}
@@ -69,9 +69,9 @@ export function FacultyDashboard() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
+            <label className="mb-1 block text-xs font-medium text-foreground-muted">Current Semester</label>
             <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-              <Select.Trigger aria-label="Semester" className="w-[120px]">
+              <Select.Trigger aria-label="Current Semester" className="w-[120px]">
                 <Select.Value />
               </Select.Trigger>
               <Select.Content>

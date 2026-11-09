@@ -34,6 +34,14 @@ export const applyImportSchema = z.object({
   }),
 });
 
+export const specializationSchema = z.object({
+  body: z.object({ name: z.string().trim().min(1, "Name the specialization").max(120) }),
+});
+
+export const setSubjectSpecializationsSchema = z.object({
+  body: z.object({ specializationIds: z.array(z.string().uuid()).max(50) }),
+});
+
 export type CreateCurriculumBody = z.infer<typeof createCurriculumSchema>["body"];
 export type UpdateCurriculumBody = z.infer<typeof updateCurriculumSchema>["body"];
 export type ApplyImportBody = z.infer<typeof applyImportSchema>["body"];

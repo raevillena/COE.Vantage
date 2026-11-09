@@ -83,7 +83,8 @@ export async function getCurriculumSubjects(req: Request, res: Response): Promis
   if (req.user?.role === "CHAIRMAN" && c.departmentId !== req.user.departmentId) {
     throw forbidden("You can only view curricula for your own department.");
   }
-  const subjects = await subjectService.listSubjectsByCurriculumId(req.params.id);
+  const specializationId = typeof req.query.specializationId === "string" && req.query.specializationId ? req.query.specializationId : undefined;
+  const subjects = await subjectService.listSubjectsByCurriculumId(req.params.id, specializationId);
   res.json(subjects);
 }
 
@@ -91,4 +92,32 @@ export async function getCurriculumSubjects(req: Request, res: Response): Promis
 export async function clearCurriculum(req: Request, res: Response): Promise<void> {
   await curriculumService.clearCurriculum(req.params.id, caller(req));
   res.status(204).send();
+}
+
+export async function listSpecializations(req: Request, res: Response): Promise<void> {
+  res.json(await curriculumService.listSpecializations(req.params.id, caller(req)));
+}
+
+export async function createSpecialization(req: Request, res: Response): Promise<void> {
+  const spec = await curriculumService.createSpecialization(req.params.id, req.body as { name: string }, caller(req));
+  await audit({ entityType: "CURRICULUM", entityId: req.params.id, entityLabel: spec.name, action: "UPDATE", summary: `Added the specialization ${spec.name} to a curriculum` });
+  res.status(201).json(spec);
+}
+
+export async function updateSpecialization(req: Request, res: Response): Promise<void> {
+  const spec = await curriculumService.updateSpecialization(req.params.specId, req.body as { name: string }, caller(req));
+  await audit({ entityType: "CURRICULUM", entityId: spec.curriculumId, entityLabel: spec.name, action: "UPDATE", summary: `Renamed a curriculum specialization to ${spec.name}` });
+  res.json(spec);
+}
+
+export async function deleteSpecialization(req: Request, res: Response): Promise<void> {
+  const spec = await curriculumService.deleteSpecialization(req.params.specId, caller(req));
+  await audit({ entityType: "CURRICULUM", entityId: spec.curriculumId, entityLabel: spec.name, action: "UPDATE", summary: `Removed the specialization ${spec.name} from a curriculum` });
+  res.status(204).send();
+}
+
+export async function setSubjectSpecializations(req: Request, res: Response): Promise<void> {
+  const result = await curriculumService.setSubjectSpecializations(req.params.id, req.params.subjectId, (req.body as { specializationIds: string[] }).specializationIds, caller(req));
+  await audit({ entityType: "CURRICULUM", entityId: req.params.id, action: "UPDATE", summary: `Changed which specializations a curriculum subject belongs to (${result.specializationIds.length === 0 ? "common to all" : `${result.specializationIds.length} specialization(s)`})` });
+  res.json(result);
 }

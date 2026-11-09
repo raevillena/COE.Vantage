@@ -15,18 +15,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.8.1",
+    date: "2026-11-09",
+    title: "Current and Scheduling Semester, and curriculum specializations",
+    changes: [
+      { kind: "new", text: "The system now tells two semesters apart: the Scheduling Semester (what a college is scheduling, used by the Scheduler, schedules, rooms, reports and the dashboard) and the Current Semester (what is running now, used by faculty pages such as My schedule and My workload). Both are set per college on the Academic years page, and until a Current Semester is set it follows the Scheduling Semester. Semester selectors now say which one they are." },
+      { kind: "new", text: "Curricula can have specializations: subjects are common to all, unique to one specialization, or shared by some of them. They are set up on the Curriculum page and in the curriculum build page, where subjects dragged in while working on a specialization are made for it. A student class can follow a specialization and then takes the common subjects plus its own in the Scheduler, auto-schedule, room requests, GE import and the dashboard progress." },
+      { kind: "improved", text: "The dashboard, its exports and the registrar workload forms show the name of the college being viewed instead of always saying College of Engineering." },
+    ],
+  },
+  {
     version: "v0.8.0",
     date: "2026-11-09",
-    title: "Grades module upgrades, MMSU Grade Push extension and per-user experimental access",
+    title: "Scheduler improvements and clearer sign-in errors",
     changes: [
-      { kind: "new", text: "MMSU Grade Push (experimental): a Chrome/Edge extension that fills the MMSU portal gradesheet from a table you paste and then checks the portal matches your sheet. It only works for people signed in to Vantage in the same browser whom an administrator has allowed to use it, and it carries the Vantage logo. Setup steps with pictures are on its own page." },
-      { kind: "new", text: "Grade subjects have an academic year and semester. The Grades page and the student grade lookup can be filtered by year and semester, and the lookup opens on the latest semester." },
-      { kind: "new", text: "The student grade lookup shows each item's maximum score and lists the items a student has no score for as Missing." },
-      { kind: "new", text: "A grade with any blank formula item is now INC (incomplete) instead of a number. Enter 0 for an item to count it as zero." },
-      { kind: "improved", text: "Grade tables keep every column that has a maximum score, wrap long headers instead of widening, have a scrollbar above the table, a pinned header and full student names." },
-      { kind: "improved", text: "Grade import finds the header row even with title rows above it, and the grade items in a formula are picked from the columns instead of typed." },
-      { kind: "improved", text: "The default grade table follows the MMSU portal: 4.00 is Conditional, 5.00 is Failed, and the default passing percent is 50." },
-      { kind: "new", text: "Administrators choose per user which experimental features they may use (Users page, row menu, Experimental access). The Users page also filters by college, department, role, status and maximum units." },
       { kind: "improved", text: "The scheduler no longer blocks assigning a faculty beyond their maximum units: overload is allowed and still shows in red on the dashboard. Auto-assign still avoids it." },
       { kind: "improved", text: "The scheduler's subject list has a menu to edit a subject's details, possible rooms and possible faculty, and the class form warns when the year level does not match the class name." },
       { kind: "improved", text: "Sign-in errors say what to do, and autofilled credentials are no longer rejected as an empty password." },
@@ -51,7 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "v0.7.4",
     date: "2026-11-05",
-    title: "Edit or cancel waiting requests, and an admin Scheduler",
+    title: "Edit or cancel waiting requests",
     changes: [
       { kind: "new", text: "Chairmen can edit or cancel a room request, and an assignment request, while it waits for approval. Editing a room request takes it back to drafts; an assignment request can change its day, time and room." },
       { kind: "improved", text: "The dashboard shows how many classes have complete schedules, how many faculty have a load and how many rooms are in use, instead of hours." },
@@ -334,7 +336,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       { kind: "new", text: "Forgot-password and reset-password by email." },
       { kind: "improved", text: "Faculty and student class schedule pages updated." },
-      { kind: "new", text: "Experimental grade module groundwork." },
     ],
   },
   {

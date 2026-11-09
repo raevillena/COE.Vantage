@@ -31,7 +31,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.8.0" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.8.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
@@ -886,9 +886,9 @@ test.describe("current term", () => {
       await page.getByRole("link", { name: "Academic years", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Academic Years" })).toBeVisible();
       await expect(page.getByRole("button", { name: "Add Academic Year" })).toBeVisible(); // the college secretary adds academic years too
-      await page.getByLabel("Semester", { exact: true }).selectOption("2");
-      await page.getByRole("button", { name: "Set as current term" }).click();
-      await expect(page.getByText("Current term saved")).toBeVisible();
+      await page.locator("#term-sem").selectOption("2");
+      await page.getByRole("button", { name: "Set as Scheduling Semester" }).click();
+      await expect(page.getByText("Scheduling Semester saved")).toBeVisible();
 
       // filters now open on the 2nd semester
       await page.goto("/schedules/student-class");
@@ -1137,7 +1137,7 @@ test.describe("university pages", () => {
       await expect(page.getByText(/Choose a college in the sidebar/)).toBeVisible();
       await page.getByRole("button", { name: /^Switch college/ }).click();
       await page.getByRole("option", { name: /Lock College/ }).click();
-      await expect(page.locator('section[aria-label="Current term"]')).toContainText("Lock College");
+      await expect(page.locator('section[aria-label="Scheduling Semester"]')).toContainText("Lock College");
       await expect(page.getByText(/Choose a college in the sidebar/)).toHaveCount(0);
     } finally {
       await request.delete(`${API}/colleges/${collegeId}`, { headers: admin });
@@ -1742,7 +1742,7 @@ test.describe("audit log", () => {
     await request.put(`${API}/academic-years/current-term`, { headers: secretary, data: { academicYearId: ay.id, semester: ay.currentSemester } });
     const term = (await list("action=SET_CURRENT_TERM"))[0];
     expect(term.actorRole).toBe("COLLEGE_SECRETARY");
-    expect(term.summary).toMatch(/Set the current term to/);
+    expect(term.summary).toMatch(/Set the Scheduling Semester to/);
     await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secretary, data: { semester: 3, locked: true } });
     await request.put(`${API}/academic-years/${ay.id}/term-lock`, { headers: secretary, data: { semester: 3, locked: false } });
     expect((await list("action=LOCK"))[0].summary).toMatch(/Locked Mid Year/);

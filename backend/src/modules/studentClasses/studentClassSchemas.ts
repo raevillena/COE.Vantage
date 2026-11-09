@@ -5,6 +5,8 @@ export const createStudentClassSchema = z.object({
     name: z.string().min(1),
     yearLevel: z.number().int().min(1),
     curriculumId: z.string().uuid(),
+    /** One of the curriculum's specializations; omit or null for none. */
+    specializationId: z.string().uuid().optional().nullable(),
     studentCount: z.number().int().min(0),
   }),
 });
@@ -14,6 +16,7 @@ export const updateStudentClassSchema = z.object({
     name: z.string().min(1).optional(),
     yearLevel: z.number().int().min(1).optional(),
     curriculumId: z.string().uuid().optional(),
+    specializationId: z.string().uuid().optional().nullable(),
     studentCount: z.number().int().min(0).optional(),
   }),
 });
