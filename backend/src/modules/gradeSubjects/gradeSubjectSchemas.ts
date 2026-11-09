@@ -27,6 +27,9 @@ export const createGradeSubjectSchema = z.object({
       z.string().min(1).max(50).optional().nullable()
     ),
     departmentId: z.string().uuid().optional().nullable(),
+    /** The term this subject's grades belong to. Both optional; a semester needs an academic year. */
+    academicYearId: z.string().uuid().optional().nullable(),
+    semester: z.number().int().min(1).max(3).optional().nullable(),
     gradingSystem: z.union([gradingSystemV1Schema, z.null()]).optional(),
     studentComputeEnabled: z.boolean().optional(),
   }),
@@ -37,6 +40,9 @@ export const updateGradeSubjectSchema = z.object({
     name: z.string().min(1).optional(),
     code: z.string().min(1).max(50).optional().nullable(),
     departmentId: z.string().uuid().optional().nullable(),
+    /** The term this subject's grades belong to. Both optional; a semester needs an academic year. */
+    academicYearId: z.string().uuid().optional().nullable(),
+    semester: z.number().int().min(1).max(3).optional().nullable(),
     /** Merges shallowly into existing `gradingSystem` on the server; omit keys you are not updating. */
     gradingSystem: z.union([gradingSystemV1PatchSchema, z.null()]).optional(),
     studentComputeEnabled: z.boolean().optional(),

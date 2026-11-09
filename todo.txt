@@ -107,3 +107,8 @@ Room request badges and the raw blocks list
 
 Wider room requests and smoother scheduler dragging
  - room request and drafting windows are wide; drafting shows the room's week with the block in place and checks day and time at once (no class needed first); room-share times compare as minutes (was text). Scheduler: block text wraps when it fits, a carried block keeps its size, the snap preview matches the block. done (v0.7.3, no migration)
+
+Grades module upgrades, MMSU Grade Push and experimental access
+ - grade subjects have an academic year and semester (filters, latest semester on the student lookup), INC for blank formula items, MMSU portal defaults, missing items on the student lookup. done (v0.8.0, needs migration 20260620000000_grade_subject_term)
+ - MMSU Grade Push browser extension (experimental, off by default). done (v0.8.0)
+ - admin chooses which users may use each experimental feature; Users page filters; the scheduler allows overload. done (v0.8.0)

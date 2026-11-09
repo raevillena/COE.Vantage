@@ -11,6 +11,7 @@ import { Select } from "../../components/ui/select";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
+import { ExperimentalAccessDialog } from "../../components/users/ExperimentalAccessDialog";
 import { DeloadingDialog } from "../../components/faculty/DeloadingDialog";
 import { isTeachingRole } from "../../utils/loadState";
 import type { AcademicYear } from "../../types/api";
@@ -85,9 +86,16 @@ export function UsersPage() {
   const [importFileName, setImportFileName] = useState("");
   const [showImportPassword, setShowImportPassword] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const NONE = "__none__";
+  const [filterCollege, setFilterCollege] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterRole, setFilterRole] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterMaxUnits, setFilterMaxUnits] = useState("");
   const [prioritizationUser, setPrioritizationUser] = useState<UserListItem | null>(null);
   const [prioritizationList, setPrioritizationList] = useState<PrioritizedSubjectItem[]>([]);
   const [prioritizationLoading, setPrioritizationLoading] = useState(false);
+  const [experimentalTarget, setExperimentalTarget] = useState<UserListItem | null>(null);
   const [deloadTarget, setDeloadTarget] = useState<UserListItem | null>(null);
   const [deloadYears, setDeloadYears] = useState<AcademicYear[]>([]);
   const [prioritizationYears, setPrioritizationYears] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
@@ -380,16 +388,41 @@ export function UsersPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
-    ? list.filter(
-        (u) =>
-          u.name.toLowerCase().includes(searchLower) ||
-          u.email.toLowerCase().includes(searchLower) ||
-          u.role.toLowerCase().includes(searchLower) ||
-          (u.department?.name ?? "").toLowerCase().includes(searchLower) ||
-          (u.status ?? "").toLowerCase().includes(searchLower)
+  const filtersActive = Boolean(searchLower || filterCollege || filterDepartment || filterRole || filterStatus || filterMaxUnits);
+  const filteredList = list.filter((u) => {
+    if (
+      searchLower &&
+      !(
+        u.name.toLowerCase().includes(searchLower) ||
+        u.email.toLowerCase().includes(searchLower) ||
+        u.role.toLowerCase().includes(searchLower) ||
+        (u.department?.name ?? "").toLowerCase().includes(searchLower) ||
+        (u.status ?? "").toLowerCase().includes(searchLower)
       )
-    : list;
+    )
+      return false;
+    if (filterCollege && (filterCollege === NONE ? Boolean(u.collegeId) : u.collegeId !== filterCollege)) return false;
+    if (filterDepartment && (filterDepartment === NONE ? Boolean(u.departmentId) : u.departmentId !== filterDepartment)) return false;
+    if (filterRole && u.role !== filterRole) return false;
+    if (filterStatus && (filterStatus === NONE ? Boolean(u.status) : u.status !== filterStatus)) return false;
+    if (filterMaxUnits === "set" && u.maxUnits == null) return false;
+    if (filterMaxUnits === "unset" && u.maxUnits != null) return false;
+    return true;
+  });
+  const roleOptions = Array.from(new Set(list.map((u) => u.role))).sort();
+  const statusOptions = Array.from(new Set(list.map((u) => u.status).filter((s): s is string => Boolean(s)))).sort();
+  const departmentOptions = departments
+    .filter((d) => !filterCollege || filterCollege === NONE || d.collegeId === filterCollege)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterCollege("");
+    setFilterDepartment("");
+    setFilterRole("");
+    setFilterStatus("");
+    setFilterMaxUnits("");
+  };
+  const filterSelectClass = "rounded border border-border-strong bg-surface px-2 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
 
   return (
     <div>
@@ -416,7 +449,8 @@ export function UsersPage() {
         </div>
       </div>
       {list.length > 0 && (
-        <div className="mb-4 relative max-w-md">
+        <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="user-filters">
+        <div className="relative w-full max-w-md">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -428,6 +462,57 @@ export function UsersPage() {
             className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
             aria-label="Search users"
           />
+        </div>
+          {colleges.length > 1 && (
+            <select
+              aria-label="Filter by college"
+              value={filterCollege}
+              onChange={(e) => {
+                setFilterCollege(e.target.value);
+                setFilterDepartment("");
+              }}
+              className={filterSelectClass}
+            >
+              <option value="">All colleges</option>
+              {colleges.map((c) => (
+                <option key={c.id} value={c.id}>{c.code || c.name}</option>
+              ))}
+              <option value={NONE}>No college</option>
+            </select>
+          )}
+          <select aria-label="Filter by department" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className={filterSelectClass}>
+            <option value="">All departments</option>
+            {departmentOptions.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+            <option value={NONE}>No department</option>
+          </select>
+          <select aria-label="Filter by role" value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className={filterSelectClass}>
+            <option value="">All roles</option>
+            {roleOptions.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <select aria-label="Filter by status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={filterSelectClass}>
+            <option value="">All statuses</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+            <option value={NONE}>No status</option>
+          </select>
+          <select aria-label="Filter by maximum units" value={filterMaxUnits} onChange={(e) => setFilterMaxUnits(e.target.value)} className={filterSelectClass}>
+            <option value="">Any max units</option>
+            <option value="set">Max units set</option>
+            <option value="unset">No max units</option>
+          </select>
+          {filtersActive && (
+            <button type="button" onClick={clearFilters} className="rounded text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
+              Clear filters
+            </button>
+          )}
+          <span className="text-sm text-foreground-muted" aria-live="polite">
+            Showing {filteredList.length} of {list.length}
+          </span>
         </div>
       )}
       {loading ? (
@@ -441,9 +526,9 @@ export function UsersPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No users match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No users match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (
@@ -540,6 +625,7 @@ export function UsersPage() {
                           <DropdownMenu.Item onSelect={() => openEdit(u)}>Edit</DropdownMenu.Item>
                           {isTeachingRole(u.role) && <DropdownMenu.Item onSelect={() => openDeloading(u)}>Deloading</DropdownMenu.Item>}
                           <DropdownMenu.Item onSelect={() => openViewPrioritization(u)}>View prioritization</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => setExperimentalTarget(u)}>Experimental access</DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => handleSendResetEmail(u.email)}
                             disabled={resetEmailLoading === u.email}
@@ -563,6 +649,9 @@ export function UsersPage() {
         </div>
       )}
 
+      {experimentalTarget && (
+        <ExperimentalAccessDialog person={{ id: experimentalTarget.id, name: experimentalTarget.name, role: experimentalTarget.role }} onClose={() => setExperimentalTarget(null)} />
+      )}
       {deloadTarget && deloadYears.length > 0 && (
         <DeloadingDialog
           person={{ id: deloadTarget.id, name: deloadTarget.name, maxUnits: deloadTarget.maxUnits }}

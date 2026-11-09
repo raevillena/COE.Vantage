@@ -1,9 +1,11 @@
 export type Role = "ADMIN" | "DEAN" | "CHAIRMAN" | "FACULTY" | "OFFICER" | "COLLEGE_SECRETARY" | "PRESIDENT" | "UNIT";
-export type ExperimentalFeatureKey = "gradeModule";
+export type ExperimentalFeatureKey = "gradeModule" | "mmsuGradePush";
 
 export interface ExperimentalFeaturesPreference {
   enabled: boolean;
   features: ExperimentalFeatureKey[];
+  /** What an administrator allows this user to switch on. */
+  granted: ExperimentalFeatureKey[];
 }
 
 export interface User {

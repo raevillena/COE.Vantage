@@ -57,18 +57,33 @@ export function LoginPage() {
     e.preventDefault();
     clearErrors();
 
-    const validation = validateLoginFields(email, password);
+    // Read the inputs themselves: a browser or password manager can autofill without React seeing a change event.
+    const form = e.currentTarget as HTMLFormElement;
+    const emailValue = (form.elements.namedItem("email") as HTMLInputElement | null)?.value ?? email;
+    const passwordValue = (form.elements.namedItem("password") as HTMLInputElement | null)?.value ?? password;
+    setEmail(emailValue);
+    setPassword(passwordValue);
+
+    const validation = validateLoginFields(emailValue, passwordValue);
     if (validation) {
       setFieldErrors(validation);
-      setError("Please fix the errors below.");
+      // The message sits under the field; the banner says what to do instead of repeating "fix the errors".
+      setError(
+        validation.email && validation.password
+          ? "Enter your email and password to sign in."
+          : validation.email
+            ? "Check your email address and try again."
+            : "Enter your password to sign in."
+      );
+      form.querySelector<HTMLInputElement>(validation.email ? "#email" : "#password")?.focus();
       return;
     }
 
     setLoading(true);
     try {
       const { data } = await apiClient.post<LoginResponse>("/auth/login", {
-        email: email.trim(),
-        password,
+        email: emailValue.trim(),
+        password: passwordValue,
       });
       dispatch(setAuth({ user: data.user, accessToken: data.accessToken }));
       navigate(from, { replace: true });
@@ -111,6 +126,7 @@ export function LoginPage() {
             </label>
             <input
               id="email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => {
@@ -140,6 +156,7 @@ export function LoginPage() {
             <div className="relative mt-1">
               <input
                 id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => {

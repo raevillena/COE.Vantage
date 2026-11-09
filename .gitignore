@@ -36,3 +36,5 @@ backend/prisma/migrations/**/migration_lock.toml
 # Playwright
 frontend/tests/e2e/.results/
 frontend/playwright-report/
+
+portal_**.txt

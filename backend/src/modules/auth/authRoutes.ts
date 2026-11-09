@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getExtensionAccess } from "./authService.js";
 import {
   login,
   refresh,
@@ -51,5 +52,12 @@ router.patch(
   validate(updateExperimentalFeaturesSchema),
   updateMyExperimentalFeatures
 );
+
+// Read by the MMSU Grade Push browser extension with the person's Vantage login cookie (no bearer token).
+router.get("/extension-access/mmsu-grade-push", async (req, res) => {
+  const access = await getExtensionAccess(req.cookies?.refreshToken, "mmsuGradePush");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(access);
+});
 
 export const authRoutes = router;

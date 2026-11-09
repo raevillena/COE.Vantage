@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const PASSWORD = process.env.E2E_PASSWORD ?? "Test123!";
-const API = process.env.E2E_API_URL ?? "http://localhost:4000";
+import { API, PASSWORD, login } from "./support";
 /** The College of Engineering. The admin names it when a call needs a college, since other colleges may exist. */
 const COE = "00000000-0000-0000-0000-0000000000a2";
 
@@ -26,21 +25,13 @@ async function lockTerms(request: import("@playwright/test").APIRequestContext, 
   };
 }
 
-async function login(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
-  await page.locator("#password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/dashboard");
-}
-
 test.describe("login page", () => {
   test("shows the release notes", async ({ page }) => {
     await page.goto("/login");
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.7.5" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.8.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
@@ -933,6 +924,143 @@ test.describe("scheduler legend", () => {
     menu = page.getByRole("menu");
     for (const text of ["Dashed border: laboratory-only subject", "Amber outline: awaiting approval", "Red: conflict with another block", "Class split between instructors"]) await expect(menu.getByText(text)).toBeVisible();
     await expect(menu.getByText("Not scheduled yet")).toHaveCount(0);
+  });
+});
+
+test.describe("scheduler subject list", () => {
+  test("a subject's menu edits its details and sets its possible rooms and faculty", async ({ page, request }) => {
+    const login = await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await login.json()) as { accessToken: string }).accessToken}` };
+    const subjects = (await (await request.get(`${API}/subjects`, { headers })).json()) as { id: string; code: string; name: string }[];
+    const subject = subjects.find((x) => x.code === "CE401");
+    test.skip(!subject, "needs the CE401 sample subject");
+
+    await login_(page, "chairman@coe.vantage");
+    await page.goto("/scheduler");
+    await page.getByRole("combobox", { name: "Student class" }).click();
+    await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+    const menuButton = page.locator('button[aria-label="Subject options for CE401"]');
+    await expect(menuButton).toBeVisible();
+
+    // the menu opens without picking the subject up to drag it
+    await menuButton.click();
+    await expect(page.getByRole("menuitem")).toHaveText(["Edit details", "Set possible rooms", "Set possible faculty"]);
+
+    try {
+      // details: the same form as the Subjects page; renaming shows in the list at once
+      await page.getByRole("menuitem", { name: "Edit details" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("heading", { name: "Edit Subject" })).toBeVisible();
+      await dialog.getByPlaceholder("Name").fill(`${subject!.name} (edited)`);
+      await dialog.getByRole("button", { name: "Save" }).click();
+      await expect(page.getByText(`${subject!.name} (edited)`).first()).toBeVisible();
+
+      // possible rooms
+      await menuButton.click();
+      await page.getByRole("menuitem", { name: "Set possible rooms" }).click();
+      await expect(page.getByRole("dialog").getByRole("heading", { name: "Rooms for auto-assign — CE401" })).toBeVisible();
+      await page.getByRole("dialog").getByRole("checkbox").first().check();
+      await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      const rooms = (await (await request.get(`${API}/subjects/${subject!.id}/rooms`, { headers })).json()) as unknown[];
+      expect(rooms.length).toBe(1);
+
+      // possible faculty opens on the term being scheduled
+      await menuButton.click();
+      await page.getByRole("menuitem", { name: "Set possible faculty" }).click();
+      await expect(page.getByRole("dialog").getByRole("heading", { name: "Prioritized faculty — CE401" })).toBeVisible();
+      await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+    } finally {
+      await request.patch(`${API}/subjects/${subject!.id}`, { headers, data: { name: subject!.name } });
+      await request.put(`${API}/subjects/${subject!.id}/rooms`, { headers, data: { roomIds: [] } });
+    }
+  });
+});
+
+test.describe("scheduler split marker", () => {
+  test("a block split between instructors shows the Split marker in the grid, even when narrow", async ({ page, request }) => {
+    const login = await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await login.json()) as { accessToken: string }).accessToken}` };
+    const get = async <T>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
+    const years = await get<{ id: string; isActive: boolean }[]>("/academic-years");
+    const ay = years.find((y) => y.isActive)?.id;
+    type Load = { id: string; subjectId: string; studentClassId: string; roomId: string | null; facultyId: string | null; subject: { code: string }; studentClass: { name: string } };
+    const loads = ay ? await get<Load[]>(`/faculty-loads?academicYearId=${ay}&semester=1`) : [];
+    const source = loads.find((l) => l.subject.code === "CE401" && l.studentClass.name === "BS CE 4A");
+    const other = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Maria Santos"));
+    test.skip(!source || !other || other.id === source.facultyId, "needs CE401 for BS CE 4A and a second instructor");
+
+    const res = await request.post(`${API}/faculty-loads`, {
+      headers,
+      data: { facultyId: other!.id, subjectId: source!.subjectId, studentClassId: source!.studentClassId, roomId: source!.roomId, dayOfWeek: 4, startTime: "13:00", endTime: "16:30", semester: 1, academicYearId: ay, splitOfLoadId: source!.id },
+    });
+    expect(res.status()).toBe(201);
+    const created = ((await res.json()) as { id: string }).id;
+    try {
+      await login_(page, "chairman@coe.vantage");
+      await page.goto("/scheduler");
+      await page.getByRole("combobox", { name: "Student class" }).click();
+      await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+      // both instructors' blocks carry the marker (the original one is labelled too); the legend explains it
+      const markers = page.locator('[title="The class is split between instructors"]:visible');
+      await expect(markers).toHaveCount(2);
+      // inside its block, not cut off to the right of it
+      for (const marker of await markers.all()) {
+        const box = (await marker.boundingBox())!;
+        const block = (await marker.locator("xpath=ancestor::*[@data-draggable-block]").boundingBox())!;
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.x).toBeGreaterThanOrEqual(block.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(block.x + block.width + 1);
+      }
+      await page.getByRole("button", { name: "Legend" }).nth(1).click();
+      await expect(page.getByRole("menu").getByText("Class split between instructors")).toBeVisible();
+    } finally {
+      await request.delete(`${API}/faculty-loads/${created}`, { headers });
+    }
+  });
+});
+
+test.describe("student class form", () => {
+  test("the year level in the name is read and a different year level field is warned about", async ({ page }) => {
+    await login_(page, "chairman@coe.vantage");
+    await page.goto("/student-classes");
+    await page.getByRole("button", { name: /^Add Student Class$/i }).first().click();
+    const dialog = page.getByRole("dialog");
+    const warning = dialog.getByRole("alert");
+    await expect(warning).toHaveCount(0);
+
+    await dialog.getByLabel("Name").fill("BS CE 4A");
+    await expect(dialog.getByText("Reads as year 4, section A of BS CE.")).toBeVisible();
+    // the year level still says 1
+    await expect(warning).toContainText('The name "BS CE 4A" reads as year 4, but the year level is set to 1.');
+
+    await dialog.getByLabel("Year level").fill("3");
+    await expect(warning).toContainText("set to 3");
+    await dialog.getByRole("button", { name: "Use year 4" }).click();
+    await expect(dialog.getByLabel("Year level")).toHaveValue("4");
+    await expect(warning).toHaveCount(0);
+
+    // the year level can be emptied to type another one (no leftover 0 or 1), and a blank one is not saved
+    const year = dialog.getByLabel("Year level");
+    await year.fill("");
+    await expect(year).toHaveValue("");
+    await expect(warning).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Year level must be between 1 and 5")).toBeVisible();
+    await expect(dialog).toBeVisible();
+    await year.pressSequentially("2");
+    await expect(year).toHaveValue("2");
+    await expect(warning).toContainText("set to 2");
+    const count = dialog.getByLabel("Student count");
+    await count.fill("");
+    await expect(count).toHaveValue("");
+
+    // a name that says no year level warns about nothing
+    await dialog.getByLabel("Name").fill("Sample class");
+    await dialog.getByLabel("Year level").fill("2");
+    await expect(warning).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
   });
 });
 

@@ -1,18 +1,29 @@
 import { useState, useEffect, useMemo } from "react";
 import { useDraggable } from "@dnd-kit/core";
+import { MoreVertical } from "lucide-react";
 import type { Curriculum, Subject, FacultyLoad } from "../../types/api";
 import { apiClient } from "../../api/apiClient";
 import { componentTag, weeklyHours } from "../../utils/subjectUnits";
 import { SubjectStatusLegend } from "./SchedulerLegend";
 import type { SubjectDragItem } from "./schedulerTypes";
+import { DropdownMenu } from "../ui/dropdownMenu";
+import { useAppSelector } from "../../store/hooks";
+import { SubjectFormDialog } from "../subjects/SubjectFormDialog";
+import { SubjectRoomsDialog } from "../subjects/SubjectRoomsDialog";
+import { SubjectFacultyDialog } from "../subjects/SubjectFacultyDialog";
+
+/** What the "⋯" menu on a subject can open. */
+type ManageAction = "details" | "rooms" | "faculty";
 
 interface SubjectItemProps {
   subject: Subject;
   status?: "none" | "partial" | "full" | "over";
   label?: string;
+  /** When set, the subject gets a "⋯" menu to edit its details and set its possible rooms and faculty. */
+  onManage?: (action: ManageAction, subject: Subject) => void;
 }
 
-function DraggableSubject({ subject, status = "none", label }: SubjectItemProps) {
+function DraggableSubject({ subject, status = "none", label, onManage }: SubjectItemProps) {
   const item: SubjectDragItem = {
     type: "subject",
     subjectId: subject.id,
@@ -48,6 +59,28 @@ function DraggableSubject({ subject, status = "none", label }: SubjectItemProps)
         {label ? <span className="text-[11px] text-foreground-muted/80"> · {label}</span> : null}
       </span>
       {componentTag(subject) && <span className="text-xs text-foreground-muted shrink-0">({componentTag(subject)})</span>}
+      {onManage && (
+        // The menu must not start a drag of the row it sits in.
+        <span className="ml-auto shrink-0" onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                className="rounded p-0.5 text-foreground-muted hover:bg-black/10 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring"
+                aria-label={`Subject options for ${subject.code}`}
+                title="Edit details, possible rooms and faculty"
+              >
+                <MoreVertical size={16} aria-hidden />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Item onSelect={() => onManage("details", subject)}>Edit details</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => onManage("rooms", subject)}>Set possible rooms</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => onManage("faculty", subject)}>Set possible faculty</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </span>
+      )}
     </div>
   );
 }
@@ -86,10 +119,46 @@ export interface CurriculumSubjectTreeProps {
   semester?: number;
   /** Loads for the current class view, used to compute scheduled minutes per subject. */
   classLoads?: FacultyLoad[];
+  /** The term being scheduled; the possible-faculty dialog opens on it. */
+  academicYearId?: string;
+  /** Called after a subject's details, rooms or faculty were saved, so the scheduler can refresh what it shows. */
+  onSubjectChanged?: () => void;
 }
 
+interface SubjectTreeBodyProps extends CurriculumSubjectTreeProps {
+  onManage?: (action: ManageAction, subject: Subject) => void;
+  /** Changes when the subjects have to be fetched again. */
+  reloadKey: number;
+}
+
+/** The subject list of the class being scheduled, with a "⋯" menu per subject to edit its details and set its possible rooms and faculty. */
 export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
-  const { curriculumId, yearLevel, semester, classLoads } = props;
+  const role = useAppSelector((st) => st.auth.user?.role);
+  // The same people who may change subjects, rooms and faculty lists on the Subjects page.
+  const canManage = role === "ADMIN" || role === "CHAIRMAN";
+  const [target, setTarget] = useState<{ action: ManageAction; subject: Subject } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const changed = () => {
+    setReloadKey((k) => k + 1);
+    props.onSubjectChanged?.();
+  };
+  const closeTarget = () => setTarget(null);
+  return (
+    <>
+      <SubjectTreeBody {...props} reloadKey={reloadKey} onManage={canManage ? (action, subject) => setTarget({ action, subject }) : undefined} />
+      <SubjectFormDialog open={target?.action === "details"} subject={target?.action === "details" ? target.subject : null} onClose={closeTarget} onSaved={changed} />
+      <SubjectRoomsDialog subject={target?.action === "rooms" ? target.subject : null} onClose={closeTarget} onSaved={changed} />
+      <SubjectFacultyDialog
+        subject={target?.action === "faculty" ? target.subject : null}
+        defaultTerm={props.academicYearId && props.semester ? { academicYearId: props.academicYearId, semester: props.semester } : undefined}
+        onClose={closeTarget}
+      />
+    </>
+  );
+}
+
+function SubjectTreeBody(props: SubjectTreeBodyProps) {
+  const { curriculumId, yearLevel, semester, classLoads, onManage, reloadKey } = props;
   const [curricula, setCurricula] = useState<Curriculum[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -97,7 +166,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
   useEffect(() => {
     apiClient.get<Curriculum[]>("/curriculum").then(({ data }) => setCurricula(data));
     apiClient.get<Subject[]>("/subjects").then(({ data }) => setSubjects(data));
-  }, []);
+  }, [reloadKey]);
 
   // When switching curriculum/year/semester context, default-expand the Year group; keep Others collapsed.
   useEffect(() => {
@@ -196,7 +265,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
                 ) : (
                   mainYear.map((s) => {
                     const { status, label } = getStatusForSubject(s);
-                    return <DraggableSubject key={s.id} subject={s} status={status} label={label} />;
+                    return <DraggableSubject key={s.id} subject={s} status={status} label={label} onManage={onManage} />;
                   })
                 )}
               </div>
@@ -218,7 +287,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
                 ) : (
                   others.map((s) => {
                     const { status, label } = getStatusForSubject(s);
-                    return <DraggableSubject key={s.id} subject={s} status={status} label={label} />;
+                    return <DraggableSubject key={s.id} subject={s} status={status} label={label} onManage={onManage} />;
                   })
                 )}
               </div>
@@ -257,7 +326,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
                   ) : (
                     subs.map((s) => {
                       const { status, label } = getStatusForSubject(s);
-                      return <DraggableSubject key={s.id} subject={s} status={status} label={label} />;
+                      return <DraggableSubject key={s.id} subject={s} status={status} label={label} onManage={onManage} />;
                     })
                   )}
                 </div>
@@ -279,7 +348,7 @@ export function CurriculumSubjectTree(props: CurriculumSubjectTreeProps) {
               <div className="px-2 pb-2 space-y-1 border-t border-border pt-1">
                 {(byCurriculum.get(null) ?? []).map((s) => {
                   const { status, label } = getStatusForSubject(s);
-                  return <DraggableSubject key={s.id} subject={s} status={status} label={label} />;
+                  return <DraggableSubject key={s.id} subject={s} status={status} label={label} onManage={onManage} />;
                 })}
               </div>
             )}

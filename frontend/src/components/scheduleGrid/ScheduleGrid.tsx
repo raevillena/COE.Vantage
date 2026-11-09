@@ -297,15 +297,23 @@ function ScheduleBlock({
       onKeyDown={onLoadClick && !pending ? (e) => e.key === "Enter" && onLoadClick(load) : undefined}
       data-draggable-block={draggableId}
       title={titleParts.join(" · ") + (pending ? " · Awaiting chairman approval" : "")}
-      className={`${positionClass} group/blk rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending && !locked ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
+      className={`${positionClass} group/blk @container rounded px-1 py-0.5 text-xs overflow-hidden min-w-0 box-border transition-[height] duration-75 ${colorClass(load.subjectId, subjectIds, palette.colors)} ${load.subject?.isLab ? "border-2 border-dashed border-foreground-muted" : ""} ${pending ? "border-2 border-amber-500 dark:border-amber-400 bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-500/50" : ""} ${isConflict && !pending ? "!bg-danger/20 ring-1 ring-danger" : ""} ${selected ? "ring-2 ring-primary" : ""} ${onLoadClick && !pending ? "cursor-pointer" : ""} ${onLoadMove && !pending && !locked ? "cursor-grab active:cursor-grabbing" : ""} ${isDragging ? "opacity-50 shadow-none" : ""} ${isResizing ? "ring-2 ring-primary/50 border-b-2 border-dashed border-primary/40" : ""}`}
       style={positionStyle ?? undefined}
     >
       <div ref={linesEl}>
-      <div className="font-medium truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words min-w-0 text-gray-900 dark:text-gray-100">
-        {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
-        {load.isSplit && <span className="ml-1 rounded bg-black/10 px-1 text-[9px] font-semibold uppercase tracking-wide dark:bg-white/20" title="The class is split between instructors">Split</span>}
-        {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
-        {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
+      <div className="flex items-start gap-1 min-w-0 font-medium text-gray-900 dark:text-gray-100">
+        <span className="min-w-0 flex-1 truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words">
+          {[load.subject?.code ?? "—", roomName].filter(Boolean).join(" · ")}
+          {pending && <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">· Awaiting approval</span>}
+          {locked && <span className="ml-1 text-[10px] font-normal" title="Room closed for this term by its department">🔒</span>}
+        </span>
+        {/* Outside the truncated text so a narrow block (instructors side by side) still shows it; the word shortens to "S" there. */}
+        {load.isSplit && (
+          <span className="shrink-0 rounded bg-black/10 px-1 text-[9px] font-semibold uppercase leading-[14px] tracking-wide dark:bg-white/20" title="The class is split between instructors" aria-label="Split between instructors">
+            <span className="hidden @[6rem]:inline">Split</span>
+            <span className="@[6rem]:hidden" aria-hidden>S</span>
+          </span>
+        )}
       </div>
       <div className="truncate group-data-[wrap=1]/blk:whitespace-normal group-data-[wrap=1]/blk:break-words min-w-0 text-[10px] text-gray-700 dark:text-gray-300">
         {pending ? "Cross-dept · " : ""}{[className, facultyShort, isResizing && resizePreviewEndMinutes != null ? `${formatTime12(load.startTime)} – ${formatTime12(minutesToTimeString(resizePreviewEndMinutes))}` : `${formatTime12(load.startTime)} – ${formatTime12(load.endTime)}`].filter(Boolean).join(" · ")}

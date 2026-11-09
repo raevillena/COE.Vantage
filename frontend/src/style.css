@@ -28,6 +28,7 @@
   --color-danger: #c53030;
   --color-danger-hover: #9b2c2c;
   --color-danger-muted: #fff5f5;
+  --color-danger-foreground: #ffffff;
   --color-success: #276749;
   --color-success-muted: #f0fff4;
   /* Amber warning — filled highlights (e.g. CND), not outline-only */
@@ -67,6 +68,7 @@
   /* Semantic status colors for dark backgrounds */
   --color-danger: #f87171;
   --color-danger-hover: #ef4444;
+  --color-danger-foreground: #0d0d0e;
   --color-danger-muted: #7f1d1d;
   --color-success: #34d399;
   --color-success-muted: #064e3b;

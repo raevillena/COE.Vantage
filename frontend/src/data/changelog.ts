@@ -15,6 +15,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.8.0",
+    date: "2026-11-09",
+    title: "Grades module upgrades, MMSU Grade Push extension and per-user experimental access",
+    changes: [
+      { kind: "new", text: "MMSU Grade Push (experimental): a Chrome/Edge extension that fills the MMSU portal gradesheet from a table you paste and then checks the portal matches your sheet. It only works for people signed in to Vantage in the same browser whom an administrator has allowed to use it, and it carries the Vantage logo. Setup steps with pictures are on its own page." },
+      { kind: "new", text: "Grade subjects have an academic year and semester. The Grades page and the student grade lookup can be filtered by year and semester, and the lookup opens on the latest semester." },
+      { kind: "new", text: "The student grade lookup shows each item's maximum score and lists the items a student has no score for as Missing." },
+      { kind: "new", text: "A grade with any blank formula item is now INC (incomplete) instead of a number. Enter 0 for an item to count it as zero." },
+      { kind: "improved", text: "Grade tables keep every column that has a maximum score, wrap long headers instead of widening, have a scrollbar above the table, a pinned header and full student names." },
+      { kind: "improved", text: "Grade import finds the header row even with title rows above it, and the grade items in a formula are picked from the columns instead of typed." },
+      { kind: "improved", text: "The default grade table follows the MMSU portal: 4.00 is Conditional, 5.00 is Failed, and the default passing percent is 50." },
+      { kind: "new", text: "Administrators choose per user which experimental features they may use (Users page, row menu, Experimental access). The Users page also filters by college, department, role, status and maximum units." },
+      { kind: "improved", text: "The scheduler no longer blocks assigning a faculty beyond their maximum units: overload is allowed and still shows in red on the dashboard. Auto-assign still avoids it." },
+      { kind: "improved", text: "The scheduler's subject list has a menu to edit a subject's details, possible rooms and possible faculty, and the class form warns when the year level does not match the class name." },
+      { kind: "improved", text: "Sign-in errors say what to do, and autofilled credentials are no longer rejected as an empty password." },
+    ],
+  },
+  {
     version: "v0.7.5",
     date: "2026-11-06",
     title: "Schedules appear once a term is locked, and cleaner timetable PDFs",

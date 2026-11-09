@@ -203,26 +203,6 @@ export async function getSlotAvailability(q: SlotAvailabilityQuery, caller?: Cal
   return { roomIds, facultyIds };
 }
 
-/** Returns total assigned units for a faculty in the given term (only in-system loads; excludeLoadId to omit one load when updating). */
-/** Units for a faculty in a term if `candidate` were added. Same subject+class on several days counts once. */
-async function getFacultyUnitsWith(
-  facultyId: string,
-  academicYearId: string,
-  semester: number,
-  candidate: { subjectId: string; studentClassId: string; units: number },
-  excludeLoadId?: string
-): Promise<{ current: number; total: number }> {
-  const loads = await prisma.facultyLoad.findMany({
-    where: { facultyId, academicYearId, semester, ...(excludeLoadId ? { id: { not: excludeLoadId } } : {}) },
-    select: { subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
-  });
-  const pairs = new Map<string, number>();
-  for (const l of loads) pairs.set(`${l.subjectId}|${l.studentClassId}`, creditedLoadUnits(l.subject));
-  const current = [...pairs.values()].reduce((s, u) => s + u, 0);
-  const total = pairs.has(`${candidate.subjectId}|${candidate.studentClassId}`) ? current : current + candidate.units;
-  return { current, total };
-}
-
 /** Validates excludeLoadId for team teaching: same slot as proposed row, different faculty/off-system identity. */
 async function assertValidCoInstructorExclude(
   excludeLoadId: string,
@@ -329,27 +309,8 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
     await assertRoomAssignable(effectiveRoomId, body.academicYearId, body.semester, caller);
   }
   if (caller) await assertStudentClassInDepartment(body.studentClassId, caller);
+  // Going over a faculty's maximum units (overload) is allowed here on purpose; it shows as overload on the dashboard.
   const effectiveFacultyId = body.facultyId?.trim() || null;
-  if (effectiveFacultyId) {
-    const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: body.subjectId }, select: { units: true, isLab: true, lecUnits: true, labUnits: true } }),
-      prisma.user.findUnique({ where: { id: effectiveFacultyId }, select: { maxUnits: true, name: true } }),
-    ]);
-    if (subject && user?.maxUnits != null) {
-      const deload = (await loadDeloadings(body.academicYearId, body.semester, [effectiveFacultyId])).get(effectiveFacultyId)?.total ?? 0;
-      const cap = effectiveMaxUnits(user.maxUnits, deload) ?? user.maxUnits;
-      const { current, total } = await getFacultyUnitsWith(effectiveFacultyId, body.academicYearId, body.semester, {
-        subjectId: body.subjectId,
-        studentClassId: body.studentClassId,
-        units: creditedLoadUnits(subject),
-      });
-      if (total > cap) {
-        throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject)}.`
-        );
-      }
-    }
-  }
 
   const trimmedRoomDisplay = body.roomDisplayName?.trim() || null;
   const trimmedFacultyDisplay = body.facultyDisplayName?.trim() || null;
@@ -451,35 +412,13 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
   const facultyDisplayName = body.facultyDisplayName !== undefined ? (body.facultyDisplayName?.trim() || null) : existing.facultyDisplayName;
   const roomId = body.roomId !== undefined ? (body.roomId?.trim() || null) : existing.roomId;
   const roomDisplayName = body.roomDisplayName !== undefined ? (body.roomDisplayName?.trim() || null) : existing.roomDisplayName;
-  const subjectId = body.subjectId ?? existing.subjectId;
   const academicYearId = body.academicYearId ?? existing.academicYearId;
   const semester = body.semester ?? existing.semester;
 
   if (roomId && caller) {
     await assertRoomAssignable(roomId, academicYearId, semester, caller);
   }
-  if (facultyId) {
-    const [subject, user] = await Promise.all([
-      prisma.subject.findUnique({ where: { id: subjectId }, select: { units: true, isLab: true, lecUnits: true, labUnits: true } }),
-      prisma.user.findUnique({ where: { id: facultyId }, select: { maxUnits: true, name: true } }),
-    ]);
-    if (subject && user?.maxUnits != null) {
-      const deload = (await loadDeloadings(existing.academicYearId, existing.semester, [facultyId])).get(facultyId)?.total ?? 0;
-      const cap = effectiveMaxUnits(user.maxUnits, deload) ?? user.maxUnits;
-      const { current, total } = await getFacultyUnitsWith(
-        facultyId,
-        existing.academicYearId,
-        existing.semester,
-        { subjectId, studentClassId: body.studentClassId ?? existing.studentClassId, units: creditedLoadUnits(subject) },
-        id
-      );
-      if (total > cap) {
-        throw badRequest(
-          `Faculty ${user.name ?? "selected"} has reached the maximum units for this term (${cap}${deload > 0 ? `: ${user.maxUnits} less ${deload} deloading` : ""}). Current: ${current}, this subject: ${creditedLoadUnits(subject)}.`
-        );
-      }
-    }
-  }
+  // Overload is allowed (see createFacultyLoad): no maximum-units check on update either.
 
   const payload: PreviewFacultyLoadBody = {
     facultyId,

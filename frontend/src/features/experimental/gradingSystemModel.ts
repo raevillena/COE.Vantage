@@ -61,7 +61,14 @@ export function defaultGradeEquivalencePh(): GradeEquivalenceRowV1[] {
   ];
 }
 
-/** Default MMSU-style numeric equivalent bands on final % (0–100). Outcome in `remarks` uses PASSED/CND/FAILED. */
+/**
+ * The MMSU portal's own rule (its gradesheet page): 1.00 to 3.00 is Passed, 4.00 is Conditional, 5.00 is Failed
+ * (INC and DRP are not computed grades). 3.00 is the lowest passing grade and its band below starts at 50%, so a final
+ * of 50% or more passes.
+ */
+export const DEFAULT_PASSING_PERCENT = 50;
+
+/** Default MMSU-style numeric equivalent bands on final % (0–100). Outcome in `remarks` follows the portal: PASSED up to 3, CND for 4, FAILED for 5. */
 export function defaultGradeEquivalenceMmsu(): GradeEquivalenceRowV1[] {
   const p = "PASSED";
   return [
@@ -74,8 +81,8 @@ export function defaultGradeEquivalenceMmsu(): GradeEquivalenceRowV1[] {
     { id: newId(), minPercent: 62, maxPercent: 67.99, letter: "2.5", remarks: p },
     { id: newId(), minPercent: 56, maxPercent: 61.99, letter: "2.75", remarks: p },
     { id: newId(), minPercent: 50, maxPercent: 55.99, letter: "3", remarks: p },
-    { id: newId(), minPercent: 40, maxPercent: 49.99, letter: "4", remarks: p },
-    { id: newId(), minPercent: 0, maxPercent: 39.99, letter: "5", remarks: p },
+    { id: newId(), minPercent: 40, maxPercent: 49.99, letter: "4", remarks: "CND" },
+    { id: newId(), minPercent: 0, maxPercent: 39.99, letter: "5", remarks: "FAILED" },
   ];
 }
 
@@ -103,7 +110,7 @@ export function defaultGradingSystemTemplate(): GradingSystemV1 {
         ],
       },
     ],
-    passingGrade: 75,
+    passingGrade: DEFAULT_PASSING_PERCENT,
     gradeEquivalence: defaultGradeEquivalenceMmsu(),
   };
 }

@@ -10,6 +10,7 @@ import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
 import { HistoryButton } from "../../components/audit/HistoryButton";
 import { useAppSelector } from "../../store/hooks";
+import { parseClassName } from "../../utils/classNameParts";
 
 export function StudentClassesPage() {
   /** The college secretary can view everything the dean can but never change it. */
@@ -19,8 +20,11 @@ export function StudentClassesPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", yearLevel: 1, curriculumId: "", studentCount: 0 });
+  const [form, setForm] = useState<{ name: string; yearLevel: number | ""; curriculumId: string; studentCount: number | "" }>({ name: "", yearLevel: 1, curriculumId: "", studentCount: 0 });
   const [curricula, setCurricula] = useState<{ id: string; name: string }[]>([]);
+  // What the typed name says about the class, to warn when the year level field disagrees.
+  const nameParts = parseClassName(form.name);
+  const yearFromName = nameParts.yearLevel;
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -64,11 +68,14 @@ export function StudentClassesPage() {
       toast.error("Name is required");
       return;
     }
-    if (form.yearLevel < 1 || form.yearLevel > 5) {
+    // The number fields can be emptied while typing; an empty student count means none.
+    const { yearLevel } = form;
+    const studentCount = form.studentCount === "" ? 0 : form.studentCount;
+    if (yearLevel === "" || yearLevel < 1 || yearLevel > 5) {
       toast.error("Year level must be between 1 and 5");
       return;
     }
-    if (form.studentCount < 0) {
+    if (studentCount < 0) {
       toast.error("Student count cannot be negative");
       return;
     }
@@ -78,10 +85,10 @@ export function StudentClassesPage() {
     }
     try {
       if (editingId) {
-        await apiClient.patch(`/student-classes/${editingId}`, { ...form, name: nameTrimmed });
+        await apiClient.patch(`/student-classes/${editingId}`, { ...form, yearLevel, studentCount, name: nameTrimmed });
         toast.success("Student class updated");
       } else {
-        await apiClient.post("/student-classes", { ...form, name: nameTrimmed });
+        await apiClient.post("/student-classes", { ...form, yearLevel, studentCount, name: nameTrimmed });
         toast.success("Student class created");
       }
       setModalOpen(false);
@@ -293,14 +300,29 @@ export function StudentClassesPage() {
             <div>
               <label htmlFor="student-class-name" className="mb-1 block text-sm font-medium text-foreground">Name</label>
               <input id="student-class-name" placeholder="e.g. BSCE-3A" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              {nameParts.yearLevel !== null && (
+                <p className="mt-1 text-[11px] text-foreground-muted">
+                  Reads as year {nameParts.yearLevel}
+                  {nameParts.section ? `, section ${nameParts.section}` : ""}
+                  {nameParts.program ? ` of ${nameParts.program}` : ""}.
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="student-class-year" className="mb-1 block text-sm font-medium text-foreground">Year level</label>
-              <input id="student-class-year" type="number" min={1} max={5} placeholder="1–5" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              <input id="student-class-year" type="number" min={1} max={5} placeholder="1–5" value={form.yearLevel} onChange={(e) => setForm((f) => ({ ...f, yearLevel: e.target.value === "" ? "" : Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              {yearFromName !== null && form.yearLevel !== "" && yearFromName !== form.yearLevel && (
+                <div role="alert" className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded border border-warning bg-warning-muted px-3 py-2 text-sm text-warning">
+                  <span>The name "{form.name.trim()}" reads as year {yearFromName}, but the year level is set to {form.yearLevel}.</span>
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, yearLevel: yearFromName }))} className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus:ring-2 focus:ring-focus-ring">
+                    Use year {yearFromName}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label htmlFor="student-class-count" className="mb-1 block text-sm font-medium text-foreground">Student count</label>
-              <input id="student-class-count" type="number" min={0} placeholder="0" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
+              <input id="student-class-count" type="number" min={0} placeholder="0" value={form.studentCount} onChange={(e) => setForm((f) => ({ ...f, studentCount: e.target.value === "" ? "" : Number(e.target.value) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>

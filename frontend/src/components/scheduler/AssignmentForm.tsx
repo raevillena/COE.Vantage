@@ -60,6 +60,8 @@ export interface AssignmentFormValues {
 interface AssignmentFormProps {
   academicYearId: string;
   semester: number;
+  /** Changes when subjects were edited elsewhere, so the list is fetched again. */
+  subjectsVersion?: number;
   initialValues: Partial<AssignmentFormValues>;
   /** Stable key that changes only when switching to a different assignment (edit vs pending). Stops sync from overwriting user's faculty/room selection on re-renders. */
   formKey: string;
@@ -102,6 +104,7 @@ interface AssignmentFormProps {
 export function AssignmentForm({
   academicYearId,
   semester,
+  subjectsVersion = 0,
   initialValues,
   formKey,
   initialValuesReady = true,
@@ -223,10 +226,14 @@ export function AssignmentForm({
       .get<AssignableFaculty[]>("/users/assignable-faculty")
       .then(({ data }) => setFaculties(data ?? []))
       .catch(() => setFaculties([]));
-    apiClient.get("/subjects").then(({ data }) => setSubjects(data));
     apiClient.get("/student-classes").then(({ data }) => setClasses(data));
     apiClient.get("/rooms").then(({ data }) => setRooms(data));
   }, []);
+
+  // Fetched again after a subject was edited from the subject list.
+  useEffect(() => {
+    apiClient.get("/subjects").then(({ data }) => setSubjects(data));
+  }, [subjectsVersion]);
 
   useEffect(() => {
     if (!facultyId || facultyId === "__others__" || !academicYearId) {

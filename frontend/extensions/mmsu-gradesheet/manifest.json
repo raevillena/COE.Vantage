@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Vantage MMSU Grade Push",
+  "version": "0.2.0",
+  "description": "For people signed in to Vantage with access: paste a grade table from Excel or Google Sheets, fill the MMSU portal gradesheet from it, and check that the portal matches your sheet.",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/128.png", "128": "icons/128.png" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://vantage.api.nbericmmsu.com/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "action": { "default_title": "Open the MMSU Grade Sheet list", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://my.mmsu.edu.ph/my/class/gradesheet/*"],
+      "exclude_matches": ["https://my.mmsu.edu.ph/my/class/gradesheet/dl/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

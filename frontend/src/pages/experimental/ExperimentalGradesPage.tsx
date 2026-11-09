@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isAxiosError } from "axios";
-import { Copy, Eye, KeyRound, Link2, Mail, Pencil, Trash2 } from "lucide-react";
+import { Copy, Eye, KeyRound, Link2, Mail, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { Dialog } from "../../components/ui/dialog";
+import { DropdownMenu } from "../../components/ui/dropdownMenu";
+import type { AcademicYear } from "../../types/api";
+import { currentTerm } from "../../utils/currentTerm";
+import { SEMESTER_LABEL, compareTermsNewestFirst, distinctTerms, termLabel, type GradeTerm } from "../../utils/gradeTerm";
 import { GradingSystemSettingsPanel } from "../../features/experimental/GradingSystemSettingsPanel";
-import { collectGradeKeys, normalizeGradingSystemFromUnknown } from "../../features/experimental/gradingSystemModel";
+import { collectGradeKeys, DEFAULT_PASSING_PERCENT, normalizeGradingSystemFromUnknown } from "../../features/experimental/gradingSystemModel";
 
 type GradeSubject = {
   id: string;
@@ -13,6 +17,10 @@ type GradeSubject = {
   code?: string | null;
   ownerId: string;
   departmentId?: string | null;
+  /** The term this subject's grades belong to; unset on subjects made before terms existed. */
+  academicYearId?: string | null;
+  semester?: number | null;
+  academicYear?: { id: string; name: string } | null;
   gradingSystem?: Record<string, unknown> | null;
   studentComputeEnabled: boolean;
   owner: { id: string; name: string; role: string; departmentId: string | null };
@@ -28,7 +36,10 @@ type GradeRecord = {
   grades: Record<string, number>;
   maxScores?: Record<string, number> | null;
   computedGrade?: {
-    finalGrade?: number;
+    /** null when the grade is INC (a formula item has no score). */
+    finalGrade?: number | null;
+    incomplete?: boolean;
+    missingKeys?: string[];
     breakdown?: unknown;
     computedAt?: string;
     letterGrade?: string | null;
@@ -38,6 +49,17 @@ type GradeRecord = {
   } | null;
   emailSentAt?: string | null;
 };
+
+const subjectTerm = (subject: GradeSubject): GradeTerm => ({
+  yearId: subject.academicYearId ?? null,
+  yearName: subject.academicYear?.name ?? null,
+  semester: subject.semester ?? null,
+});
+
+const ALL = "all";
+const NO_YEAR = "none";
+const NO_SEMESTER = "unset";
+const filterSelectClass = "w-full rounded border border-border-strong bg-surface px-2 py-1.5 text-sm text-foreground focus:ring-2 focus:ring-focus-ring";
 
 /** Column names shown in Edit record: table columns plus any keys only on this row. */
 function mergeGradeKeysForEdit(record: GradeRecord, columnKeys: string[]): string[] {
@@ -158,6 +180,7 @@ function recordSearchHaystack(record: GradeRecord): string {
     if (cg.letterGrade) parts.push(String(cg.letterGrade));
     if (cg.remarks) parts.push(String(cg.remarks));
     if (cg.passingGrade !== undefined && cg.passingGrade !== null) parts.push(String(cg.passingGrade));
+    if (cg.incomplete) parts.push("inc", "incomplete");
     if (cg.passed === true) parts.push("pass", "passed", "yes");
     if (cg.passed === false) parts.push("fail", "failed", "no");
     if (cg.computedAt) parts.push(cg.computedAt);
@@ -270,7 +293,7 @@ const NEAR_PASSING_BAND_POINTS = 15;
 
 /**
  * Score vs column max (0–100): green at/above subject passing %, amber in the band just below, red lower.
- * `passingThreshold` comes from grading settings (default 75 when unset).
+ * `passingThreshold` comes from grading settings (the MMSU default, 50, when unset).
  */
 function gradeBandFromRatioVsPassing(ratioPercent: number | null, passingThreshold: number): GradeBand {
   if (ratioPercent === null) return "missing";
@@ -299,10 +322,33 @@ function gradeCellClassName(record: GradeRecord, key: string, passingThreshold: 
 /** True when remarks already encode pass/fail (MMSU-style); avoids duplicating a “Pass” line. */
 function isStructuredOutcomeRemark(remarks: string | null | undefined): boolean {
   const r = (remarks ?? "").trim().toUpperCase();
-  return r === "PASSED" || r === "CND" || r === "FAILED" || r === "PASS" || r === "FAIL";
+  return r === "PASSED" || r === "CND" || r === "FAILED" || r === "PASS" || r === "FAIL" || r === "INC";
 }
 
-type FinalGradeBand = "high" | "cnd" | "mid" | "low" | "missing";
+/** INC: a formula item had no score when the grade was computed, so there is no number. */
+function isIncomplete(cg: GradeRecord["computedGrade"]): boolean {
+  return !!cg && (cg.incomplete === true || (cg.remarks ?? "").trim().toUpperCase() === "INC");
+}
+
+/** What the Final column shows first: the number, or INC. */
+function finalGradeText(cg: GradeRecord["computedGrade"]): string {
+  if (!cg) return "—";
+  if (isIncomplete(cg)) return "INC";
+  return cg.finalGrade != null ? String(cg.finalGrade) : "—";
+}
+
+/** The line under it: how many items are missing (INC), or the equivalent and remarks. */
+function finalGradeSubtext(cg: GradeRecord["computedGrade"]): string | null {
+  if (!cg) return null;
+  if (isIncomplete(cg)) {
+    const n = cg.missingKeys?.length ?? 0;
+    return n > 0 ? `${n} item${n === 1 ? "" : "s"} missing` : "Incomplete";
+  }
+  if (cg.remarks) return cg.letterGrade ? `${cg.remarks} · ${cg.letterGrade}` : cg.remarks;
+  return cg.letterGrade ?? null;
+}
+
+type FinalGradeBand = "high" | "cnd" | "mid" | "low" | "inc" | "missing";
 
 /**
  * Final column styling from grade-equivalence **remarks** and pass/fail, not fixed 85/70 on the numeric final.
@@ -310,6 +356,7 @@ type FinalGradeBand = "high" | "cnd" | "mid" | "low" | "missing";
 function finalGradeBandFromComputed(record: GradeRecord): FinalGradeBand {
   const cg = record.computedGrade;
   if (!cg) return "missing";
+  if (isIncomplete(cg)) return "inc";
   const f = cg.finalGrade;
   if (f === undefined || f === null || Number.isNaN(Number(f))) return "missing";
 
@@ -329,20 +376,36 @@ function finalGradeBandFromComputed(record: GradeRecord): FinalGradeBand {
 }
 
 function finalGradeClassName(record: GradeRecord, variant: "table-cell" | "inline" = "table-cell"): string {
-  const base =
-    variant === "table-cell"
-      ? "whitespace-nowrap px-3 py-2 font-medium rounded-sm"
-      : "inline-block rounded-sm px-2 py-1 font-medium";
   const band = finalGradeBandFromComputed(record);
+  if (variant === "inline") {
+    const base = "inline-block rounded-sm px-2 py-1 font-medium";
+    switch (band) {
+      case "high":
+        return `${base} bg-success-muted/90 text-success`;
+      case "cnd":
+        return `${base} bg-warning-muted/90 text-warning`;
+      case "mid":
+      case "inc":
+        return `${base} bg-warning-muted/70 text-warning`;
+      case "low":
+        return `${base} bg-danger/12 text-danger`;
+      case "missing":
+        return `${base} text-foreground-muted`;
+    }
+  }
+  // The table cell is frozen while the scores scroll under it, so its tint is a gradient laid over an opaque
+  // surface colour: a plain translucent background would let the scrolled scores show through.
+  const base = "whitespace-nowrap rounded-sm bg-surface px-3 py-2 font-medium";
   switch (band) {
     case "high":
-      return `${base} bg-success-muted/90 text-success`;
+      return `${base} bg-linear-to-b from-success-muted/90 to-success-muted/90 text-success`;
     case "cnd":
-      return `${base} bg-warning-muted/90 text-warning`;
+      return `${base} bg-linear-to-b from-warning-muted/90 to-warning-muted/90 text-warning`;
     case "mid":
-      return `${base} bg-warning-muted/70 text-warning`;
+    case "inc":
+      return `${base} bg-linear-to-b from-warning-muted/70 to-warning-muted/70 text-warning`;
     case "low":
-      return `${base} bg-danger/12 text-danger`;
+      return `${base} bg-linear-to-b from-danger/12 to-danger/12 text-danger`;
     case "missing":
       return `${base} text-foreground-muted`;
   }
@@ -463,7 +526,7 @@ function RecordGradeGridEditor({
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="w-full min-w-[4rem] rounded border border-border bg-background px-2 py-1 text-sm font-mono text-foreground"
+                      className="w-full min-w-[4rem] rounded border border-border bg-surface px-2 py-1 text-sm font-mono text-foreground"
                       value={gradeValues[key] ?? ""}
                       onChange={(e) => onGradeChange(key, e.target.value)}
                       placeholder="—"
@@ -473,7 +536,7 @@ function RecordGradeGridEditor({
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="w-full min-w-[4rem] rounded border border-border bg-background px-2 py-1 text-sm font-mono text-foreground"
+                      className="w-full min-w-[4rem] rounded border border-border bg-surface px-2 py-1 text-sm font-mono text-foreground"
                       value={maxValues[key] ?? ""}
                       onChange={(e) => onMaxChange(key, e.target.value)}
                       placeholder="100"
@@ -489,7 +552,7 @@ function RecordGradeGridEditor({
         <label className="flex min-w-[12rem] flex-1 flex-col gap-0.5 text-xs font-medium text-foreground">
           New column name
           <input
-            className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+            className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
             value={newKeyInput}
             onChange={(e) => onNewKeyInputChange(e.target.value)}
             placeholder="Matches CSV / grading formula key"
@@ -503,7 +566,7 @@ function RecordGradeGridEditor({
         </label>
         <button
           type="button"
-          className="rounded border border-border-strong bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
+          className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
           onClick={() => onAppendColumn()}
         >
           Add column
@@ -525,6 +588,13 @@ export function ExperimentalGradesPage() {
 
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
+  /** The term a new subject is created in; opens on the current one. */
+  const [newSubjectYear, setNewSubjectYear] = useState("");
+  const [newSubjectSemester, setNewSubjectSemester] = useState("");
+  /** The subject list's filters. */
+  const [listYear, setListYear] = useState(ALL);
+  const [listSemester, setListSemester] = useState(ALL);
 
   const [recordName, setRecordName] = useState("");
   const [recordNumber, setRecordNumber] = useState("");
@@ -576,6 +646,36 @@ export function ExperimentalGradesPage() {
   } | null>(null);
   const [recordSearch, setRecordSearch] = useState("");
 
+  /** The records table's own scroller, and the scrollbar strip above its headers that mirrors it. */
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [tableScroll, setTableScroll] = useState({ scrollWidth: 0, clientWidth: 0 });
+  const tableScrolls = tableScroll.scrollWidth > tableScroll.clientWidth + 1;
+
+  const subjectTerms = useMemo(() => distinctTerms(subjects.map(subjectTerm)), [subjects]);
+  const listYears = useMemo(() => {
+    const seen = new Map<string, GradeTerm>();
+    for (const term of subjectTerms) if (term.yearId && !seen.has(term.yearId)) seen.set(term.yearId, term);
+    return Array.from(seen.values()).sort(compareTermsNewestFirst);
+  }, [subjectTerms]);
+  const hasUndatedSubjects = subjectTerms.some((term) => term.yearId === null);
+  const listSemesters = useMemo(() => {
+    if (listYear === NO_YEAR) return [];
+    const values = new Set<number | null>();
+    for (const term of subjectTerms) if (term.yearId && (listYear === ALL || term.yearId === listYear)) values.add(term.semester);
+    return Array.from(values).sort((a, b) => (b ?? 0) - (a ?? 0));
+  }, [subjectTerms, listYear]);
+  const filteredSubjects = useMemo(
+    () =>
+      subjects.filter((subject) => {
+        const yearOk = listYear === ALL || (subject.academicYearId ?? NO_YEAR) === listYear;
+        const semesterOk = listSemester === ALL || String(subject.semester ?? NO_SEMESTER) === listSemester;
+        return yearOk && semesterOk;
+      }),
+    [subjects, listYear, listSemester]
+  );
+  const listFiltered = listYear !== ALL || listSemester !== ALL;
+
   const selectedSubject = useMemo(
     () => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
     [subjects, selectedSubjectId]
@@ -587,27 +687,42 @@ export function ExperimentalGradesPage() {
     [selectedSubject]
   );
 
-  /** Column order: grading-system keys first (when set), then any other keys found on records, sorted. */
+  /**
+   * The subject's score columns: every item any record has a maximum (the row under the header on import) or a score for,
+   * so a column shows up as soon as it is defined, before anyone has a score in it. Grading-formula items come first, in the
+   * formula's order; the rest follow, numbered names in natural order (Lab 2 before Lab 10).
+   */
   const gradeColumnKeys = useMemo(() => {
     const fromSystem =
       selectedSubject?.gradingSystem != null
         ? collectGradeKeys(normalizeGradingSystemFromUnknown(selectedSubject.gradingSystem))
         : [];
-    const fromRecords = new Set<string>();
+    const present = new Set<string>();
     for (const r of records) {
-      if (r.grades && typeof r.grades === "object" && !Array.isArray(r.grades)) {
-        Object.keys(r.grades).forEach((k) => fromRecords.add(k));
+      for (const source of [r.grades, r.maxScores]) {
+        if (source && typeof source === "object" && !Array.isArray(source)) Object.keys(source).forEach((k) => present.add(k));
       }
     }
     const ordered: string[] = [];
     for (const k of fromSystem) {
-      if (fromRecords.has(k)) ordered.push(k);
+      if (present.has(k) && !ordered.includes(k)) ordered.push(k);
     }
-    const rest = Array.from(fromRecords)
+    const rest = Array.from(present)
       .filter((k) => !ordered.includes(k))
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
     return [...ordered, ...rest];
   }, [records, selectedSubject?.gradingSystem]);
+
+  /** The maximum each column is out of, taken from the first record that has one, for pre-filling new records. */
+  const columnMaxScores = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const r of records) {
+      for (const [key, value] of Object.entries(r.maxScores ?? {})) {
+        if (out[key] === undefined && Number.isFinite(Number(value))) out[key] = Number(value);
+      }
+    }
+    return out;
+  }, [records]);
 
   /** Keys required for “completion” — grading-system formula keys when set, else visible columns. */
   const expectedKeysForCompletion = useMemo(() => {
@@ -621,16 +736,16 @@ export function ExperimentalGradesPage() {
     return gradeColumnKeys;
   }, [selectedSubject?.gradingSystem, gradeColumnKeys]);
 
-  /** Passing % from grading settings — drives score-cell green/amber/red vs each column’s max (default 75). */
+  /** Passing % from grading settings — drives score-cell green/amber/red vs each column’s max (the MMSU default, 50, when unset). */
   const passingPercentForHighlights = useMemo(() => {
-    if (!selectedSubject?.gradingSystem) return 75;
+    if (!selectedSubject?.gradingSystem) return DEFAULT_PASSING_PERCENT;
     const n = normalizeGradingSystemFromUnknown(selectedSubject.gradingSystem);
     const pg = n.passingGrade;
     if (pg !== undefined && Number.isFinite(pg) && pg >= 0 && pg <= 100) return pg;
-    return 75;
+    return DEFAULT_PASSING_PERCENT;
   }, [selectedSubject?.gradingSystem]);
 
-  const recordTableColCount = useMemo(() => 9 + gradeColumnKeys.length, [gradeColumnKeys.length]);
+  const recordTableColCount = useMemo(() => 6 + gradeColumnKeys.length, [gradeColumnKeys.length]);
   const filteredRecords = useMemo(() => {
     const q = recordSearch.trim().toLowerCase();
     if (!q) return records;
@@ -644,7 +759,8 @@ export function ExperimentalGradesPage() {
     const mv: Record<string, string> = {};
     for (const k of keys) {
       gv[k] = "";
-      mv[k] = "";
+      // A new student is out of the same maximum as the rest of the class.
+      mv[k] = columnMaxScores[k] !== undefined ? String(columnMaxScores[k]) : "";
     }
     setAddGradeValues(gv);
     setAddMaxValues(mv);
@@ -695,6 +811,20 @@ export function ExperimentalGradesPage() {
   }, []);
 
   useEffect(() => {
+    apiClient
+      .get<AcademicYear[]>("/academic-years/for-schedules")
+      .then(({ data }) => {
+        setAcademicYears(data);
+        const current = currentTerm(data);
+        if (current) {
+          setNewSubjectYear(current.academicYearId);
+          setNewSubjectSemester(String(current.semester));
+        }
+      })
+      .catch(() => setAcademicYears([]));
+  }, []);
+
+  useEffect(() => {
     if (!selectedSubjectId) {
       setRecords([]);
       setViewers([]);
@@ -718,6 +848,23 @@ export function ExperimentalGradesPage() {
     }
   }, [selectedSubjectId]);
 
+  // Track how wide the table is against its box, so the top scrollbar matches and only shows when there is something to scroll.
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const measure = () => setTableScroll({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, [selectedSubjectId, gradeColumnKeys.length, filteredRecords.length]);
+
+  /** Keeps the top scrollbar and the table moving together (setting an equal scrollLeft fires no event, so this cannot loop). */
+  const mirrorScroll = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (from && to && Math.round(to.scrollLeft) !== Math.round(from.scrollLeft)) to.scrollLeft = from.scrollLeft;
+  };
+
   const createSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newSubjectName.trim();
@@ -731,6 +878,8 @@ export function ExperimentalGradesPage() {
       await apiClient.post("/grade-subjects", {
         name,
         code: newSubjectCode.trim() || null,
+        academicYearId: newSubjectYear || null,
+        semester: newSubjectYear && newSubjectSemester ? Number(newSubjectSemester) : null,
       });
       setNewSubjectName("");
       setNewSubjectCode("");
@@ -751,6 +900,19 @@ export function ExperimentalGradesPage() {
           ? err.message
           : "Could not create grade subject.";
       setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateSubjectTerm = async (subject: GradeSubject, academicYearId: string | null, semester: number | null) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { data } = await apiClient.patch<GradeSubject>(`/grade-subjects/${subject.id}`, { academicYearId, semester });
+      setSubjects((prev) => prev.map((s) => (s.id === data.id ? { ...s, ...data } : s)));
+    } catch (err: unknown) {
+      setError(isAxiosError(err) ? String(err.response?.data?.message ?? err.message) : "Could not update the term.");
     } finally {
       setSaving(false);
     }
@@ -1273,22 +1435,55 @@ export function ExperimentalGradesPage() {
 
       {error && <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         <section className="space-y-3 rounded border border-border bg-surface p-4">
           <h2 className="text-lg font-medium text-foreground">Grade subjects</h2>
           <form className="space-y-2" onSubmit={createSubject}>
             <input
-              className="w-full rounded border border-border-strong bg-background px-3 py-2 text-sm"
+              className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm"
               placeholder="Subject name"
+              aria-label="Subject name"
               value={newSubjectName}
               onChange={(e) => setNewSubjectName(e.target.value)}
             />
             <input
-              className="w-full rounded border border-border-strong bg-background px-3 py-2 text-sm"
+              className="w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm"
               placeholder="Code (optional)"
+              aria-label="Subject code"
               value={newSubjectCode}
               onChange={(e) => setNewSubjectCode(e.target.value)}
             />
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                Academic year
+                <select
+                  className={filterSelectClass}
+                  value={newSubjectYear}
+                  onChange={(e) => {
+                    setNewSubjectYear(e.target.value);
+                    if (!e.target.value) setNewSubjectSemester("");
+                  }}
+                >
+                  <option value="">Not set</option>
+                  {academicYears.map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                Semester
+                <select className={filterSelectClass} value={newSubjectSemester} onChange={(e) => setNewSubjectSemester(e.target.value)} disabled={!newSubjectYear}>
+                  <option value="">Not set</option>
+                  {[1, 2, 3].map((n) => (
+                    <option key={n} value={n}>
+                      {SEMESTER_LABEL[n]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <button
               type="submit"
               disabled={saving}
@@ -1298,14 +1493,73 @@ export function ExperimentalGradesPage() {
             </button>
           </form>
 
+          {subjects.length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3" role="group" aria-label="Filter grade subjects by term">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                  Filter: year
+                  <select
+                    className={filterSelectClass}
+                    value={listYear}
+                    onChange={(e) => {
+                      setListYear(e.target.value);
+                      setListSemester(ALL);
+                    }}
+                  >
+                    <option value={ALL}>All years</option>
+                    {listYears.map((year) => (
+                      <option key={year.yearId} value={year.yearId!}>
+                        {year.yearName}
+                      </option>
+                    ))}
+                    {hasUndatedSubjects && <option value={NO_YEAR}>No term set</option>}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                  Filter: semester
+                  <select
+                    className={`${filterSelectClass} disabled:opacity-60`}
+                    value={listSemester}
+                    onChange={(e) => setListSemester(e.target.value)}
+                    disabled={listYear === NO_YEAR}
+                  >
+                    <option value={ALL}>All semesters</option>
+                    {listSemesters.map((semester) => (
+                      <option key={semester ?? NO_SEMESTER} value={semester === null ? NO_SEMESTER : String(semester)}>
+                        {semester === null ? "Semester not set" : SEMESTER_LABEL[semester]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-foreground-muted">
+                <span role="status" aria-live="polite">
+                  Showing {filteredSubjects.length} of {subjects.length}
+                </span>
+                {listFiltered && (
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setListYear(ALL);
+                      setListSemester(ALL);
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            {subjects.map((subject) => (
+            {filteredSubjects.map((subject) => (
               <div
                 key={subject.id}
                 className={`w-full rounded border px-3 py-2 ${
                   selectedSubjectId === subject.id
                     ? "border-primary bg-primary-muted"
-                    : "border-border bg-background hover:bg-surface-hover"
+                    : "border-border bg-surface hover:bg-surface-hover"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -1318,6 +1572,7 @@ export function ExperimentalGradesPage() {
                   </button>
                   <span className="text-xs text-foreground-muted">{subject.code || "—"}</span>
                 </div>
+                <p className="mt-0.5 text-xs text-foreground-muted">{termLabel(subjectTerm(subject))}</p>
                 <div className="mt-1 flex items-center justify-between text-xs text-foreground-muted">
                   <span>{subject._count.records} records</span>
                   <button
@@ -1333,10 +1588,13 @@ export function ExperimentalGradesPage() {
             {!loading && subjects.length === 0 && (
               <p className="text-sm text-foreground-muted">No grade subjects yet.</p>
             )}
+            {!loading && subjects.length > 0 && filteredSubjects.length === 0 && (
+              <p className="text-sm text-foreground-muted">No grade subjects in this term. Change the filters or clear them.</p>
+            )}
           </div>
         </section>
 
-        <section className="space-y-4 rounded border border-border bg-surface p-4">
+        <section className="min-w-0 space-y-4 rounded border border-border bg-surface p-4">
           {!selectedSubject ? (
             <p className="text-sm text-foreground-muted">Select a grade subject to manage records and sharing.</p>
           ) : (
@@ -1358,12 +1616,50 @@ export function ExperimentalGradesPage() {
                       {viewers.length} shared viewer{viewers.length === 1 ? "" : "s"}
                     </button>
                   </p>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                      Academic year
+                      <select
+                        className={`${filterSelectClass} min-w-[9rem]`}
+                        value={selectedSubject.academicYearId ?? ""}
+                        disabled={saving}
+                        onChange={(e) => void updateSubjectTerm(selectedSubject, e.target.value || null, e.target.value ? selectedSubject.semester ?? null : null)}
+                      >
+                        <option value="">Not set</option>
+                        {selectedSubject.academicYear && !academicYears.some((y) => y.id === selectedSubject.academicYear!.id) && (
+                          <option value={selectedSubject.academicYear.id}>{selectedSubject.academicYear.name}</option>
+                        )}
+                        {academicYears.map((year) => (
+                          <option key={year.id} value={year.id}>
+                            {year.isActive ? `${year.name} (current)` : year.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
+                      Semester
+                      <select
+                        className={`${filterSelectClass} min-w-[8rem]`}
+                        value={selectedSubject.semester ?? ""}
+                        disabled={saving || !selectedSubject.academicYearId}
+                        onChange={(e) => void updateSubjectTerm(selectedSubject, selectedSubject.academicYearId ?? null, e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">Not set</option>
+                        {[1, 2, 3].map((n) => (
+                          <option key={n} value={n}>
+                            {SEMESTER_LABEL[n]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="pb-1.5 text-xs text-foreground-muted">Students can filter their grades by this term.</p>
+                  </div>
                 </div>
 
                 <div
                   role="toolbar"
                   aria-label="Grade subject actions"
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
                 >
                   <button
                     type="button"
@@ -1375,7 +1671,10 @@ export function ExperimentalGradesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAddRecordOpen(true)}
+                    onClick={() => {
+                      initAddRecordGradeGrid();
+                      setAddRecordOpen(true);
+                    }}
                     disabled={saving}
                     className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-60"
                   >
@@ -1383,7 +1682,10 @@ export function ExperimentalGradesPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setImportOpen(true)}
+                    onClick={() => {
+                      setImportDialogError(null);
+                      setImportOpen(true);
+                    }}
                     disabled={saving}
                     className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-60"
                   >
@@ -1445,7 +1747,7 @@ export function ExperimentalGradesPage() {
                         Name
                         <input
                           required
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           value={recordName}
                           onChange={(e) => setRecordName(e.target.value)}
                         />
@@ -1454,7 +1756,7 @@ export function ExperimentalGradesPage() {
                         Student number
                         <input
                           required
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           value={recordNumber}
                           onChange={(e) => setRecordNumber(e.target.value)}
                         />
@@ -1462,7 +1764,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Email
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           type="email"
                           value={recordEmail}
                           onChange={(e) => setRecordEmail(e.target.value)}
@@ -1471,7 +1773,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Access code
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal font-mono text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal font-mono text-foreground"
                           placeholder="Leave blank to auto-generate"
                           value={recordCode}
                           onChange={(e) => setRecordCode(e.target.value)}
@@ -1497,7 +1799,7 @@ export function ExperimentalGradesPage() {
                       <Dialog.Close asChild>
                         <button
                           type="button"
-                          className="rounded border border-border-strong bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
+                          className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
                         >
                           Cancel
                         </button>
@@ -1523,10 +1825,19 @@ export function ExperimentalGradesPage() {
               >
                 <Dialog.Content
                   title="Import records"
-                  description="**Full replace:** existing records for this subject are removed, then data is loaded from your file or sheet (re-import = sync from source, not append). Row 1: headers. Row 2: max score per component (positive number). Row 3+: student rows — **blank / - / N/A** score cells are left empty (not 0) so status reflects true completeness. Optional email / access `code`. **Course**, **Remarks**, **Final grade** / computed total columns (not **Final Exam** scores) are ignored. Put a positive max in row 2 under **Final Exam** so that column imports. `*_max` columns optional — maxima come from row 2."
+                  description="Replaces every record of this subject with the contents of the file or sheet. Importing again syncs from your source; it does not add to what is already here."
                   className="!max-w-xl max-h-[90vh] overflow-y-auto"
                 >
                   <div className="mt-4 space-y-3 text-sm">
+                    <ul className="list-disc space-y-1 rounded border border-border bg-surface-muted/40 py-2 pl-7 pr-3 text-xs text-foreground-muted">
+                      <li>
+                        The header row can be anywhere in the first 20 rows, so a title or schedule above it is fine. It needs a <b>Name</b> column and a{" "}
+                        <b>Student Number</b> column. <b>Email</b> and access <b>Code</b> columns are optional.
+                      </li>
+                      <li>The row directly under the header holds the <b>maximum score</b> of each column. Only columns with a positive maximum are imported.</li>
+                      <li>Student rows follow. A blank, &quot;-&quot; or &quot;N/A&quot; score is left empty, not stored as 0.</li>
+                      <li>Course, Remarks and Final Grade / total columns are ignored. To import final exam scores, give the Final Exam column a maximum.</li>
+                    </ul>
                     {importDialogError && (
                       <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
                         {importDialogError}
@@ -1535,7 +1846,7 @@ export function ExperimentalGradesPage() {
                     <button
                       type="button"
                       onClick={downloadCsvTemplate}
-                      className="rounded border border-border-strong bg-background px-3 py-1.5 text-xs hover:bg-surface-hover"
+                      className="rounded border border-border-strong bg-surface px-3 py-1.5 text-xs hover:bg-surface-hover"
                     >
                       Download CSV template
                     </button>
@@ -1547,6 +1858,7 @@ export function ExperimentalGradesPage() {
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) void importCsvRecords(file);
+                          e.target.value = "";
                         }}
                         className="text-xs"
                       />
@@ -1567,7 +1879,7 @@ export function ExperimentalGradesPage() {
                         type="button"
                         disabled={!googleSheetUrl.trim() || saving}
                         onClick={() => void importFromGoogleSheet()}
-                        className="rounded border border-border-strong bg-background px-2 py-1 text-xs hover:bg-surface-hover disabled:opacity-50"
+                        className="rounded border border-border-strong bg-surface px-2 py-1 text-xs hover:bg-surface-hover disabled:opacity-50"
                       >
                         Import/Update from sheet
                       </button>
@@ -1648,7 +1960,7 @@ export function ExperimentalGradesPage() {
                         <Dialog.Close asChild>
                           <button
                             type="button"
-                            className="rounded border border-border-strong bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"
+                            className="rounded border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover"
                           >
                             Close
                           </button>
@@ -1681,7 +1993,7 @@ export function ExperimentalGradesPage() {
                       onClick={async () => {
                         if (await sendAccessEmails(false)) setSendEmailOpen(false);
                       }}
-                      className="rounded border border-border-strong bg-background px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50"
+                      className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50"
                     >
                       Send to all records
                     </button>
@@ -1703,7 +2015,7 @@ export function ExperimentalGradesPage() {
                 <Dialog.Content title="Share access" description="Invite staff to view or edit this grade subject." className="!max-w-lg max-h-[90vh] overflow-y-auto">
                   <form className="mt-4 mb-3 flex flex-wrap gap-2" onSubmit={addViewer}>
                     <select
-                      className="min-w-[200px] flex-1 rounded border border-border-strong bg-background px-2 py-1.5 text-sm"
+                      className="min-w-[200px] flex-1 rounded border border-border-strong bg-surface px-2 py-1.5 text-sm"
                       value={candidateId}
                       onChange={(e) => setCandidateId(e.target.value)}
                     >
@@ -1756,7 +2068,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Name
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           value={editRecordName}
                           onChange={(e) => setEditRecordName(e.target.value)}
                         />
@@ -1764,7 +2076,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Student number
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           value={editRecordNumber}
                           onChange={(e) => setEditRecordNumber(e.target.value)}
                         />
@@ -1772,7 +2084,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Email
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground"
                           type="email"
                           value={editRecordEmail}
                           onChange={(e) => setEditRecordEmail(e.target.value)}
@@ -1781,7 +2093,7 @@ export function ExperimentalGradesPage() {
                       <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground">
                         Access code
                         <input
-                          className="rounded border border-border-strong bg-background px-2 py-1.5 text-sm font-normal text-foreground font-mono"
+                          className="rounded border border-border-strong bg-surface px-2 py-1.5 text-sm font-normal text-foreground font-mono"
                           value={editRecordCode}
                           onChange={(e) => setEditRecordCode(e.target.value)}
                         />
@@ -1832,7 +2144,7 @@ export function ExperimentalGradesPage() {
                     <Dialog.Close asChild>
                       <button
                         type="button"
-                        className="rounded border border-border-strong bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
+                        className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover"
                       >
                         Cancel
                       </button>
@@ -1914,15 +2226,9 @@ export function ExperimentalGradesPage() {
                         <dt className="text-foreground-muted">Final</dt>
                         <dd className={finalGradeClassName(viewRecord, "inline")}>
                           <div className="flex flex-col gap-0.5">
-                            <span>{viewRecord.computedGrade?.finalGrade ?? "—"}</span>
-                            {(viewRecord.computedGrade?.remarks || viewRecord.computedGrade?.letterGrade) && (
-                              <span className="text-xs font-semibold text-inherit">
-                                {viewRecord.computedGrade?.remarks
-                                  ? viewRecord.computedGrade?.letterGrade
-                                    ? `${viewRecord.computedGrade.remarks} · ${viewRecord.computedGrade.letterGrade}`
-                                    : viewRecord.computedGrade.remarks
-                                  : viewRecord.computedGrade?.letterGrade}
-                              </span>
+                            <span>{finalGradeText(viewRecord.computedGrade)}</span>
+                            {finalGradeSubtext(viewRecord.computedGrade) && (
+                              <span className="text-xs font-semibold text-inherit">{finalGradeSubtext(viewRecord.computedGrade)}</span>
                             )}
                             {viewRecord.computedGrade?.passed !== null &&
                               viewRecord.computedGrade?.passed !== undefined &&
@@ -1952,7 +2258,10 @@ export function ExperimentalGradesPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {Object.keys(viewRecord.grades ?? {}).map((key) => (
+                            {[
+                              ...gradeColumnKeys.filter((key) => key in (viewRecord.grades ?? {})),
+                              ...Object.keys(viewRecord.grades ?? {}).filter((key) => !gradeColumnKeys.includes(key)),
+                            ].map((key) => (
                               <tr key={key} className="border-t border-border">
                                 <td className="px-2 py-1 text-foreground">{key}</td>
                                 <td className={gradeCellClassName(viewRecord, key, passingPercentForHighlights)}>
@@ -1966,12 +2275,19 @@ export function ExperimentalGradesPage() {
                       {viewRecord.computedGrade != null && (
                         <div>
                           <p className="mb-1 text-xs font-medium text-foreground-muted">Computed grade details</p>
-                          <div className="rounded border border-border bg-background p-2">
+                          <div className="rounded border border-border bg-surface p-2">
                             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                               <dt className="text-foreground-muted">Final grade</dt>
-                              <dd className="font-medium text-foreground">
-                                {viewRecord.computedGrade.finalGrade ?? "—"}
-                              </dd>
+                              <dd className="font-medium text-foreground">{finalGradeText(viewRecord.computedGrade)}</dd>
+                              {isIncomplete(viewRecord.computedGrade) && (
+                                <>
+                                  <dt className="text-foreground-muted">No score for</dt>
+                                  <dd className="text-warning">
+                                    {(viewRecord.computedGrade.missingKeys ?? []).join(", ") || "—"}
+                                    <span className="block text-foreground-muted">Enter 0 for an item to count it as zero, then compute again.</span>
+                                  </dd>
+                                </>
+                              )}
                               <dt className="text-foreground-muted">Equivalent</dt>
                               <dd className="text-foreground">
                                 {viewRecord.computedGrade.letterGrade ?? "—"}
@@ -2034,7 +2350,7 @@ export function ExperimentalGradesPage() {
                 >
                   {regenerateCodeTarget && (
                     <div className="mt-4 space-y-3 text-sm">
-                      <p className="rounded border border-border bg-background px-3 py-2 text-foreground">
+                      <p className="rounded border border-border bg-surface px-3 py-2 text-foreground">
                         <span className="text-foreground-muted">Student: </span>
                         <span className="font-medium">{regenerateCodeTarget.studentName}</span>
                         <span className="text-foreground-muted"> · #</span>
@@ -2077,7 +2393,7 @@ export function ExperimentalGradesPage() {
                 >
                   {deleteRecordTarget && (
                     <div className="mt-4 space-y-3 text-sm">
-                      <p className="rounded border border-border bg-background px-3 py-2 text-foreground">
+                      <p className="rounded border border-border bg-surface px-3 py-2 text-foreground">
                         <span className="text-foreground-muted">Student: </span>
                         <span className="font-medium">{deleteRecordTarget.studentName}</span>
                         <span className="text-foreground-muted"> · #</span>
@@ -2101,7 +2417,7 @@ export function ExperimentalGradesPage() {
                           spellCheck={false}
                           value={deleteRecordChallengeInput}
                           onChange={(e) => setDeleteRecordChallengeInput(e.target.value.toUpperCase())}
-                          className="rounded border border-border-strong bg-background px-3 py-2 font-mono text-sm uppercase tracking-wide text-foreground"
+                          className="rounded border border-border-strong bg-surface px-3 py-2 font-mono text-sm uppercase tracking-wide text-foreground"
                           placeholder="Type the code"
                         />
                       </label>
@@ -2143,35 +2459,67 @@ export function ExperimentalGradesPage() {
                   value={recordSearch}
                   onChange={(e) => setRecordSearch(e.target.value)}
                   placeholder="Search: name, number, email, code, grades, final, remarks…"
-                  className="w-full max-w-md rounded border border-border-strong bg-background px-3 py-1.5 text-sm text-foreground"
+                  className="w-full max-w-md rounded border border-border-strong bg-surface px-3 py-1.5 text-sm text-foreground"
                 />
                 <p className="text-xs text-foreground-muted">
                   Showing {filteredRecords.length} of {records.length}
                 </p>
               </div>
-              <div className="overflow-x-auto rounded border border-border">
+              <div>
+              {/* A second horizontal scrollbar directly above the headers, mirroring the table's own, so sideways scrolling
+                  does not need a trip to the bottom of the table. */}
+              {tableScrolls && (
+                <div
+                  ref={topScrollRef}
+                  data-testid="grid-top-scrollbar"
+                  aria-hidden
+                  onScroll={() => mirrorScroll(topScrollRef.current, tableScrollRef.current)}
+                  className="overflow-x-scroll overflow-y-hidden rounded-t border border-b-0 border-border bg-surface-muted"
+                >
+                  <div style={{ width: tableScroll.scrollWidth, height: 1 }} />
+                </div>
+              )}
+              <div
+                ref={tableScrollRef}
+                onScroll={() => mirrorScroll(tableScrollRef.current, topScrollRef.current)}
+                // Bounded height with its own vertical scroll: the header row stays pinned and the horizontal scrollbar at the
+                // bottom is always on screen, however many students there are.
+                className={`max-h-[min(75vh,56rem)] overflow-x-auto overflow-y-auto border border-border ${tableScrolls ? "rounded-b" : "rounded"}`}
+              >
                 <table className="min-w-max w-full table-fixed border-separate border-spacing-0 text-sm">
                   <thead className="bg-surface-muted text-left">
-                    <tr>
-                      <th className="sticky left-0 z-[4] box-border w-10 min-w-10 bg-surface-muted px-2 py-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
-                        <input
-                          type="checkbox"
-                          checked={filteredRecords.length > 0 && filteredRecords.every((r) => selectedRecordIds.has(r.id))}
-                          onChange={(e) => toggleAllRecordsSelection(e.target.checked)}
-                          aria-label="Select all records"
-                        />
+                    {/* Bottom-aligned, so one-line headers sit on the same baseline as wrapped ones. */}
+                    <tr className="align-bottom">
+                      {/* The one frozen column: every frozen cell costs a compositor layer per row, which is what made
+                          horizontal scrolling stutter. Checkbox, name and the row's actions live together in it. */}
+                      <th className="sticky top-0 z-[5] box-border w-64 min-w-64 bg-surface-muted px-2 py-2 xl:left-0 xl:z-[7] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={filteredRecords.length > 0 && filteredRecords.every((r) => selectedRecordIds.has(r.id))}
+                            onChange={(e) => toggleAllRecordsSelection(e.target.checked)}
+                            aria-label="Select all records"
+                          />
+                          <span>Student</span>
+                        </div>
                       </th>
-                      <th className="sticky left-10 z-[3] box-border w-44 min-w-44 whitespace-nowrap bg-surface-muted px-3 py-2 overflow-hidden text-ellipsis">
-                        Student
+                      <th className="sticky top-0 z-[5] box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2">
+                        Final
                       </th>
-                      <th className="sticky left-[13.5rem] z-[3] box-border w-32 min-w-32 whitespace-nowrap bg-surface-muted px-3 py-2 overflow-hidden text-ellipsis">
+                      <th
+                        className="sticky top-0 z-[5] box-border w-24 min-w-24 whitespace-nowrap bg-surface-muted py-2 pl-3 pr-1"
+                        title="Filled grade keys vs grading formula (or visible columns)"
+                      >
+                        Status
+                      </th>
+                      <th className="sticky top-0 z-[5] box-border w-32 min-w-32 overflow-hidden text-ellipsis whitespace-nowrap border-l border-border bg-surface-muted px-3 py-2">
                         Number
                       </th>
-                      <th className="sticky left-[21.5rem] z-[3] box-border w-52 min-w-52 whitespace-nowrap bg-surface-muted px-3 py-2 overflow-hidden text-ellipsis">
+                      <th className="sticky top-0 z-[5] box-border w-52 min-w-52 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-3 py-2">
                         Email
                       </th>
                       <th
-                        className="sticky left-[34.5rem] z-[3] box-border w-24 min-w-24 whitespace-nowrap bg-surface-muted px-2 py-2 overflow-hidden text-ellipsis"
+                        className="sticky top-0 z-[5] box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2"
                         title="Access code — click a cell below to copy"
                       >
                         Code
@@ -2179,79 +2527,97 @@ export function ExperimentalGradesPage() {
                       {gradeColumnKeys.map((key, idx) => (
                         <th
                           key={key}
-                          className={`box-border max-w-[10rem] min-w-[4.5rem] whitespace-nowrap px-2 py-2 text-center font-medium text-foreground ${idx === 0 ? "border-l border-border" : ""}`}
+                          className={`sticky top-0 z-[5] box-border w-[4.5rem] min-w-[4.5rem] max-w-[4.5rem] bg-surface-muted px-1.5 py-2 text-center align-bottom text-xs font-medium leading-tight text-foreground [overflow-wrap:anywhere] ${idx === 0 ? "border-l border-border" : ""}`}
                           title={key}
                         >
-                          <span className="block truncate">{key}</span>
+                          {/* Wraps inside the column's width, so a long name makes the header taller, not the column wider. */}
+                          <span className="block">{key}</span>
                         </th>
                       ))}
-                      <th
-                        aria-hidden
-                        className="box-border w-0 min-w-0 bg-surface-muted p-0"
-                      />
-                      <th
-                        className="sticky right-[15rem] z-[3] box-border w-24 min-w-24 whitespace-nowrap border-l border-border bg-surface-muted pl-3 pr-1 py-2 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.08)]"
-                        title="Filled grade keys vs grading formula (or visible columns)"
-                      >
-                        Status
-                      </th>
-                      <th className="sticky right-40 z-[3] box-border w-22 min-w-20 whitespace-nowrap bg-surface-muted px-2 py-2 overflow-hidden text-ellipsis">
-                        Final
-                      </th>
-                      <th className="sticky right-0 z-[4] box-border w-42 min-w-42 bg-surface-muted px-2 py-2 text-right font-medium text-foreground shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.08)]">
-                        Actions
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRecords.map((record) => (
-                      <tr key={record.id} className="border-t border-border">
-                        <td className="sticky left-0 z-[2] box-border w-10 min-w-10 bg-background px-2 py-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
-                          <input
-                            type="checkbox"
-                            checked={selectedRecordIds.has(record.id)}
-                            onChange={(e) => toggleRecordSelection(record.id, e.target.checked)}
-                            aria-label={`Select ${record.studentName}`}
-                          />
-                        </td>
-                        <td className="sticky left-10 z-[1] box-border w-44 min-w-44 whitespace-nowrap bg-background px-3 py-2 text-foreground">
-                          <div className="truncate" title={record.studentName}>
-                            {record.studentName}
+                      <tr key={record.id} className="[&>td]:border-t [&>td]:border-border">
+                        <td className="box-border w-64 min-w-64 bg-surface px-2 py-2 xl:sticky xl:left-0 xl:z-[2] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              className="mt-2 shrink-0"
+                              checked={selectedRecordIds.has(record.id)}
+                              onChange={(e) => toggleRecordSelection(record.id, e.target.checked)}
+                              aria-label={`Select ${record.studentName}`}
+                            />
+                            {/* The whole name, wrapping onto more lines: many students share a first or last name, so a clipped name hides what tells them apart. */}
+                            <div className="min-w-0 flex-1 whitespace-normal break-words py-1 leading-snug text-foreground">{record.studentName}</div>
+                            <button
+                              type="button"
+                              title="Edit record"
+                              aria-label={`Edit record for ${record.studentName}`}
+                              className="shrink-0 rounded p-1.5 text-primary hover:bg-primary-muted"
+                              onClick={() => openEditRecord(record)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <DropdownMenu.Root>
+                              <DropdownMenu.Trigger asChild>
+                                <button
+                                  type="button"
+                                  title="More actions"
+                                  aria-label={`More actions for ${record.studentName}`}
+                                  className="shrink-0 rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </DropdownMenu.Trigger>
+                              <DropdownMenu.Content align="start">
+                                <DropdownMenu.Item onSelect={() => setViewRecord(record)}>
+                                  <Eye className="mr-2 h-4 w-4" aria-hidden /> View details
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item disabled={saving} onSelect={() => void sendAccessEmailOne(record.id)}>
+                                  <Mail className="mr-2 h-4 w-4" aria-hidden /> Send access email
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item onSelect={() => void copyRecordLookupLink(record)}>
+                                  <Link2 className="mr-2 h-4 w-4" aria-hidden /> Copy public lookup link
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item onSelect={() => void copyRecordAccessCode(record.code)}>
+                                  <Copy className="mr-2 h-4 w-4" aria-hidden /> Copy access code
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                  disabled={saving}
+                                  onSelect={() =>
+                                    openRegenerateCodeConfirm({
+                                      id: record.id,
+                                      studentName: record.studentName,
+                                      studentNumber: record.studentNumber,
+                                    })
+                                  }
+                                >
+                                  <KeyRound className="mr-2 h-4 w-4" aria-hidden /> Regenerate access code
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item className="text-danger focus:bg-danger-muted" onSelect={() => openDeleteRecordConfirm(record)}>
+                                  <Trash2 className="mr-2 h-4 w-4" aria-hidden /> Delete record
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Content>
+                            </DropdownMenu.Root>
                           </div>
                         </td>
-                        <td className="sticky left-[13.5rem] z-[1] box-border w-32 min-w-32 whitespace-nowrap bg-background px-3 py-2 font-mono text-xs text-foreground">
-                          <div className="truncate" title={record.studentNumber}>
-                            {record.studentNumber}
+                        <td className={`box-border w-24 min-w-24 align-top ${finalGradeClassName(record)}`}>
+                          <div className="flex flex-col gap-0.5">
+                            <span>{finalGradeText(record.computedGrade)}</span>
+                            {finalGradeSubtext(record.computedGrade) && (
+                              <span className="text-[10px] font-semibold text-inherit">{finalGradeSubtext(record.computedGrade)}</span>
+                            )}
+                            {record.computedGrade?.passed !== null &&
+                              record.computedGrade?.passed !== undefined &&
+                              !isStructuredOutcomeRemark(record.computedGrade?.remarks) && (
+                                <span className="text-[10px] font-medium text-inherit opacity-90">
+                                  {record.computedGrade.passed ? "Pass" : "Fail"}
+                                </span>
+                              )}
                           </div>
                         </td>
-                        <td className="sticky left-[21.5rem] z-[1] box-border w-52 min-w-52 bg-background px-3 py-2 text-xs text-foreground">
-                          <div className="truncate" title={record.email ?? undefined}>
-                            {record.email ?? "—"}
-                          </div>
-                          {record.email && record.emailSentAt && (
-                            <div className="mt-0.5 text-[10px] text-foreground-muted">Sent {shortSentAt(record.emailSentAt) ?? ""}</div>
-                          )}
-                        </td>
-                        <td className="sticky left-[34.5rem] z-[1] box-border w-24 min-w-24 whitespace-nowrap bg-background px-1 py-1 font-mono text-xs text-foreground align-middle">
-                          <button
-                            type="button"
-                            className="block max-w-full truncate rounded px-1 py-1 text-left hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            title="Copy access code"
-                            onClick={() => void copyRecordAccessCode(record.code)}
-                          >
-                            {record.code}
-                          </button>
-                        </td>
-                        {gradeColumnKeys.map((key, idx) => (
-                          <td
-                            key={`${record.id}-${key}`}
-                            className={`${gradeCellClassName(record, key, passingPercentForHighlights)} ${idx === 0 ? "border-l border-border" : ""}`}
-                          >
-                            {formatGradeCell(record, key)}
-                          </td>
-                        ))}
-                        <td aria-hidden className="w-2 min-w-2 bg-background p-0" />
-                        <td className="sticky right-[15rem] z-[1] box-border w-24 min-w-24 border-l border-border bg-background pl-3 pr-1 py-2 align-top shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                        <td className="box-border w-24 min-w-24 bg-surface py-2 pl-3 pr-1 align-top">
                           {(() => {
                             const c = getRecordCompletion(record, expectedKeysForCompletion);
                             if (c.status === "na") {
@@ -2297,102 +2663,37 @@ export function ExperimentalGradesPage() {
                             );
                           })()}
                         </td>
-                        <td className={`sticky right-40 z-[1] box-border w-24 min-w-24 align-top ${finalGradeClassName(record)}`}>
-                          <div className="flex flex-col gap-0.5">
-                            <span>{record.computedGrade?.finalGrade ?? "—"}</span>
-                            {(record.computedGrade?.remarks || record.computedGrade?.letterGrade) && (
-                              <span className="text-[10px] font-semibold text-inherit">
-                                {record.computedGrade?.remarks
-                                  ? record.computedGrade?.letterGrade
-                                    ? `${record.computedGrade.remarks} · ${record.computedGrade.letterGrade}`
-                                    : record.computedGrade.remarks
-                                  : record.computedGrade?.letterGrade}
-                              </span>
-                            )}
-                            {record.computedGrade?.passed !== null &&
-                              record.computedGrade?.passed !== undefined &&
-                              !isStructuredOutcomeRemark(record.computedGrade?.remarks) && (
-                                <span className="text-[10px] font-medium text-inherit opacity-90">
-                                  {record.computedGrade.passed ? "Pass" : "Fail"}
-                                </span>
-                              )}
+                        <td className="box-border w-32 min-w-32 whitespace-nowrap border-l border-border bg-surface px-3 py-2 font-mono text-xs text-foreground">
+                          <div className="truncate" title={record.studentNumber}>
+                            {record.studentNumber}
                           </div>
                         </td>
-                        <td className="sticky right-0 z-[2] box-border w-44 min-w-44 bg-background px-1 py-1 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.06)]">
-                          <div className="flex flex-wrap items-center justify-end gap-0.5">
-                            <button
-                              type="button"
-                              title="View details"
-                              aria-label="View details"
-                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-                              onClick={() => setViewRecord(record)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Send access email"
-                              aria-label="Send access email"
-                              disabled={saving}
-                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
-                              onClick={() => void sendAccessEmailOne(record.id)}
-                            >
-                              <Mail className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Copy public lookup link"
-                              aria-label="Copy public lookup link"
-                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-                              onClick={() => void copyRecordLookupLink(record)}
-                            >
-                              <Link2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Copy access code"
-                              aria-label="Copy access code"
-                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground"
-                              onClick={() => void copyRecordAccessCode(record.code)}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Regenerate access code"
-                              aria-label="Regenerate access code"
-                              disabled={saving}
-                              className="rounded p-1.5 text-foreground-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
-                              onClick={() =>
-                                openRegenerateCodeConfirm({
-                                  id: record.id,
-                                  studentName: record.studentName,
-                                  studentNumber: record.studentNumber,
-                                })
-                              }
-                            >
-                              <KeyRound className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Edit record"
-                              aria-label="Edit record"
-                              className="rounded p-1.5 text-primary hover:bg-primary-muted"
-                              onClick={() => openEditRecord(record)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Delete record"
-                              aria-label="Delete record"
-                              className="rounded p-1.5 text-danger hover:bg-danger/10"
-                              onClick={() => openDeleteRecordConfirm(record)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                        <td className="box-border w-52 min-w-52 bg-surface px-3 py-2 text-xs text-foreground">
+                          <div className="truncate" title={record.email ?? undefined}>
+                            {record.email ?? "—"}
                           </div>
+                          {record.email && record.emailSentAt && (
+                            <div className="mt-0.5 text-[10px] text-foreground-muted">Sent {shortSentAt(record.emailSentAt) ?? ""}</div>
+                          )}
                         </td>
+                        <td className="box-border w-24 min-w-24 whitespace-nowrap bg-surface px-1 py-1 align-middle font-mono text-xs text-foreground">
+                          <button
+                            type="button"
+                            className="block max-w-full truncate rounded px-1 py-1 text-left hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            title="Copy access code"
+                            onClick={() => void copyRecordAccessCode(record.code)}
+                          >
+                            {record.code}
+                          </button>
+                        </td>
+                        {gradeColumnKeys.map((key, idx) => (
+                          <td
+                            key={`${record.id}-${key}`}
+                            className={`${gradeCellClassName(record, key, passingPercentForHighlights)} ${idx === 0 ? "border-l border-border" : ""}`}
+                          >
+                            {formatGradeCell(record, key)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                     {filteredRecords.length === 0 && (
@@ -2404,6 +2705,7 @@ export function ExperimentalGradesPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
               </div>
             </>
           )}

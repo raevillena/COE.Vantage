@@ -506,6 +506,9 @@ export function SchedulerPage() {
       .finally(() => setRoomLoadsLoading(false));
   }, [academicYearId, semester, selectedRoomId]);
 
+  /** Bumped when a subject was edited from the subject list, so the assignment form fetches the subjects again. */
+  const [subjectsVersion, setSubjectsVersion] = useState(0);
+
   const refreshLoads = useCallback(() => {
     if (!academicYearId) return;
     const params = new URLSearchParams({ academicYearId, semester: String(semester) });
@@ -1406,6 +1409,11 @@ export function SchedulerPage() {
                   yearLevel: viewMode === "class" ? currentYearLevel : undefined,
                   semester: viewMode === "class" ? semester : undefined,
                   classLoads: viewMode === "class" ? loads : undefined,
+                  academicYearId: academicYearId || undefined,
+                  onSubjectChanged: () => {
+                    setSubjectsVersion((v) => v + 1);
+                    refreshLoads();
+                  },
                 } satisfies CurriculumSubjectTreeProps)}
               />
             </div>
@@ -1637,6 +1645,7 @@ export function SchedulerPage() {
                 <AssignmentForm
                   academicYearId={academicYearId}
                   semester={semester}
+                  subjectsVersion={subjectsVersion}
                   initialValues={assignmentInitialValues}
                   formKey={editingLoadId ?? pendingAssignment?.subjectId ?? ""}
                   initialValuesReady={editingLoadId ? editingLoad?.id === editingLoadId : true}

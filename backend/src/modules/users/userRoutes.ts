@@ -7,6 +7,9 @@ import { z } from "zod";
 import type { Request, Response } from "express";
 import { singleImage, uploadedImage, AVATAR_MAX_BYTES } from "../../utils/imageUpload.js";
 import { getAvatar, removeAvatar, setAvatar, updateMyName } from "./userProfileService.js";
+import { getUserExperimentalGrants, setUserExperimentalGrants } from "../auth/authService.js";
+import { setExperimentalGrantsSchema } from "../auth/authSchemas.js";
+import type { ExperimentalFeatureKey } from "../auth/experimentalFeatures.js";
 import { createUserSchema, updateUserSchema } from "./userSchemas.js";
 
 const updateMyNameSchema = z.object({ body: z.object({ name: z.string().trim().min(1, "Name is required").max(100) }) });
@@ -59,6 +62,12 @@ router.get("/:id/avatar", async (req: Request, res: Response) => {
 router.get("/assignable-faculty", authorize("ADMIN", "DEAN", "CHAIRMAN"), listAssignableFaculty);
 
 router.get("/:id/prioritized-subjects", authorize("ADMIN", "DEAN", "CHAIRMAN"), getPrioritizedSubjects);
+router.get("/:id/experimental-features", authorize("ADMIN"), async (req: Request, res: Response) => {
+  res.json(await getUserExperimentalGrants(req.params.id));
+});
+router.put("/:id/experimental-features", authorize("ADMIN"), validate(setExperimentalGrantsSchema), async (req: Request, res: Response) => {
+  res.json(await setUserExperimentalGrants(req.params.id, (req.body as { granted: ExperimentalFeatureKey[] }).granted));
+});
 router.get("/:id", authorize("ADMIN"), getById);
 router.post("/", authorize("ADMIN", "CHAIRMAN"), validate(createUserSchema), create);
 router.patch("/:id", authorize("ADMIN", "CHAIRMAN"), validate(updateUserSchema), update);

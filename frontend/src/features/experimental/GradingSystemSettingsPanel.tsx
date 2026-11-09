@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { isAxiosError } from "axios";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
 import { computeFinalGradeWithPolicy } from "./computeFinalGradeClient";
 import {
   collectGradeKeys,
+  DEFAULT_PASSING_PERCENT,
   defaultGradeEquivalenceMmsu,
   defaultGradeEquivalencePh,
   defaultGradingSystemTemplate,
@@ -141,7 +142,100 @@ function CollapsibleCard({
   );
 }
 
-function emptyCategory(): GradingCategoryV1 {
+/**
+ * Which score columns count in a component. The choices are the columns the subject's records already have, so a
+ * key can no longer be mistyped. A key the formula still names but no record has is kept visible (flagged) until removed.
+ */
+function GradeKeyPicker({
+  available,
+  selected,
+  usedElsewhere,
+  onChange,
+}: {
+  available: string[];
+  selected: string[];
+  /** Key → "Category › Component" for keys another component already counts. */
+  usedElsewhere: Record<string, string>;
+  onChange: (keys: string[]) => void;
+}) {
+  const labelId = useId();
+  const missing = selected.filter((key) => !available.includes(key));
+  const duplicated = selected.filter((key) => usedElsewhere[key]);
+
+  const set = (next: string[]) => {
+    // Keep the picks in column order, with keys that no longer exist (if any) after them.
+    onChange([...available.filter((key) => next.includes(key)), ...next.filter((key) => !available.includes(key))]);
+  };
+  const toggle = (key: string, on: boolean) => set(on ? [...selected, key] : selected.filter((k) => k !== key));
+
+  return (
+    <div role="group" aria-labelledby={labelId} className="w-full basis-full">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <span id={labelId} className="text-xs font-medium text-foreground">
+          Grade keys{" "}
+          <span className="font-normal text-foreground-muted">
+            — pick the score columns that count here ({selected.filter((k) => available.includes(k)).length} of {available.length})
+          </span>
+        </span>
+        {available.length > 0 && (
+          <span className="flex gap-3 text-xs">
+            <button type="button" className="text-primary hover:underline" onClick={() => set([...available, ...missing])}>
+              Select all
+            </button>
+            <button type="button" className="text-primary hover:underline" onClick={() => set([])}>
+              Clear
+            </button>
+          </span>
+        )}
+      </div>
+      {available.length === 0 && (
+        <p className="rounded border border-dashed border-border-strong px-2 py-1.5 text-xs text-foreground-muted">
+          This subject has no score columns yet. Add a record or import data first, then pick the columns that count here.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {available.map((key) => {
+          const on = selected.includes(key);
+          const other = usedElsewhere[key];
+          return (
+            <label key={key} className="relative" title={other ? `Also counted in ${other}` : undefined}>
+              <input type="checkbox" className="peer sr-only" checked={on} onChange={(e) => toggle(key, e.target.checked)} />
+              <span
+                className={`inline-flex cursor-pointer select-none items-center gap-1 rounded-full border px-2.5 py-1 text-xs peer-focus-visible:ring-2 peer-focus-visible:ring-focus-ring peer-focus-visible:ring-offset-1 ${
+                  on ? "border-primary bg-primary text-primary-foreground" : "border-border-strong bg-surface text-foreground hover:bg-surface-hover"
+                } ${other ? "border-dashed" : ""}`}
+              >
+                {on && <Check className="h-3 w-3" aria-hidden />}
+                {key}
+              </span>
+            </label>
+          );
+        })}
+        {missing.map((key) => (
+          <button
+            key={`missing-${key}`}
+            type="button"
+            title="No record has this column. Click to remove it from the formula."
+            onClick={() => toggle(key, false)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-warning bg-warning-muted px-2.5 py-1 text-xs text-warning hover:opacity-80"
+          >
+            {key} · no such column ✕
+          </button>
+        ))}
+      </div>
+      {available.some((key) => usedElsewhere[key]) && (
+        <p className="mt-1 text-xs text-foreground-muted">Dashed columns are already counted in another component.</p>
+      )}
+      {duplicated.length > 0 && (
+        <p className="mt-1 text-xs text-warning">
+          Also counted in another component: {duplicated.map((key) => `${key} (${usedElsewhere[key]})`).join(", ")}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function emptyCategory(gradeKeys: string[]): GradingCategoryV1 {
   return {
     id: newId(),
     name: "New category",
@@ -151,7 +245,7 @@ function emptyCategory(): GradingCategoryV1 {
         id: newId(),
         name: "Component A",
         weight: 100,
-        gradeKeys: ["quiz1"],
+        gradeKeys,
       },
     ],
   };
@@ -174,7 +268,7 @@ export function GradingSystemSettingsPanel({
   );
   const [passingGradeInput, setPassingGradeInput] = useState(() => {
     const n = normalizeGradingSystemFromUnknown(initialGradingSystem);
-    return n.passingGrade !== undefined ? String(n.passingGrade) : "75";
+    return n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT);
   });
   const [gradeEquivalence, setGradeEquivalence] = useState<GradeEquivalenceRowV1[]>(() => {
     const n = normalizeGradingSystemFromUnknown(initialGradingSystem);
@@ -205,7 +299,7 @@ export function GradingSystemSettingsPanel({
 
     const n = normalizeGradingSystemFromUnknown(raw);
     setCategories(n.categories);
-    setPassingGradeInput(n.passingGrade !== undefined ? String(n.passingGrade) : "75");
+    setPassingGradeInput(n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(n.gradeEquivalence ?? []);
     setStudentComputeEnabled(initialStudentComputeEnabled);
     setLocalSettingsError(null);
@@ -227,6 +321,35 @@ export function GradingSystemSettingsPanel({
 
   const expectedKeys = useMemo(() => collectGradeKeys(systemPayload), [systemPayload]);
 
+  /** The subject's score columns: every item any record has a score or a maximum for (a column exists once it has a maximum). */
+  const availableKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const record of records) {
+      for (const key of Object.keys(record.grades ?? {})) keys.add(key);
+      for (const key of Object.keys(record.maxScores ?? {})) keys.add(key);
+    }
+    return Array.from(keys).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  }, [records]);
+
+  /** A new component starts on the first column no component counts yet (none when they are all taken). */
+  const unusedKeys = (): string[] => {
+    const used = new Set(categories.flatMap((c) => c.components.flatMap((x) => x.gradeKeys)));
+    const free = availableKeys.find((key) => !used.has(key));
+    return free ? [free] : [];
+  };
+
+  /** Keys another component already counts, for the picker's duplicate hint. */
+  const usedByOthers = (catIndex: number, compIndex: number): Record<string, string> => {
+    const out: Record<string, string> = {};
+    categories.forEach((c, ci) =>
+      c.components.forEach((x, xi) => {
+        if (ci === catIndex && xi === compIndex) return;
+        for (const key of x.gradeKeys) out[key] ??= `${c.name} › ${x.name}`;
+      })
+    );
+    return out;
+  };
+
   const previewRecord = useMemo(
     () => records.find((r) => r.id === previewRecordId) ?? records[0] ?? null,
     [records, previewRecordId]
@@ -234,8 +357,8 @@ export function GradingSystemSettingsPanel({
 
   const preview = useMemo(() => {
     if (!previewRecord) return null;
-    return computeFinalGradeWithPolicy(systemPayload, previewRecord.grades, previewRecord.maxScores ?? null);
-  }, [previewRecord, systemPayload]);
+    return computeFinalGradeWithPolicy(systemPayload, previewRecord.grades, previewRecord.maxScores ?? null, availableKeys);
+  }, [previewRecord, systemPayload, availableKeys]);
 
   const openAdvanced = () => {
     setAdvancedJson(JSON.stringify(systemPayload, null, 2));
@@ -259,7 +382,7 @@ export function GradingSystemSettingsPanel({
           gradingSystem: buildGradingPatchFromNormalized(normalized),
         });
         setCategories(normalized.categories);
-        setPassingGradeInput(normalized.passingGrade !== undefined ? String(normalized.passingGrade) : "75");
+        setPassingGradeInput(normalized.passingGrade !== undefined ? String(normalized.passingGrade) : String(DEFAULT_PASSING_PERCENT));
         setGradeEquivalence(normalized.gradeEquivalence ?? []);
         setAdvancedOpen(false);
         await onSaved?.(data);
@@ -333,7 +456,7 @@ export function GradingSystemSettingsPanel({
   const loadTemplate = () => {
     const t = defaultGradingSystemTemplate();
     setCategories(t.categories);
-    setPassingGradeInput(t.passingGrade !== undefined ? String(t.passingGrade) : "75");
+    setPassingGradeInput(t.passingGrade !== undefined ? String(t.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(t.gradeEquivalence ?? []);
     setLocalSettingsError(null);
   };
@@ -373,7 +496,7 @@ export function GradingSystemSettingsPanel({
   };
 
   const addCategory = () => {
-    setCategories((prev) => [...prev, emptyCategory()]);
+    setCategories((prev) => [...prev, emptyCategory(unusedKeys())]);
   };
 
   const removeCategory = (index: number) => {
@@ -392,7 +515,7 @@ export function GradingSystemSettingsPanel({
               ...c,
               components: [
                 ...c.components,
-                { id: newId(), name: "New component", weight: 0, gradeKeys: ["quiz1"] },
+                { id: newId(), name: "New component", weight: 0, gradeKeys: unusedKeys() },
               ],
             }
           : c
@@ -421,7 +544,7 @@ export function GradingSystemSettingsPanel({
   };
 
   return (
-    <div className={embedInDialog ? "space-y-3" : "rounded border border-border bg-background p-3"}>
+    <div className={embedInDialog ? "space-y-3" : "rounded border border-border bg-surface p-3"}>
       {!embedInDialog && <h3 className="mb-2 text-sm font-semibold text-foreground">Subject grading settings</h3>}
 
       <CollapsibleCard
@@ -453,10 +576,10 @@ export function GradingSystemSettingsPanel({
               min={0}
               max={100}
               step={0.01}
-              className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+              className="rounded border border-border bg-surface px-2 py-1 text-sm text-foreground"
               value={passingGradeInput}
               onChange={(e) => setPassingGradeInput(e.target.value)}
-              placeholder="e.g. 75"
+              placeholder={`e.g. ${DEFAULT_PASSING_PERCENT}`}
             />
           </label>
         </div>
@@ -526,7 +649,7 @@ export function GradingSystemSettingsPanel({
                         min={0}
                         max={100}
                         step={0.01}
-                        className="h-10 w-full rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         value={Number.isFinite(row.minPercent) ? row.minPercent : 0}
                         onChange={(e) => updateEquivalenceRow(ri, { minPercent: Number(e.target.value) })}
                       />
@@ -535,7 +658,7 @@ export function GradingSystemSettingsPanel({
                         min={0}
                         max={100}
                         step={0.01}
-                        className="h-10 w-full rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         value={Number.isFinite(row.maxPercent) ? row.maxPercent : 0}
                         onChange={(e) => updateEquivalenceRow(ri, { maxPercent: Number(e.target.value) })}
                       />
@@ -545,7 +668,7 @@ export function GradingSystemSettingsPanel({
                           min={0}
                           max={5}
                           step={0.01}
-                          className="h-10 w-full rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           value={parsedEquiv}
                           onChange={(e) => {
                             const raw = e.target.value;
@@ -560,14 +683,14 @@ export function GradingSystemSettingsPanel({
                       ) : (
                         <input
                           type="text"
-                          className="h-10 w-full rounded-md border border-border-strong bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           value={row.letter}
                           placeholder="e.g. 1.25 or A"
                           onChange={(e) => updateEquivalenceRow(ri, { letter: e.target.value })}
                         />
                       )}
                       <select
-                        className="h-10 rounded-md border border-border-strong bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className="h-10 rounded-md border border-border-strong bg-surface px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         value={normalizeEquivalenceRemark(row.remarks)}
                         onChange={(e) =>
                           updateEquivalenceRow(ri, { remarks: e.target.value as GradeEquivalenceRemarkOption })
@@ -599,7 +722,7 @@ export function GradingSystemSettingsPanel({
             <button
               type="button"
               onClick={addEquivalenceRow}
-              className="inline-flex items-center justify-center gap-1 rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+              className="inline-flex items-center justify-center gap-1 rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
               Add Range
@@ -607,7 +730,7 @@ export function GradingSystemSettingsPanel({
             <button
               type="button"
               onClick={resetEquivalenceToMmsuDefault}
-              className="rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+              className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
             >
               Reset to MMSU Default
             </button>
@@ -621,14 +744,14 @@ export function GradingSystemSettingsPanel({
             <button
               type="button"
               onClick={sortEquivalenceByMin}
-              className="rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+              className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
             >
               Sort by min %
             </button>
             <button
               type="button"
               onClick={loadSampleEquivalenceOnly}
-              className="rounded border border-dashed border-border-strong bg-background px-2 py-1 text-xs text-foreground-muted hover:bg-surface-hover"
+              className="rounded border border-dashed border-border-strong bg-surface px-2 py-1 text-xs text-foreground-muted hover:bg-surface-hover"
             >
               Load A–F sample
             </button>
@@ -675,14 +798,14 @@ export function GradingSystemSettingsPanel({
           <button
             type="button"
             onClick={loadTemplate}
-            className="rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+            className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
           >
             Load example template
           </button>
           <button
             type="button"
             onClick={addCategory}
-            className="rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+            className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
           >
             Add category
           </button>
@@ -690,7 +813,7 @@ export function GradingSystemSettingsPanel({
             <button
               type="button"
               onClick={openAdvanced}
-              className="rounded border border-border-strong bg-background px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
+              className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
             >
               Advanced JSON
             </button>
@@ -708,7 +831,7 @@ export function GradingSystemSettingsPanel({
 
         {advancedOpen && (
           <textarea
-            className="mb-3 h-36 w-full rounded border border-border-strong bg-background px-2 py-1.5 font-mono text-xs text-foreground"
+            className="mb-3 h-36 w-full rounded border border-border-strong bg-surface px-2 py-1.5 font-mono text-xs text-foreground"
             value={advancedJson}
             onChange={(e) => setAdvancedJson(e.target.value)}
             spellCheck={false}
@@ -784,7 +907,7 @@ export function GradingSystemSettingsPanel({
                     <label className="flex min-w-[120px] flex-1 flex-col gap-0.5 text-xs font-medium text-foreground">
                       Component
                       <input
-                        className="rounded border border-border bg-background px-2 py-1 text-sm font-normal text-foreground"
+                        className="rounded border border-border bg-surface px-2 py-1 text-sm font-normal text-foreground"
                         value={comp.name}
                         onChange={(e) => updateComponent(ci, xi, { name: e.target.value })}
                       />
@@ -793,30 +916,20 @@ export function GradingSystemSettingsPanel({
                       % in category
                       <input
                         type="number"
-                        className="rounded border border-border bg-background px-2 py-1 text-sm font-normal text-foreground"
+                        className="rounded border border-border bg-surface px-2 py-1 text-sm font-normal text-foreground"
                         value={Number.isFinite(comp.weight) ? comp.weight : 0}
                         onChange={(e) => updateComponent(ci, xi, { weight: Number(e.target.value) })}
-                      />
-                    </label>
-                    <label className="flex min-w-[180px] flex-[2] flex-col gap-0.5 text-xs font-medium text-foreground">
-                      Grade keys (comma-separated)
-                      <input
-                        className="rounded border border-border bg-background px-2 py-1 font-mono text-xs font-normal text-foreground"
-                        value={comp.gradeKeys.join(", ")}
-                        onChange={(e) =>
-                          updateComponent(ci, xi, {
-                            gradeKeys: e.target.value
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="Quiz 1, Midterms"
                       />
                     </label>
                     <button type="button" className="text-xs text-danger" onClick={() => removeComponent(ci, xi)}>
                       Remove
                     </button>
+                    <GradeKeyPicker
+                      available={availableKeys}
+                      selected={comp.gradeKeys}
+                      usedElsewhere={usedByOthers(ci, xi)}
+                      onChange={(keys) => updateComponent(ci, xi, { gradeKeys: keys })}
+                    />
                   </div>
                 ))}
                 <button type="button" onClick={() => addComponent(ci)} className="text-xs text-primary hover:underline">
@@ -848,7 +961,7 @@ export function GradingSystemSettingsPanel({
             <label className="text-xs text-foreground-muted">
               Record
               <select
-                className="ml-1 rounded border border-border bg-background px-2 py-1 text-xs"
+                className="ml-1 rounded border border-border bg-surface px-2 py-1 text-xs"
                 value={previewRecord?.id ?? ""}
                 onChange={(e) => setPreviewRecordId(e.target.value)}
               >
@@ -859,7 +972,17 @@ export function GradingSystemSettingsPanel({
                 ))}
               </select>
             </label>
-            {preview && (
+            {preview && preview.incomplete && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium text-foreground">
+                  Final: <span className="text-warning">INC</span>
+                </span>
+                <span className="text-xs text-foreground-muted">
+                  No score for {preview.missingKeys.join(", ")}. Enter 0 for an item to count it as zero.
+                </span>
+              </div>
+            )}
+            {preview && !preview.incomplete && (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium text-foreground">
                   Final: <span className="text-primary">{preview.finalGrade}</span>

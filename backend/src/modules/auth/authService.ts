@@ -20,7 +20,9 @@ import type {
   UpdateExperimentalFeaturesBody,
 } from "./authSchemas.js";
 import {
+  EXPERIMENTAL_FEATURE_ROLES,
   normalizeExperimentalFeatures,
+  type ExperimentalFeatureKey,
   type ExperimentalFeaturesPreference,
 } from "./experimentalFeatures.js";
 
@@ -103,7 +105,7 @@ export async function login(body: LoginBody): Promise<{ accessToken: string; ref
       avatarVersion: user.avatar?.updatedAt.getTime() ?? null,
       unitColleges: user.unitColleges,
       unitAreas: user.unitAreas,
-      experimentalFeatures: normalizeExperimentalFeatures(user.experimentalFeatures),
+      experimentalFeatures: normalizeExperimentalFeatures(user.experimentalFeatures, user.role),
     },
   };
 }
@@ -147,10 +149,56 @@ export async function register(body: RegisterBody): Promise<{ id: string; email:
 export async function getMyExperimentalFeatures(userId: string): Promise<ExperimentalFeaturesPreference> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { experimentalFeatures: true, isDeleted: true },
+    select: { experimentalFeatures: true, isDeleted: true, role: true },
   });
   if (!user || user.isDeleted) throw unauthorized("User not found");
-  return normalizeExperimentalFeatures(user.experimentalFeatures);
+  return normalizeExperimentalFeatures(user.experimentalFeatures, user.role);
+}
+
+export type ExtensionAccess =
+  | { allowed: true; user: { name: string; email: string }; appUrl: string }
+  | { allowed: false; reason: "signed_out" | "role" | "not_granted" | "not_enabled"; user?: { name: string; email: string }; appUrl: string };
+
+/**
+ * Lets the MMSU Grade Push browser extension ask "may the person signed in to Vantage in this browser use me?".
+ * It reads the Vantage login cookie but does not rotate it (the extension must never log the web app out) and hands
+ * back no token, only the answer. Access = the role fits, an administrator granted the feature and the person switched it on.
+ */
+export async function getExtensionAccess(refreshTokenFromCookie: string | undefined, feature: ExperimentalFeatureKey): Promise<ExtensionAccess> {
+  const appUrl = env.FRONTEND_ORIGIN;
+  if (!refreshTokenFromCookie) return { allowed: false, reason: "signed_out", appUrl };
+  let userId: string;
+  try {
+    userId = await verifyRefreshToken(refreshTokenFromCookie);
+  } catch {
+    return { allowed: false, reason: "signed_out", appUrl };
+  }
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true, role: true, isDeleted: true, experimentalFeatures: true } });
+  if (!user || user.isDeleted) return { allowed: false, reason: "signed_out", appUrl };
+  const who = { name: user.name, email: user.email };
+  if (!EXPERIMENTAL_FEATURE_ROLES[feature].includes(user.role)) return { allowed: false, reason: "role", user: who, appUrl };
+  const prefs = normalizeExperimentalFeatures(user.experimentalFeatures, user.role);
+  if (!prefs.granted.includes(feature)) return { allowed: false, reason: "not_granted", user: who, appUrl };
+  if (!prefs.enabled || !prefs.features.includes(feature)) return { allowed: false, reason: "not_enabled", user: who, appUrl };
+  return { allowed: true, user: who, appUrl };
+}
+
+/** Administrator: what experiments one user may switch on (their own switches inside it are kept). */
+export async function getUserExperimentalGrants(userId: string): Promise<ExperimentalFeaturesPreference> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { experimentalFeatures: true, isDeleted: true, role: true } });
+  if (!user || user.isDeleted) throw badRequest("User not found");
+  return normalizeExperimentalFeatures(user.experimentalFeatures, user.role);
+}
+
+export async function setUserExperimentalGrants(
+  userId: string,
+  granted: ExperimentalFeaturesPreference["granted"]
+): Promise<ExperimentalFeaturesPreference> {
+  const current = await getUserExperimentalGrants(userId);
+  const unique = Array.from(new Set(granted));
+  const next = { enabled: current.enabled, features: current.features.filter((feature) => unique.includes(feature)), granted: unique };
+  await prisma.user.update({ where: { id: userId }, data: { experimentalFeatures: next as unknown as Prisma.InputJsonValue } });
+  return next;
 }
 
 export async function updateMyExperimentalFeatures(
@@ -160,7 +208,9 @@ export async function updateMyExperimentalFeatures(
   const current = await getMyExperimentalFeatures(userId);
   const next: ExperimentalFeaturesPreference = {
     enabled: body.enabled ?? current.enabled,
-    features: body.features ?? current.features,
+    // A user can only switch on what an administrator granted.
+    features: (body.features ?? current.features).filter((feature) => current.granted.includes(feature)),
+    granted: current.granted,
   };
 
   await prisma.user.update({

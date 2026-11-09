@@ -9,7 +9,7 @@ import {
   experimentalFeatureCatalog,
   type ExperimentalFeatureDefinition,
 } from "../../features/experimental/featureCatalog";
-import type { ExperimentalFeatureKey } from "../../types/auth";
+import type { ExperimentalFeatureKey, ExperimentalFeaturesPreference } from "../../types/auth";
 import { UserAvatar } from "../../components/ui/userAvatar";
 import { Button } from "../../components/ui/button";
 import { resizeImage } from "../../utils/compressImage";
@@ -222,7 +222,7 @@ export function UserProfilePage() {
     if (!user) return;
     setExpLoading(true);
     apiClient
-      .get<{ enabled: boolean; features: ExperimentalFeatureKey[] }>("/auth/me/experimental-features")
+      .get<ExperimentalFeaturesPreference>("/auth/me/experimental-features")
       .then(({ data }) => {
         setExpEnabled(data.enabled);
         setSelectedFeatures(data.features);
@@ -235,7 +235,7 @@ export function UserProfilePage() {
   }, [dispatch, user?.id]);
 
   const visibleFeatureCatalog = (Object.values(experimentalFeatureCatalog) as ExperimentalFeatureDefinition[]).filter(
-    (feature) => (user ? feature.allowedRoles.includes(user.role) : false)
+    (feature) => (user ? feature.allowedRoles.includes(user.role) && (user.experimentalFeatures?.granted ?? []).includes(feature.key) : false)
   );
 
   const saveExperimentalPreferences = async (
@@ -252,7 +252,7 @@ export function UserProfilePage() {
     setSelectedFeatures(nextFeatures);
 
     try {
-      const { data } = await apiClient.patch<{ enabled: boolean; features: ExperimentalFeatureKey[] }>(
+      const { data } = await apiClient.patch<ExperimentalFeaturesPreference>(
         "/auth/me/experimental-features",
         next
       );
@@ -376,7 +376,7 @@ export function UserProfilePage() {
           <div className="mt-4 space-y-3">
             <p className="text-sm font-medium text-foreground">Select enabled experiments</p>
             {visibleFeatureCatalog.length === 0 ? (
-              <p className="text-sm text-foreground-muted">No experimental features available for your role yet.</p>
+              <p className="text-sm text-foreground-muted">Ask an administrator for access to an experimental feature.</p>
             ) : (
               visibleFeatureCatalog.map((feature) => (
                 <label key={feature.key} className="flex items-start gap-3">

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { currentTerm } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
-import type { AcademicYear, Room, Subject } from "../../types/api";
+import type { Subject } from "../../types/api";
 import toast from "react-hot-toast";
 import { Dialog } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
@@ -9,15 +8,12 @@ import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { MoreVertical, Pencil } from "lucide-react";
 import { DropdownMenu } from "../../components/ui/dropdownMenu";
 import { Spinner } from "../../components/ui/spinner";
-import { HelpTip } from "../../components/ui/helpTip";
 import { useAppSelector } from "../../store/hooks";
-import { labUnitsOf, lecUnitsOf, unitsLabel, weeklyHours } from "../../utils/subjectUnits";
+import { unitsLabel, weeklyHours } from "../../utils/subjectUnits";
 import { HistoryButton } from "../../components/audit/HistoryButton";
-import {
-  PrioritizedFacultyModal,
-  type FacultyWithDepartment,
-  type PrioritizedFacultyItem,
-} from "./PrioritizedFacultyModal";
+import { SubjectFormDialog } from "../../components/subjects/SubjectFormDialog";
+import { SubjectRoomsDialog } from "../../components/subjects/SubjectRoomsDialog";
+import { SubjectFacultyDialog } from "../../components/subjects/SubjectFacultyDialog";
 
 export function SubjectsPage() {
   /** The college secretary can view everything the dean can but never change it. */
@@ -27,41 +23,18 @@ export function SubjectsPage() {
   /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
   const [curriculumFilter, setCurriculumFilter] = useState("");
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    code: "",
-    lecUnits: 3,
-    labUnits: 0,
-    yearLevel: "",
-    curriculumId: "",
-    departmentId: "",
-  });
+  /** The subject form: null = closed, subject null = adding one. */
+  const [formState, setFormState] = useState<{ subject: Subject | null } | null>(null);
   const [curricula, setCurricula] = useState<{ id: string; name: string; createdAt?: string; departmentId?: string | null }[]>([]);
-  const userDeptId = useAppSelector((st) => st.auth.user?.departmentId) ?? null;
-  /** Possible rooms for auto-assign: the subject being edited, all rooms, the ticked room ids. */
+  /** Possible rooms and faculty: the subject being set. */
   const [roomsSubject, setRoomsSubject] = useState<Subject | null>(null);
-  const [allRooms, setAllRooms] = useState<Room[]>([]);
-  const [roomIds, setRoomIds] = useState<Set<string>>(new Set());
-  const [roomsLoading, setRoomsLoading] = useState(false);
-  const [roomsSaving, setRoomsSaving] = useState(false);
-  const [roomSearch, setRoomSearch] = useState("");
+  const [prioritySubject, setPrioritySubject] = useState<Subject | null>(null);
   const [filterInitialized, setFilterInitialized] = useState(false);
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const [prioritySubject, setPrioritySubject] = useState<Subject | null>(null);
-  const [priorityList, setPriorityList] = useState<PrioritizedFacultyItem[]>([]);
-  const [allFaculty, setAllFaculty] = useState<FacultyWithDepartment[]>([]);
-  const [priorityLoading, setPriorityLoading] = useState(false);
-  const [prioritySaving, setPrioritySaving] = useState(false);
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [priorityTerm, setPriorityTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const load = async () => {
@@ -79,8 +52,6 @@ export function SubjectsPage() {
   useEffect(() => {
     load();
     apiClient.get("/curriculum").then(({ data }) => setCurricula(data));
-    apiClient.get("/departments").then(({ data }) => setDepartments(data));
-    apiClient.get<AcademicYear[]>("/academic-years/for-schedules").then(({ data }) => setAcademicYears(data)).catch(() => setAcademicYears([]));
   }, []);
 
   // Start on the most recently added curriculum instead of "All curricula".
@@ -91,103 +62,8 @@ export function SubjectsPage() {
     setFilterInitialized(true);
   }, [curricula, filterInitialized]);
 
-  const openRooms = async (s: Subject) => {
-    setRoomsSubject(s);
-    setRoomSearch("");
-    setRoomIds(new Set((s.subjectRooms ?? []).map((r) => r.roomId)));
-    setRoomsLoading(true);
-    try {
-      const { data } = await apiClient.get<Room[]>("/rooms");
-      setAllRooms(data ?? []);
-    } catch {
-      toast.error("Failed to load rooms");
-      setRoomsSubject(null);
-    } finally {
-      setRoomsLoading(false);
-    }
-  };
-
-  const saveRooms = async () => {
-    if (!roomsSubject) return;
-    setRoomsSaving(true);
-    try {
-      await apiClient.put(`/subjects/${roomsSubject.id}/rooms`, { roomIds: [...roomIds] });
-      toast.success(roomIds.size === 0 ? "Auto-assign may use any available room" : "Rooms saved");
-      setRoomsSubject(null);
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed to save rooms";
-      toast.error(msg);
-    } finally {
-      setRoomsSaving(false);
-    }
-  };
-
-  const openCreate = () => {
-    setEditingId(null);
-    // A new subject starts in the curriculum being looked at (and its department), so it is not added ungrouped.
-    const inCurriculum = curriculumFilter && curriculumFilter !== "__none__" ? curricula.find((c) => c.id === curriculumFilter) : undefined;
-    setForm({ name: "", code: "", lecUnits: 3, labUnits: 0, yearLevel: "", curriculumId: inCurriculum?.id ?? "", departmentId: inCurriculum?.departmentId ?? "" });
-    setModalOpen(true);
-  };
-
-  const openEdit = (s: Subject) => {
-    setEditingId(s.id);
-    setForm({
-      name: s.name,
-      code: s.code,
-      lecUnits: lecUnitsOf(s),
-      labUnits: labUnitsOf(s),
-      yearLevel: s.yearLevel != null ? String(s.yearLevel) : "",
-      curriculumId: s.curriculumId ?? "",
-      departmentId: s.departmentId ?? "",
-    });
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const nameTrimmed = form.name.trim();
-    if (!nameTrimmed) {
-      toast.error("Name is required");
-      return;
-    }
-    if (form.lecUnits < 0 || form.labUnits < 0) {
-      toast.error("Units cannot be negative");
-      return;
-    }
-    try {
-      // When creating: use custom code if provided, else derive from name. Normalize: spaces→hyphens, alphanumeric+hyphen only, uppercase, max 32 chars.
-      const normalizeCode = (raw: string) =>
-        raw.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9-]/g, "").toUpperCase().slice(0, 32) || undefined;
-      const codeWhenCreating = editingId
-        ? undefined
-        : (form.code.trim() ? normalizeCode(form.code) : normalizeCode(nameTrimmed)) || `SUB-${Date.now()}`;
-      const payload = {
-        ...(codeWhenCreating !== undefined && { code: codeWhenCreating }),
-        name: nameTrimmed,
-        lecUnits: form.lecUnits,
-        labUnits: form.labUnits,
-        yearLevel: form.yearLevel ? Number(form.yearLevel) : null,
-        curriculumId: form.curriculumId || null,
-        departmentId: form.departmentId || null,
-      };
-      if (editingId) {
-        await apiClient.patch(`/subjects/${editingId}`, payload);
-        toast.success("Subject updated");
-      } else {
-        await apiClient.post("/subjects", { ...payload, code: codeWhenCreating! });
-        toast.success("Subject created");
-        // show it: the list is filtered by curriculum, and a subject in another one would seem to vanish
-        if (curriculumFilter) setCurriculumFilter(form.curriculumId || "__none__");
-      }
-      setModalOpen(false);
-      load();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
-      toast.error(msg);
-    }
-  };
+  const openCreate = () => setFormState({ subject: null });
+  const openEdit = (s: Subject) => setFormState({ subject: s });
 
   const handleDeleteClick = (id: string) => setDeleteConfirmId(id);
 
@@ -203,62 +79,6 @@ export function SubjectsPage() {
       toast.error("Failed to delete");
     } finally {
       setDeleteLoading(false);
-    }
-  };
-
-  /** Loads one subject's faculty list for one term (the list is per academic year + semester). */
-  const loadPriority = async (s: Subject, term: { academicYearId: string; semester: number }) => {
-    setPriorityList([]);
-    setPriorityLoading(true);
-    try {
-      const [priRes, facRes] = await Promise.all([
-        apiClient.get<{ facultyId: string; name: string; email: string; priority: number }[]>(
-          `/subjects/${s.id}/prioritized-faculty`,
-          { params: term }
-        ),
-        apiClient.get<FacultyWithDepartment[]>("/users?role=FACULTY"),
-      ]);
-      setPriorityList((priRes.data ?? []).map((p, i) => ({ ...p, priority: i })));
-      setAllFaculty(facRes.data ?? []);
-    } catch {
-      toast.error("Failed to load");
-      setPrioritySubject(null);
-    } finally {
-      setPriorityLoading(false);
-    }
-  };
-
-  const openPriorityModal = async (s: Subject) => {
-    const current = currentTerm(academicYears);
-    if (!current) {
-      toast.error("No academic year available");
-      return;
-    }
-    // A subject offered in one semester opens on it; one offered in both opens on the current semester.
-    const term = { academicYearId: current.academicYearId, semester: s.semester ?? current.semester };
-    setPriorityTerm(term);
-    setPrioritySubject(s);
-    setAllFaculty([]);
-    await loadPriority(s, term);
-  };
-
-  const changePriorityTerm = (next: { academicYearId: string; semester: number }) => {
-    setPriorityTerm(next);
-    if (prioritySubject) void loadPriority(prioritySubject, next);
-  };
-
-  const savePriority = async (facultyIds: string[]) => {
-    if (!prioritySubject || !priorityTerm) return;
-    setPrioritySaving(true);
-    try {
-      await apiClient.put(`/subjects/${prioritySubject.id}/prioritized-faculty`, { facultyIds, ...priorityTerm });
-      toast.success("Prioritized faculty updated");
-      setPrioritySubject(null);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Failed";
-      toast.error(msg);
-    } finally {
-      setPrioritySaving(false);
     }
   };
 
@@ -467,8 +287,8 @@ export function SubjectsPage() {
                         </DropdownMenu.Trigger>
                         <DropdownMenu.Content align="end">
                           <DropdownMenu.Item onSelect={() => openEdit(s)}>Edit</DropdownMenu.Item>
-                          <DropdownMenu.Item onSelect={() => openPriorityModal(s)}>Set prioritized faculty</DropdownMenu.Item>
-                          <DropdownMenu.Item onSelect={() => openRooms(s)}>Set rooms for auto-assign</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => setPrioritySubject(s)}>Set prioritized faculty</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => setRoomsSubject(s)}>Set rooms for auto-assign</DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => handleDeleteClick(s.id)} className="text-danger focus:bg-danger-muted focus:text-danger-hover">Move to trash</DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu.Root>
@@ -481,217 +301,19 @@ export function SubjectsPage() {
         </div>
         </>
       )}
-      <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>
-        <Dialog.Content title={editingId ? "Edit Subject" : "Add Subject"}>
-          <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            {editingId ? (
-              <p className="text-sm text-foreground-muted">
-                <span className="font-medium text-foreground">Code: </span>
-                {list.find((s) => s.id === editingId)?.code ?? "—"}
-              </p>
-            ) : (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">Code</label>
-                <input
-                  placeholder="e.g. MATH101 or leave empty to generate from name"
-                  value={form.code}
-                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                  className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                  aria-label="Subject code (optional)"
-                />
-                <p className="mt-1 text-[11px] text-foreground-muted">
-                  Optional. Uppercase letters, numbers, and hyphens only; max 32 characters. Empty = generated from name.
-                </p>
-              </div>
-            )}
-            <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="subject-lec-units" className="mb-1 block text-sm font-medium text-foreground">Lecture units</label>
-                <input id="subject-lec-units" type="number" min={0} value={form.lecUnits} onChange={(e) => setForm((f) => ({ ...f, lecUnits: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-              </div>
-              <div>
-                <label htmlFor="subject-lab-units" className="mb-1 block text-sm font-medium text-foreground">Laboratory units</label>
-                <input id="subject-lab-units" type="number" min={0} value={form.labUnits} onChange={(e) => setForm((f) => ({ ...f, labUnits: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1" />
-              </div>
-            </div>
-            <p className="text-[11px] text-foreground-muted">
-              Total {form.lecUnits + form.labUnits} {form.lecUnits + form.labUnits === 1 ? "unit" : "units"}. Needs {form.lecUnits + form.labUnits * 3} hrs/week of blocks and counts {form.lecUnits + form.labUnits * 3} units of faculty load (a laboratory unit is 3 hours). A laboratory-only subject must use a laboratory room.
-            </p>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Year level (within curriculum)</label>
-              <input
-                type="number"
-                min={1}
-                placeholder="e.g. 1, 2, 3, 4"
-                value={form.yearLevel}
-                onChange={(e) => setForm((f) => ({ ...f, yearLevel: e.target.value }))}
-                className="w-full rounded border border-border-strong px-3 py-2 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-              />
-              <p className="mt-1 text-[11px] text-foreground-muted">
-                Optional. Used to group subjects by year level in the scheduler for classes on this curriculum.
-              </p>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
-              <SearchableSelect
-                options={curricula.map((c) => ({ value: c.id, label: c.name }))}
-                value={form.curriculumId || "__none__"}
-                onValueChange={(v) =>
-                  setForm((f) => {
-                    const id = v === "__none__" ? "" : v;
-                    // choosing a curriculum fills in its department when none is chosen yet
-                    const dept = id && !f.departmentId ? curricula.find((c) => c.id === id)?.departmentId ?? "" : f.departmentId;
-                    return { ...f, curriculumId: id, departmentId: dept };
-                  })
-                }
-                noneOption={{ value: "__none__", label: "No curriculum" }}
-                placeholder="Search curricula…"
-                aria-label="Curriculum"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
-              <SearchableSelect
-                options={departments.map((d) => ({ value: d.id, label: d.name }))}
-                value={form.departmentId || "__none__"}
-                onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === "__none__" ? "" : v }))}
-                noneOption={{ value: "__none__", label: "No department" }}
-                placeholder="Search departments…"
-                aria-label="Department"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Dialog.Close asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-              </Dialog.Close>
-              <Button type="submit">Save</Button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Root>
-
-      <Dialog.Root open={roomsSubject !== null} onOpenChange={(open) => !open && setRoomsSubject(null)}>
-        <Dialog.Content
-          className="!max-w-lg max-h-[90vh] overflow-y-auto"
-          title={`Rooms for auto-assign — ${roomsSubject?.code ?? ""}`}
-          description="Restrict auto-assign to specific rooms for this subject."
-        >
-          {roomsLoading ? (
-            <div className="flex justify-center py-8" aria-busy="true">
-              <Spinner />
-            </div>
-          ) : (
-            <>
-              <label htmlFor="room-search" className="sr-only">Search rooms</label>
-              <input
-                id="room-search"
-                type="search"
-                value={roomSearch}
-                onChange={(e) => setRoomSearch(e.target.value)}
-                placeholder="Search rooms…"
-                className="mt-4 w-full rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-              />
-              <ul className="mt-3 max-h-72 divide-y divide-border overflow-y-auto rounded border border-border">
-                {[...allRooms]
-                  .filter((r) => `${r.name} ${r.department?.name ?? ""}`.toLowerCase().includes(roomSearch.trim().toLowerCase()))
-                  .sort((a, b) => {
-                    const own = (r: Room) => (r.departmentId === userDeptId ? 0 : 1);
-                    return own(a) - own(b) || a.name.localeCompare(b.name);
-                  })
-                  .map((r) => (
-                    <li key={r.id}>
-                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-surface-muted">
-                        <input
-                          type="checkbox"
-                          checked={roomIds.has(r.id)}
-                          onChange={() =>
-                            setRoomIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(r.id)) next.delete(r.id);
-                              else next.add(r.id);
-                              return next;
-                            })
-                          }
-                          className="rounded border-border-strong focus:ring-focus-ring"
-                        />
-                        <span className="flex-1 text-foreground">{r.name}</span>
-                        <span className="text-xs text-foreground-muted">
-                          {r.isLab ? "Lab · " : ""}
-                          {r.capacity} seats · {r.department?.code ?? r.department?.name ?? ""}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-              </ul>
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground-muted">
-                {roomIds.size === 0 ? "No rooms selected: any available room" : `${roomIds.size} room${roomIds.size === 1 ? "" : "s"} selected`}
-                <HelpTip>
-                  Auto-assign places this subject only in the selected rooms. With none selected it may use any available room: your department's rooms, or rooms of other departments that are open for the term.
-                </HelpTip>
-              </div>
-            </>
-          )}
-          <div className="mt-4 flex justify-end gap-2">
-            <Dialog.Close asChild>
-              <Button type="button" variant="secondary">Cancel</Button>
-            </Dialog.Close>
-            <Button type="button" onClick={saveRooms} disabled={roomsLoading || roomsSaving}>
-              {roomsSaving ? "…" : "Save"}
-            </Button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Root>
-
-      <PrioritizedFacultyModal
-        subject={prioritySubject}
-        open={prioritySubject !== null}
-        onOpenChange={(open) => !open && setPrioritySubject(null)}
-        initialPriorityList={priorityList}
-        allFaculty={allFaculty}
-        onSave={savePriority}
-        saving={prioritySaving}
-        loading={priorityLoading}
-        termControls={
-          priorityTerm && (
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <div>
-                <label htmlFor="pf-ay" className="mb-1 block text-xs font-medium text-foreground-muted">Academic year</label>
-                <select
-                  id="pf-ay"
-                  value={priorityTerm.academicYearId}
-                  onChange={(e) => changePriorityTerm({ ...priorityTerm, academicYearId: e.target.value })}
-                  disabled={priorityLoading || prioritySaving}
-                  className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                >
-                  {academicYears.map((y) => (
-                    <option key={y.id} value={y.id}>{y.isActive ? `${y.name} (current)` : y.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="pf-sem" className="mb-1 block text-xs font-medium text-foreground-muted">Semester</label>
-                <select
-                  id="pf-sem"
-                  value={priorityTerm.semester}
-                  onChange={(e) => changePriorityTerm({ ...priorityTerm, semester: Number(e.target.value) })}
-                  disabled={priorityLoading || prioritySaving}
-                  className="rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
-                >
-                  <option value={1}>1st Sem</option>
-                  <option value={2}>2nd Sem</option>
-                  <option value={3}>Mid Year</option>
-                </select>
-              </div>
-            </div>
-          )
-        }
-        termLabel={
-          priorityTerm
-            ? `${academicYears.find((y) => y.id === priorityTerm.academicYearId)?.name ?? ""} · ${["", "1st Sem", "2nd Sem", "Mid Year"][priorityTerm.semester]}`
-            : undefined
-        }
+      <SubjectFormDialog
+        open={formState !== null}
+        subject={formState?.subject ?? null}
+        defaultCurriculumId={curriculumFilter && curriculumFilter !== "__none__" ? curriculumFilter : undefined}
+        onClose={() => setFormState(null)}
+        onSaved={({ created, curriculumId }) => {
+          // show it: the list is filtered by curriculum, and a subject in another one would seem to vanish
+          if (created && curriculumFilter) setCurriculumFilter(curriculumId || "__none__");
+          load();
+        }}
       />
+      <SubjectRoomsDialog subject={roomsSubject} onClose={() => setRoomsSubject(null)} onSaved={load} />
+      <SubjectFacultyDialog subject={prioritySubject} onClose={() => setPrioritySubject(null)} />
 
       <Dialog.Root open={deleteConfirmId !== null} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <Dialog.Content title="Move subject to trash" description="This subject will be moved to Trash. An admin can restore it or permanently delete it from the Trash page.">

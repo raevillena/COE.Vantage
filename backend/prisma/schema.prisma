@@ -130,6 +130,9 @@ model GradeSubject {
   code                  String?
   ownerId               String
   departmentId          String?
+  /// The term this subject's grades belong to (both null = not set). Lets the public lookup filter by year and semester.
+  academicYearId        String?
+  semester              Int? // 1 = 1st, 2 = 2nd, 3 = Mid Year
   gradingSystem         Json?
   studentComputeEnabled Boolean   @default(false)
   isDeleted             Boolean   @default(false)
@@ -137,13 +140,15 @@ model GradeSubject {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  owner      User                 @relation("GradeSubjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  department Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  viewers    GradeSubjectViewer[]
-  records    GradeRecord[]
+  owner        User                 @relation("GradeSubjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  department   Department?          @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear?        @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  viewers      GradeSubjectViewer[]
+  records      GradeRecord[]
 
   @@index([ownerId, isDeleted])
   @@index([departmentId])
+  @@index([academicYearId, semester])
 }
 
 model GradeSubjectViewer {
@@ -229,6 +234,7 @@ model AcademicYear {
   geOfferingSets               GeOfferingSet[]
   termLocks                    TermLock[]
   collegesCurrent              College[]                     @relation("CollegeCurrentYear")
+  gradeSubjects                GradeSubject[]
 
   @@index([isDeleted])
 }

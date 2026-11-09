@@ -37,12 +37,21 @@ export function parseCsvLine(line: string): string[] {
   return values;
 }
 
+/** Lowercase letters and digits only, so "Student Number ", "Student No." and "student_number" compare equal. */
+function normalizeHeader(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/** Accepted header names for each identity column, already normalised (see normalizeHeader). */
 const HEADER_ALIASES: Record<"studentName" | "studentNumber" | "email" | "code", string[]> = {
-  studentName: ["studentname", "student_name", "name", "student"],
-  studentNumber: ["studentnumber", "student_number", "student no", "studentno", "id number"],
-  email: ["email", "email_address", "student_email"],
-  code: ["code", "accesscode", "access_code", "securitycode", "security_code"],
+  studentName: ["studentname", "name", "student", "fullname", "studentsname", "nameofstudent", "names"],
+  studentNumber: ["studentnumber", "studentno", "studentnum", "studentid", "idnumber", "idno"],
+  email: ["email", "emailaddress", "studentemail"],
+  code: ["code", "accesscode", "securitycode"],
 };
+
+/** How far down to look for the header row (class records often start with a title and a schedule line). */
+const HEADER_SEARCH_ROWS = 20;
 
 /**
  * Column headers (normalized) that are **not** raw grade components:
@@ -72,6 +81,7 @@ const IMPORT_IGNORE_METADATA_ALIASES = new Set([
   "gwa",
   "weightedgrade",
   "transmutedgrade",
+  "overallrating",
 ]);
 
 /** Lowercase + alphanumeric only — for metadata ignore matching (see IMPORT_IGNORE_METADATA_ALIASES). */
@@ -85,9 +95,28 @@ function headerNormKey(name: string): string {
 }
 
 function resolveColumnIndex(header: string[], key: keyof typeof HEADER_ALIASES): number {
-  const normalized = header.map((h) => h.toLowerCase());
   const aliases = HEADER_ALIASES[key];
-  return normalized.findIndex((h) => aliases.includes(h.replace(/\s+/g, "")));
+  return header.findIndex((h) => aliases.includes(normalizeHeader(h)));
+}
+
+/** The first of the top rows that has both a name column and a student-number column; 0 when none does. */
+function findHeaderRowIndex(rows: string[][]): number {
+  for (let i = 0; i < Math.min(rows.length, HEADER_SEARCH_ROWS); i += 1) {
+    if (resolveColumnIndex(rows[i], "studentName") >= 0 && resolveColumnIndex(rows[i], "studentNumber") >= 0) return i;
+  }
+  return 0;
+}
+
+/**
+ * Parse a whole sheet: the header row is found among the first rows (a title or schedule above it is fine), the
+ * row under it holds each column's maximum score, and student rows follow.
+ */
+export function parseGradeRecordsFromRows(rows: string[][]): { records: GradeImportRecord[]; errors: string[] } {
+  const headerIndex = findHeaderRowIndex(rows);
+  let maxRowIndex = headerIndex + 1;
+  while (maxRowIndex < rows.length && rows[maxRowIndex].every((cell) => cell.trim() === "")) maxRowIndex += 1;
+  // `maxRowIndex + 1` is the 1-based sheet row of the max-score row, which row numbers in messages count from.
+  return parseGradeRecordsFromTable(rows[headerIndex] ?? [], rows.slice(maxRowIndex), maxRowIndex + 1);
 }
 
 /** True when the cell should be treated as “no score” (not imported, not coerced to 0). */
@@ -98,8 +127,15 @@ function isBlankScoreCell(raw: string): boolean {
   return /^n\/?a$/i.test(t);
 }
 
-/** Parse a header row plus data rows (e.g. from CSV or first Excel sheet). */
-export function parseGradeRecordsFromTable(header: string[], dataRows: string[][]): { records: GradeImportRecord[]; errors: string[] } {
+/**
+ * Parse a header row plus the rows under it: the first is the max-score row, the rest are students.
+ * `maxRowNumber` is that max-score row's 1-based number in the source (2 when the header is on row 1).
+ */
+export function parseGradeRecordsFromTable(
+  header: string[],
+  dataRows: string[][],
+  maxRowNumber = 2
+): { records: GradeImportRecord[]; errors: string[] } {
   const errors: string[] = [];
   if (header.length === 0 || dataRows.length === 0) {
     return { records: [], errors: ["Table must include a header row and at least one data row."] };
@@ -110,8 +146,8 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
   const emailIdx = resolveColumnIndex(header, "email");
   const codeIdx = resolveColumnIndex(header, "code");
 
-  if (studentNameIdx < 0) errors.push("Missing required studentName column.");
-  if (studentNumberIdx < 0) errors.push("Missing required studentNumber column.");
+  if (studentNameIdx < 0) errors.push(`Could not find the name column: a header named "Name" or "Student Name" (looked in the first ${HEADER_SEARCH_ROWS} rows).`);
+  if (studentNumberIdx < 0) errors.push(`Could not find the student number column: a header named "Student Number" or "Student No." (looked in the first ${HEADER_SEARCH_ROWS} rows).`);
   if (errors.length > 0) return { records: [], errors };
 
   const reserved = new Set<number>();
@@ -138,6 +174,7 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
   for (let i = 0; i < header.length; i += 1) {
     if (reserved.has(i) || indicesThatAreMaxOnlyColumns.has(i)) continue;
     const displayName = header[i].trim();
+    if (displayName === "") continue; // e.g. the row-number column: no header means no component
     candidateScoreColumns.push({ displayName, index: i, normKey: headerNormKey(displayName) });
   }
 
@@ -150,7 +187,7 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
     return {
       records: [],
       errors: [
-        "Import requires a max-score row directly under the header (row 2), then student rows starting at row 3.",
+        "Import requires a max-score row directly under the header, then the student rows.",
       ],
     };
   }
@@ -174,7 +211,7 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
     return {
       records: [],
       errors: [
-        "Row 2 (under the header) must list a positive number under each grade column you want to import (those numbers are the maximum scores). No usable grade columns were found.",
+        "The max-score row (directly under the header) must list a positive number under each grade column you want to import. No usable grade columns were found.",
       ],
     };
   }
@@ -183,8 +220,10 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
   for (const col of candidateScoreColumns) {
     if (activeIndexSet.has(col.index)) continue;
     const rawMax = getMaxCell(col.index).trim();
+    // A column headed only by a weight ("50%") with no max is a label, not a component: nothing to warn about.
+    if (rawMax === "" && /^\d+(\.\d+)?\s*%$/.test(col.displayName)) continue;
     errors.push(
-      `Skipped column "${col.displayName}": row 2 must be a positive max score for this component (found ${rawMax ? `"${rawMax}"` : "empty"}). Example: put 100 under "Final Exam" if the exam is out of 100 — this is separate from any "Final grade" / computed total column (those should stay blank in row 2 or be omitted).`
+      `Skipped column "${col.displayName}": the max-score row (directly under the header) must have a positive max for this component (found ${rawMax ? `"${rawMax}"` : "empty"}). Example: put 100 under "Final Exam" if the exam is out of 100 — this is separate from any "Final grade" / computed total column (those should stay blank there or be omitted).`
     );
   }
 
@@ -217,7 +256,7 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
       const numeric = Number(raw.trim());
       if (!Number.isFinite(numeric)) {
         errors.push(
-          `Row ${rowIndex + 3}: grade "${col.displayName}" must be a number, blank, "-", or "N/A" (blank is not stored as 0).`
+          `Row ${maxRowNumber + 1 + rowIndex}: grade "${col.displayName}" must be a number, blank, "-", or "N/A" (blank is not stored as 0).`
         );
         return;
       }
@@ -227,7 +266,7 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
     const codeFromFile = codeIdx >= 0 ? get(codeIdx).trim() : "";
     const codeValue: string | null = codeFromFile.length > 0 ? codeFromFile : null;
     if (!studentNameRaw || !studentNumberRaw) {
-      errors.push(`Row ${rowIndex + 3}: studentName and studentNumber are required.`);
+      errors.push(`Row ${maxRowNumber + 1 + rowIndex}: studentName and studentNumber are required.`);
       return;
     }
 
@@ -246,19 +285,15 @@ export function parseGradeRecordsFromTable(header: string[], dataRows: string[][
 
 /** Parse full CSV text into import records plus per-row error messages for skipped rows. */
 export function parseGradeRecordsFromCsvText(text: string): { records: GradeImportRecord[]; errors: string[] } {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  if (lines.length < 3) {
+  // Blank lines are kept (they are skipped later) so the row numbers in messages match the sheet's.
+  const rows = text.split(/\r?\n/).map((line) => parseCsvLine(line.trim()));
+  if (rows.filter((row) => row.some((cell) => cell !== "")).length < 3) {
     return {
       records: [],
       errors: [
-        "CSV must include a header row, a max-score row (row 2), and at least one student row (row 3+).",
+        "CSV must include a header row, a max-score row (the row under it), and at least one student row.",
       ],
     };
   }
-  const header = parseCsvLine(lines[0]);
-  const dataRows = lines.slice(1).map((line) => parseCsvLine(line));
-  return parseGradeRecordsFromTable(header, dataRows);
+  return parseGradeRecordsFromRows(rows);
 }

@@ -18,6 +18,14 @@ export const experimentalFeatureCatalog: Record<ExperimentalFeatureKey, Experime
     sidebarLabel: "Grades",
     allowedRoles: ["ADMIN", "FACULTY", "CHAIRMAN", "DEAN"],
   },
+  mmsuGradePush: {
+    key: "mmsuGradePush",
+    label: "MMSU Grade Push",
+    description: "Browser extension that fills the MMSU portal gradesheet from a table you paste, then checks the portal matches your sheet.",
+    routePath: "/experimental/mmsu-grade-push",
+    sidebarLabel: "MMSU Grade Push",
+    allowedRoles: ["ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"],
+  },
 };
 
 export function getExperimentalFeaturesForUser(user: User | null): ExperimentalFeatureDefinition[] {

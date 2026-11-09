@@ -31,6 +31,7 @@ import { GeSubjectsPage } from "./pages/geSubjects/GeSubjectsPage";
 import { AboutPage } from "./pages/about/AboutPage";
 import { NotFoundPage } from "./pages/notFound/NotFoundPage";
 import { ExperimentalGradesPage } from "./pages/experimental/ExperimentalGradesPage";
+import { ExperimentalMmsuGradePushPage } from "./pages/experimental/ExperimentalMmsuGradePushPage";
 import { AuditLogPage } from "./pages/audit/AuditLogPage";
 import { UniversityPage } from "./pages/university/UniversityPage";
 import { CollegesPage } from "./pages/university/CollegesPage";
@@ -86,6 +87,16 @@ function App() {
             <ProtectedRoute allowedRoles={["ADMIN", "FACULTY", "CHAIRMAN", "DEAN"]}>
               <ExperimentalRoute featureKey="gradeModule">
                 <ExperimentalGradesPage />
+              </ExperimentalRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="experimental/mmsu-grade-push"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"]}>
+              <ExperimentalRoute featureKey="mmsuGradePush">
+                <ExperimentalMmsuGradePushPage />
               </ExperimentalRoute>
             </ProtectedRoute>
           }
