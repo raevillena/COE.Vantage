@@ -1,14 +1,15 @@
 import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
-import { AppError, badRequest, forbidden, notFound } from "../../utils/errors.js";
+import { AppError, badRequest, conflict, forbidden, notFound } from "../../utils/errors.js";
 import { runUnscoped } from "../../utils/auditContext.js";
 import { env } from "../../config/env.js";
-import { sendGradeAccessEmail } from "../../utils/email.js";
+import { isSmtpConfigured, sendGradeAccessEmail } from "../../utils/email.js";
 import type {
   CreateGradeRecordBody,
   CreateGradeSubjectBody,
   ImportGradeRecordsBody,
   SendAccessCodesBody,
+  ImportEmailsBody,
   PublicComputeRecordBody,
   UpdateGradeRecordBody,
   UpdateGradeSubjectBody,
@@ -164,6 +165,7 @@ export async function updateGradeSubject(subjectId: string, caller: Caller, body
       semester: semesterUpdate,
       gradingSystem: gradingSystemUpdate,
       studentComputeEnabled: body.studentComputeEnabled,
+      sheetImportUrl: body.sheetImportUrl,
     },
     include: {
       owner: { select: { id: true, name: true, role: true, departmentId: true } },
@@ -263,26 +265,42 @@ export async function createRecord(subjectId: string, caller: Caller, body: Crea
 
 /**
  * Full **replace** import: removes every `GradeRecord` for the subject, then inserts the payload.
- * Matches “sync from source sheet” — re-import does not append.
+ * Matches "sync from source sheet" — re-import does not append.
+ *
+ * A student who was already in the subject keeps their access code (matched by student number) unless the sheet names a
+ * code, so the links and codes already sent to students keep working after a re-import. Only new students get a new code.
  */
 export async function importRecords(subjectId: string, caller: Caller, body: ImportGradeRecordsBody) {
   const access = await loadSubjectAccess(subjectId, caller);
   assertWriteAccess(access);
 
   return prisma.$transaction(async (tx) => {
+    const before = await tx.gradeRecord.findMany({ where: { subjectId }, select: { studentNumber: true, code: true, email: true, emailSentAt: true } });
+    const previous = new Map(before.map((row) => [row.studentNumber.trim().toLowerCase(), row]));
     const removed = await tx.gradeRecord.deleteMany({ where: { subjectId } });
     if (body.records.length > 0) {
-      await tx.gradeRecord.createMany({
-        data: body.records.map((record) => ({
+      const used = new Set<string>();
+      const data = body.records.map((record) => {
+        const earlier = previous.get(record.studentNumber.trim().toLowerCase());
+        const given = record.code?.trim() || "";
+        let code = given || earlier?.code || newGradeRecordAccessCode();
+        // two rows with the same student number must not share a code
+        while (used.has(code)) code = newGradeRecordAccessCode();
+        used.add(code);
+        const kept = !given && earlier?.code === code;
+        return {
           subjectId,
           studentName: record.studentName,
           studentNumber: record.studentNumber,
-          email: record.email ?? null,
-          code: record.code?.trim() ? record.code.trim() : newGradeRecordAccessCode(),
+          email: record.email ?? earlier?.email ?? null,
+          code,
+          // "sent" only stays true while the code that was sent is still the code
+          emailSentAt: kept ? earlier?.emailSentAt ?? null : null,
           grades: record.grades,
           maxScores: record.maxScores ?? undefined,
-        })),
+        };
       });
+      await tx.gradeRecord.createMany({ data });
     }
     return { imported: body.records.length, removed: removed.count };
   });
@@ -330,6 +348,8 @@ export async function importRecordsFromGoogleSheet(subjectId: string, caller: Ca
     throw badRequest(errors[0] ?? "No valid rows in the exported CSV");
   }
   const { imported, removed } = await importRecords(subjectId, caller, gradeImportRecordsToBody(records));
+  // Remember the link that worked, with the subject, so it is there next time whatever browser is used.
+  await prisma.gradeSubject.update({ where: { id: subjectId }, data: { sheetImportUrl: sheetUrl } });
   return { imported, removed, skipped: errors.length, errors: errors.slice(0, 50) };
 }
 
@@ -654,39 +674,167 @@ export async function publicLookup(studentNumber: string, code: string) {
   return attachExpectedItems(records);
 }
 
+// ---------------------------------------------------------------- access emails
+// Sent as a background job, one email at a time with a pause between them, so a long list neither holds a request open nor
+// hits the mail server as a burst (which is how a mailbox gets flagged as spam or blocked). Failures are kept per student.
+
+const EMAIL_PAUSE_MS = 1500; // between two emails (only when a real SMTP server is configured)
+const EMAIL_DAILY_LIMIT = 400; // emails started in 24 hours across the app; most mailboxes allow 500
+const EMAIL_STOP_AFTER_FAILURES = 3; // this many failures in a row means the server refuses us: stop instead of retrying
+
+type EmailFailure = { studentNumber: string; studentName: string; reason: string };
+type EmailJob = {
+  state: "running" | "done";
+  total: number;
+  sent: number;
+  failed: EmailFailure[];
+  /** Left out because they have no (valid) email address. */
+  noEmail: number;
+  /** Left out because they were already sent their code (and "resend" was off). */
+  alreadySent: number;
+  /** Why the job ended before reaching everyone, if it did. */
+  stoppedReason: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+const emailJobs = new Map<string, EmailJob>();
+
+const EMAIL_PATTERN = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+export function isValidEmail(value: string): boolean {
+  return value.length <= 254 && EMAIL_PATTERN.test(value);
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function accessEmailStatus(subjectId: string, caller: Caller) {
+  await loadSubjectAccess(subjectId, caller);
+  return emailJobs.get(subjectId) ?? null;
+}
+
 export async function sendAccessCodes(subjectId: string, caller: Caller, body: SendAccessCodesBody) {
   const access = await loadSubjectAccess(subjectId, caller);
   assertWriteAccess(access);
+  if (emailJobs.get(subjectId)?.state === "running") throw conflict("Emails for this subject are already being sent. Wait for them to finish.");
 
-  const where = body.recordIds?.length
-    ? { subjectId, id: { in: body.recordIds } }
-    : { subjectId };
-  const records = await prisma.gradeRecord.findMany({ where });
-  if (records.length === 0) return { sent: 0, skipped: 0 };
+  const where = body.recordIds?.length ? { subjectId, id: { in: body.recordIds } } : { subjectId };
+  const records = await prisma.gradeRecord.findMany({ where, orderBy: { studentName: "asc" } });
+  const queue = records.filter((r) => r.email && isValidEmail(r.email) && (body.resend || !r.emailSentAt));
+  const noEmail = records.filter((r) => !r.email || !isValidEmail(r.email)).length;
+  const alreadySent = records.filter((r) => r.email && isValidEmail(r.email) && !body.resend && r.emailSentAt).length;
+
+  const real = isSmtpConfigured();
+  let allowance = queue.length;
+  if (real) {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const usedToday = await runUnscoped(() => prisma.gradeRecord.count({ where: { emailSentAt: { gte: since } } }));
+    allowance = Math.max(0, EMAIL_DAILY_LIMIT - usedToday);
+  }
+  const toSend = queue.slice(0, allowance);
+  const job: EmailJob = {
+    state: toSend.length > 0 ? "running" : "done",
+    total: toSend.length,
+    sent: 0,
+    failed: [],
+    noEmail,
+    alreadySent,
+    stoppedReason:
+      toSend.length < queue.length
+        ? `Daily limit reached: only ${toSend.length} of ${queue.length} emails were queued so the mail account is not flagged. Send the rest tomorrow.`
+        : null,
+    startedAt: new Date().toISOString(),
+    finishedAt: toSend.length > 0 ? null : new Date().toISOString(),
+  };
+  emailJobs.set(subjectId, job);
+  if (toSend.length === 0) return job;
 
   const base = env.FRONTEND_ORIGIN.replace(/\/$/, "");
-  let sent = 0;
-  let skipped = 0;
-  for (const record of records) {
-    if (!record.email) {
-      skipped += 1;
+  const subjectName = access.subject.name;
+  void runUnscoped(async () => {
+    let failuresInARow = 0;
+    for (let i = 0; i < toSend.length; i += 1) {
+      const record = toSend[i];
+      try {
+        await sendGradeAccessEmail({
+          toEmail: record.email!,
+          subjectName,
+          studentName: record.studentName,
+          studentNumber: record.studentNumber,
+          accessCode: record.code,
+          lookupUrl: `${base}/grades?studentNumber=${encodeURIComponent(record.studentNumber)}&code=${encodeURIComponent(record.code)}`,
+        });
+        await prisma.gradeRecord.update({ where: { id: record.id }, data: { emailSentAt: new Date() } });
+        job.sent += 1;
+        failuresInARow = 0;
+      } catch (err) {
+        job.failed.push({
+          studentNumber: record.studentNumber,
+          studentName: record.studentName,
+          reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+        });
+        failuresInARow += 1;
+        if (failuresInARow >= EMAIL_STOP_AFTER_FAILURES) {
+          job.stoppedReason = `Stopped after ${EMAIL_STOP_AFTER_FAILURES} failures in a row (the mail server may be refusing messages). The remaining ${toSend.length - i - 1} were not tried.`;
+          break;
+        }
+      }
+      if (real && i < toSend.length - 1) await pause(EMAIL_PAUSE_MS);
+    }
+    job.state = "done";
+    job.finishedAt = new Date().toISOString();
+  }).catch((err) => {
+    job.state = "done";
+    job.stoppedReason = `Sending stopped: ${err instanceof Error ? err.message : String(err)}`;
+    job.finishedAt = new Date().toISOString();
+  });
+  return job;
+}
+
+/**
+ * Fills in the email of records that already exist, from a table copied out of a sheet (name, student number, email).
+ * Matched by student number; only the email changes (grades and access codes are never touched, no record is created).
+ * A changed address clears "sent" so the new address gets the code.
+ */
+export async function importEmails(subjectId: string, caller: Caller, body: ImportEmailsBody) {
+  const access = await loadSubjectAccess(subjectId, caller);
+  assertWriteAccess(access);
+  const records = await prisma.gradeRecord.findMany({ where: { subjectId } });
+  const bySubjectNumber = new Map(records.map((r) => [r.studentNumber.trim().toLowerCase(), r]));
+  const squash = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  let updated = 0;
+  let unchanged = 0;
+  const unmatched: { studentNumber: string; studentName: string }[] = [];
+  const invalid: { studentNumber: string; email: string }[] = [];
+  const nameDiffers: { studentNumber: string; sheetName: string; recordName: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of body.rows) {
+    const number = row.studentNumber.trim();
+    const email = row.email.trim().toLowerCase();
+    const record = bySubjectNumber.get(number.toLowerCase());
+    if (!record) {
+      unmatched.push({ studentNumber: number, studentName: row.studentName ?? "" });
       continue;
     }
-    const lookupUrl = `${base}/grades?studentNumber=${encodeURIComponent(record.studentNumber)}&code=${encodeURIComponent(record.code)}`;
-    await sendGradeAccessEmail({
-      toEmail: record.email,
-      subjectName: access.subject.name,
-      studentName: record.studentName,
-      studentNumber: record.studentNumber,
-      accessCode: record.code,
-      lookupUrl,
-    });
-    sent += 1;
-    await prisma.gradeRecord.update({
-      where: { id: record.id },
-      data: { emailSentAt: new Date() },
-    });
+    if (!isValidEmail(email)) {
+      invalid.push({ studentNumber: number, email: row.email.trim() });
+      continue;
+    }
+    if (seen.has(record.id)) continue; // a student listed twice: the first row wins
+    seen.add(record.id);
+    if (row.studentName && squash(row.studentName) !== squash(record.studentName)) {
+      // names are written in many ways ("Last, First" or "First Last"): only flag when the words differ too
+      const words = (v: string) => v.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(" ");
+      if (words(row.studentName) !== words(record.studentName)) {
+        nameDiffers.push({ studentNumber: number, sheetName: row.studentName, recordName: record.studentName });
+      }
+    }
+    if ((record.email ?? "").toLowerCase() === email) {
+      unchanged += 1;
+      continue;
+    }
+    await prisma.gradeRecord.update({ where: { id: record.id }, data: { email, emailSentAt: null } });
+    updated += 1;
   }
-  return { sent, skipped };
+  return { updated, unchanged, unmatched, invalid, nameDiffers };
 }
 

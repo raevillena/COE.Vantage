@@ -260,6 +260,8 @@ export function AssignmentForm({
     const effectiveRoomId = isOffSystemRoom ? null : roomId;
     if ((!effectiveFacultyId && !facultyDisplayName?.trim()) || !subjectId || !studentClassId || (effectiveRoomId === "" && !roomDisplayName?.trim()) || !academicYearId) {
       setPreview(null);
+      // a check that was running is cancelled by this change and can no longer switch the spinner off
+      setLoading(false);
       return;
     }
     let cancelled = false;
@@ -300,19 +302,23 @@ export function AssignmentForm({
   useEffect(() => {
     if (!coInstructorOpen || !editingLoadId || String(editingLoadId).startsWith("pending-")) {
       setCoPreview(null);
+      setCoLoading(false);
       return;
     }
     if (!coFacultyId) {
       setCoPreview(null);
+      setCoLoading(false);
       return;
     }
     const coEffectiveRoomId = coIsOffSystemRoom ? null : coRoomId || null;
     if (!subjectId || !studentClassId || !academicYearId) {
       setCoPreview(null);
+      setCoLoading(false);
       return;
     }
     if (!coIsOffSystemRoom && (!coRoomId || coRoomId === "__none__")) {
       setCoPreview(null);
+      setCoLoading(false);
       return;
     }
     let cancelled = false;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isAxiosError } from "axios";
-import { Copy, Eye, KeyRound, Link2, Mail, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, KeyRound, Link2, Mail, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { Dialog } from "../../components/ui/dialog";
@@ -21,6 +21,8 @@ type GradeSubject = {
   academicYearId?: string | null;
   semester?: number | null;
   academicYear?: { id: string; name: string } | null;
+  /** The Google Sheet link this subject imports from (kept on the server). */
+  sheetImportUrl?: string | null;
   gradingSystem?: Record<string, unknown> | null;
   studentComputeEnabled: boolean;
   owner: { id: string; name: string; role: string; departmentId: string | null };
@@ -79,6 +81,41 @@ function formatGradeCell(record: GradeRecord, key: string): string {
   const max = maxScores?.[key];
   if (max !== undefined && Number.isFinite(Number(max))) return `${Number(raw)}/${Number(max)}`;
   return String(Number(raw));
+}
+
+type PastedEmailRow = { studentName: string; studentNumber: string; email: string };
+
+/**
+ * Reads a table copied out of a sheet (tab separated; comma separated also works). Uses the header row when there is one
+ * (name / student number / email, in any order), otherwise finds each column by what the cell looks like.
+ */
+export function parsePastedEmails(text: string): PastedEmailRow[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+  const split = (line: string) => (line.includes("\t") ? line.split("\t") : line.split(",")).map((c) => c.trim().replace(/^"|"$/g, ""));
+  const grid = lines.map(split);
+  let col: { name: number; number: number; email: number } | null = null;
+  const head = grid[0];
+  if (!head.some((c) => c.includes("@"))) {
+    const find = (re: RegExp) => head.findIndex((c) => re.test(c));
+    const email = find(/e-?mail/i);
+    const number = find(/(student|id).*(no|num|#)|^id$|number/i);
+    const name = head.findIndex((c, i) => i !== email && i !== number && /name/i.test(c));
+    if (email >= 0 && number >= 0) col = { email, number, name };
+    grid.shift();
+  }
+  const rows: PastedEmailRow[] = [];
+  for (const cells of grid) {
+    if (col) {
+      rows.push({ studentName: col.name >= 0 ? (cells[col.name] ?? "") : "", studentNumber: cells[col.number] ?? "", email: cells[col.email] ?? "" });
+      continue;
+    }
+    const email = cells.find((c) => c.includes("@")) ?? "";
+    const number = cells.find((c) => /^[0-9][0-9-]*$/.test(c)) ?? "";
+    const name = cells.filter((c) => c && c !== email && c !== number).sort((a, b) => b.length - a.length)[0] ?? "";
+    rows.push({ studentName: name, studentNumber: number, email });
+  }
+  return rows.filter((r) => r.studentNumber || r.email);
 }
 
 function shortSentAt(iso: string | null | undefined): string | null {
@@ -200,7 +237,7 @@ function ComputedBreakdownSection({ breakdown }: { breakdown: unknown }) {
   if (categories && categories.length > 0) {
     return (
       <div className="mt-2 space-y-2 border-t border-border pt-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">Breakdown</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Breakdown</p>
         <div className="space-y-2">
           {categories.map((cat, catIdx) => {
             const catLabel = String(cat.name ?? cat.id ?? `Category ${catIdx + 1}`);
@@ -216,7 +253,7 @@ function ComputedBreakdownSection({ breakdown }: { breakdown: unknown }) {
                   </span>
                 </div>
                 {comps.length > 0 ? (
-                  <table className="mt-2 w-full border-collapse text-[10px]">
+                  <table className="mt-2 w-full border-collapse text-xs">
                     <thead>
                       <tr className="border-b border-border text-left text-foreground-muted">
                         <th className="py-1 pr-2 font-medium">Component</th>
@@ -242,7 +279,7 @@ function ComputedBreakdownSection({ breakdown }: { breakdown: unknown }) {
                     </tbody>
                   </table>
                 ) : (
-                  <p className="mt-1 text-[10px] text-foreground-muted">No components in this category.</p>
+                  <p className="mt-1 text-xs text-foreground-muted">No components in this category.</p>
                 )}
               </div>
             );
@@ -254,8 +291,8 @@ function ComputedBreakdownSection({ breakdown }: { breakdown: unknown }) {
   if (breakdown != null && typeof breakdown === "object") {
     return (
       <div className="mt-2 space-y-1 border-t border-border pt-2">
-        <p className="text-[10px] font-medium text-foreground-muted">Breakdown (legacy shape)</p>
-        <pre className="max-h-48 overflow-auto rounded border border-border bg-surface-muted/20 p-2 font-mono text-[10px] leading-relaxed text-foreground">
+        <p className="text-xs font-medium text-foreground-muted">Breakdown (legacy shape)</p>
+        <pre className="max-h-48 overflow-auto rounded border border-border bg-surface-muted/20 p-2 font-mono text-xs leading-relaxed text-foreground">
           {JSON.stringify(breakdown, null, 2)}
         </pre>
       </div>
@@ -264,7 +301,7 @@ function ComputedBreakdownSection({ breakdown }: { breakdown: unknown }) {
   if (breakdown != null && breakdown !== "") {
     return (
       <div className="mt-2 border-t border-border pt-2">
-        <p className="mb-1 text-[10px] text-foreground-muted">Breakdown</p>
+        <p className="mb-1 text-xs text-foreground-muted">Breakdown</p>
         <p className="font-mono text-xs text-foreground">{String(breakdown)}</p>
       </div>
     );
@@ -632,12 +669,41 @@ export function ExperimentalGradesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [resendAll, setResendAll] = useState(false);
+  type EmailJobView = {
+    state: "running" | "done";
+    total: number;
+    sent: number;
+    failed: { studentNumber: string; studentName: string; reason: string }[];
+    noEmail: number;
+    alreadySent: number;
+    stoppedReason: string | null;
+  };
+  const [emailJob, setEmailJob] = useState<EmailJobView | null>(null);
+  const [importEmailsOpen, setImportEmailsOpen] = useState(false);
+  const [emailPaste, setEmailPaste] = useState("");
+  const [emailImportResult, setEmailImportResult] = useState<{
+    updated: number;
+    unchanged: number;
+    unmatched: { studentNumber: string; studentName: string }[];
+    invalid: { studentNumber: string; email: string }[];
+    nameDiffers: { studentNumber: string; sheetName: string; recordName: string }[];
+  } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [viewRecord, setViewRecord] = useState<GradeRecord | null>(null);
   /** Record queued for delete; dialog shows a typed challenge before calling the API. */
   const [deleteRecordTarget, setDeleteRecordTarget] = useState<GradeRecord | null>(null);
   const [deleteRecordChallenge, setDeleteRecordChallenge] = useState("");
   const [deleteRecordChallengeInput, setDeleteRecordChallengeInput] = useState("");
+  /** One in-app confirmation for every "are you sure" (replaces window.confirm): `askConfirm` resolves true on confirm. */
+  const [confirmAsk, setConfirmAsk] = useState<{ title: string; text: string; label: string; danger: boolean; resolve: (ok: boolean) => void } | null>(null);
+  const askConfirm = (title: string, text: string, label: string, danger = false) =>
+    new Promise<boolean>((resolve) => setConfirmAsk({ title, text, label, danger, resolve }));
+  const answerConfirm = (ok: boolean) => {
+    confirmAsk?.resolve(ok);
+    setConfirmAsk(null);
+  };
+
   /** Student row context for regenerate-code confirmation (replaces window.confirm). */
   const [regenerateCodeTarget, setRegenerateCodeTarget] = useState<{
     id: string;
@@ -645,6 +711,25 @@ export function ExperimentalGradesPage() {
     studentNumber: string;
   } | null>(null);
   const [recordSearch, setRecordSearch] = useState("");
+  /** Text search over the subject list (name, code and owner), next to the year and semester filters. */
+  const [listSearch, setListSearch] = useState("");
+  /** Freeze the name + actions column while scrolling sideways. On by default (the user prefers it); every frozen cell is its
+      own compositor layer per student, so the "Freeze names" checkbox lets a slow browser turn it off. Remembered in this browser. */
+  const [freezeNames, setFreezeNames] = useState(() => {
+    try {
+      return localStorage.getItem("cv_grades_freeze_names") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const changeFreezeNames = (on: boolean) => {
+    setFreezeNames(on);
+    try {
+      localStorage.setItem("cv_grades_freeze_names", on ? "1" : "0");
+    } catch {
+      // remembering the choice is a convenience
+    }
+  };
 
   /** The records table's own scroller, and the scrollbar strip above its headers that mirrors it. */
   const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -670,11 +755,13 @@ export function ExperimentalGradesPage() {
       subjects.filter((subject) => {
         const yearOk = listYear === ALL || (subject.academicYearId ?? NO_YEAR) === listYear;
         const semesterOk = listSemester === ALL || String(subject.semester ?? NO_SEMESTER) === listSemester;
-        return yearOk && semesterOk;
+        const needle = listSearch.trim().toLowerCase();
+        const searchOk = !needle || [subject.name, subject.code ?? "", subject.owner.name].some((text) => text.toLowerCase().includes(needle));
+        return yearOk && semesterOk && searchOk;
       }),
-    [subjects, listYear, listSemester]
+    [subjects, listYear, listSemester, listSearch]
   );
-  const listFiltered = listYear !== ALL || listSemester !== ALL;
+  const listFiltered = listYear !== ALL || listSemester !== ALL || listSearch.trim() !== "";
 
   const selectedSubject = useMemo(
     () => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
@@ -843,10 +930,34 @@ export function ExperimentalGradesPage() {
     if (!selectedSubjectId) {
       setGoogleSheetUrl("");
     } else {
-      // Restore last successful sheet import link for this subject (see persistImportSheetUrl).
-      setGoogleSheetUrl(readStoredImportSheetUrl(selectedSubjectId));
+      // The link is saved with the subject on the server. A link only this browser remembers (older versions kept it in
+      // local storage) is shown and moved up to the server once.
+      const onServer = subjects.find((subject) => subject.id === selectedSubjectId)?.sheetImportUrl ?? "";
+      const inBrowser = readStoredImportSheetUrl(selectedSubjectId);
+      setGoogleSheetUrl(onServer || inBrowser);
+      if (!onServer && inBrowser) {
+        void apiClient
+          .patch(`/grade-subjects/${selectedSubjectId}`, { sheetImportUrl: inBrowser })
+          .then(() => loadSubjects())
+          .catch(() => undefined);
+      }
     }
   }, [selectedSubjectId]);
+
+  /** Saves the typed link when the box is left (not only after a successful import), so it is not lost on a reload or another subject. */
+  const saveSheetUrl = async () => {
+    if (!selectedSubjectId) return;
+    const value = googleSheetUrl.trim();
+    const onServer = subjects.find((subject) => subject.id === selectedSubjectId)?.sheetImportUrl ?? "";
+    if (value === onServer) return;
+    if (value) persistImportSheetUrl(selectedSubjectId, value); // also keep a copy in this browser
+    try {
+      await apiClient.patch(`/grade-subjects/${selectedSubjectId}`, { sheetImportUrl: value || null });
+      await loadSubjects();
+    } catch {
+      // a text that is not a link is refused by the server: the import button reports it when it is used
+    }
+  };
 
   // Track how wide the table is against its box, so the top scrollbar matches and only shows when there is something to scroll.
   useEffect(() => {
@@ -918,8 +1029,32 @@ export function ExperimentalGradesPage() {
     }
   };
 
+  /** Rename a grade subject (its name and its optional code). */
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; code: string } | null>(null);
+  const saveRename = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renameTarget) return;
+    const name = renameTarget.name.trim();
+    if (!name) {
+      setError("A subject needs a name.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiClient.patch(`/grade-subjects/${renameTarget.id}`, { name, code: renameTarget.code.trim() || null });
+      setRenameTarget(null);
+      await loadSubjects();
+    } catch {
+      setError("Could not rename the grade subject.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const removeSubject = async (subjectId: string) => {
-    if (!window.confirm("Delete this grade subject?")) return;
+    const target = subjects.find((subject) => subject.id === subjectId);
+    const detail = target ? `"${target.name}" and its ${target._count.records} record${target._count.records === 1 ? "" : "s"} with their access codes will be deleted.` : "Its records and access codes go with it.";
+    if (!(await askConfirm("Delete this grade subject?", detail, "Delete subject", true))) return;
     setSaving(true);
     try {
       await apiClient.delete(`/grade-subjects/${subjectId}`);
@@ -1144,11 +1279,7 @@ export function ExperimentalGradesPage() {
 
   const importCsvRecords = async (file: File) => {
     if (!selectedSubjectId) return;
-    if (
-      !window.confirm(
-        "Import replaces all grade records for this subject with the file contents (same as syncing from the source sheet). Continue?"
-      )
-    ) {
+    if (!(await askConfirm("Replace all records?", "Import replaces all grade records for this subject with the file contents (same as syncing from the source sheet).", "Import and replace"))) {
       return;
     }
     setSaving(true);
@@ -1185,11 +1316,7 @@ export function ExperimentalGradesPage() {
 
   const importFromGoogleSheet = async () => {
     if (!selectedSubjectId || !googleSheetUrl.trim()) return;
-    if (
-      !window.confirm(
-        "Import replaces all grade records for this subject with the sheet contents (full sync). Continue?"
-      )
-    ) {
+    if (!(await askConfirm("Replace all records?", "Import replaces all grade records for this subject with the sheet contents (full sync).", "Import and replace"))) {
       return;
     }
     setSaving(true);
@@ -1228,11 +1355,7 @@ export function ExperimentalGradesPage() {
   /** Excel upload uses multipart FormData; axios default JSON header would break the boundary, so we use fetch with the same base URL and Bearer token as the SPA. */
   const importExcelFile = async (file: File) => {
     if (!selectedSubjectId) return;
-    if (
-      !window.confirm(
-        "Import replaces all grade records for this subject with the spreadsheet contents (full sync). Continue?"
-      )
-    ) {
+    if (!(await askConfirm("Replace all records?", "Import replaces all grade records for this subject with the spreadsheet contents (full sync).", "Import and replace"))) {
       return;
     }
     setSaving(true);
@@ -1362,39 +1485,70 @@ export function ExperimentalGradesPage() {
     setSelectedRecordIds(new Set(filteredRecords.map((record) => record.id)));
   };
 
-  const sendAccessEmails = async (selectedOnly: boolean): Promise<boolean> => {
-    if (!selectedSubjectId) return false;
-    setSaving(true);
+  /** Starts the background send and follows it until it finishes; the server paces the emails. */
+  const runEmailJob = async (recordIds: string[] | undefined, resend: boolean): Promise<EmailJobView | null> => {
+    if (!selectedSubjectId) return null;
+    const subjectId = selectedSubjectId;
     setError(null);
     try {
-      const payload = selectedOnly ? { recordIds: Array.from(selectedRecordIds) } : {};
-      await apiClient.post(`/grade-subjects/${selectedSubjectId}/send-access-codes`, payload);
-      await loadSubjectDetails(selectedSubjectId);
-      return true;
-    } catch {
-      setError("Could not send access code emails.");
-      return false;
+      const started = await apiClient.post<EmailJobView>(`/grade-subjects/${subjectId}/send-access-codes`, { ...(recordIds ? { recordIds } : {}), resend });
+      let job = started.data;
+      setEmailJob(job);
+      while (job.state === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const polled = await apiClient.get<EmailJobView | null>(`/grade-subjects/${subjectId}/send-access-codes/status`);
+        if (!polled.data) break;
+        job = polled.data;
+        setEmailJob(job);
+        void loadSubjectDetails(subjectId);
+      }
+      await loadSubjectDetails(subjectId);
+      return job;
+    } catch (e) {
+      const message = isAxiosError(e) && e.response?.status === 409 ? "Emails for this subject are already being sent. Wait for them to finish." : "Could not send access code emails.";
+      setError(message);
+      toast.error(message);
+      return null;
+    }
+  };
+
+  const sendAccessEmails = async (selectedOnly: boolean) => {
+    setSaving(true);
+    try {
+      await runEmailJob(selectedOnly ? Array.from(selectedRecordIds) : undefined, resendAll);
     } finally {
       setSaving(false);
     }
   };
 
   const sendAccessEmailOne = async (recordId: string) => {
-    if (!selectedSubjectId) return;
     setSaving(true);
-    setError(null);
     try {
-      const { data } = await apiClient.post<{ sent: number; skipped: number }>(
-        `/grade-subjects/${selectedSubjectId}/send-access-codes`,
-        { recordIds: [recordId] }
-      );
+      const job = await runEmailJob([recordId], true);
+      if (!job) return;
+      if (job.sent > 0) toast.success("Access email sent.");
+      else if (job.failed.length > 0) toast.error(`Could not send: ${job.failed[0].reason}`);
+      else toast.error("This record has no valid email address.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const importEmailsFromPaste = async () => {
+    if (!selectedSubjectId) return;
+    const rows = parsePastedEmails(emailPaste);
+    if (rows.length === 0) {
+      setEmailImportResult(null);
+      toast.error("Paste the rows copied from your sheet first.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await apiClient.post(`/grade-subjects/${selectedSubjectId}/records/import-emails`, { rows: rows.map((r) => ({ ...r, studentName: r.studentName || undefined })) });
+      setEmailImportResult(data);
       await loadSubjectDetails(selectedSubjectId);
-      if (data.sent > 0) toast.success("Access email sent.");
-      else if (data.skipped > 0) toast.error("This record has no email address.");
-      else toast.success("Nothing to send.");
     } catch {
-      setError("Could not send access email.");
-      toast.error("Could not send access email.");
+      toast.error("Could not import the emails.");
     } finally {
       setSaving(false);
     }
@@ -1495,6 +1649,14 @@ export function ExperimentalGradesPage() {
 
           {subjects.length > 0 && (
             <div className="space-y-2 border-t border-border pt-3" role="group" aria-label="Filter grade subjects by term">
+              <input
+                type="search"
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                placeholder="Search subjects by name, code or owner…"
+                aria-label="Search grade subjects"
+                className="w-full rounded border border-border-strong bg-surface px-3 py-1.5 text-sm text-foreground"
+              />
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-0.5 text-xs font-medium text-foreground-muted">
                   Filter: year
@@ -1543,6 +1705,7 @@ export function ExperimentalGradesPage() {
                     onClick={() => {
                       setListYear(ALL);
                       setListSemester(ALL);
+                      setListSearch("");
                     }}
                   >
                     Clear filters
@@ -1575,13 +1738,24 @@ export function ExperimentalGradesPage() {
                 <p className="mt-0.5 text-xs text-foreground-muted">{termLabel(subjectTerm(subject))}</p>
                 <div className="mt-1 flex items-center justify-between text-xs text-foreground-muted">
                   <span>{subject._count.records} records</span>
-                  <button
-                    type="button"
-                    className="text-danger"
-                    onClick={() => void removeSubject(subject.id)}
-                  >
-                    Delete
-                  </button>
+                  <span className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-primary hover:underline"
+                      aria-label={`Rename ${subject.name}`}
+                      onClick={() => setRenameTarget({ id: subject.id, name: subject.name, code: subject.code ?? "" })}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="text-danger hover:underline"
+                      aria-label={`Delete ${subject.name}`}
+                      onClick={() => void removeSubject(subject.id)}
+                    >
+                      Delete
+                    </button>
+                  </span>
                 </div>
               </div>
             ))}
@@ -1709,6 +1883,18 @@ export function ExperimentalGradesPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => {
+                      setEmailPaste("");
+                      setEmailImportResult(null);
+                      setImportEmailsOpen(true);
+                    }}
+                    disabled={saving}
+                    className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-60"
+                  >
+                    Import emails
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setShareOpen(true)}
                     disabled={saving}
                     className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-60"
@@ -1821,6 +2007,7 @@ export function ExperimentalGradesPage() {
                 onOpenChange={(open) => {
                   setImportOpen(open);
                   if (open) setImportDialogError(null);
+                  else void saveSheetUrl(); // closing the dialog keeps a link that was typed but not imported yet
                 }}
               >
                 <Dialog.Content
@@ -1874,6 +2061,8 @@ export function ExperimentalGradesPage() {
                         placeholder="https://docs.google.com/spreadsheets/d/..."
                         value={googleSheetUrl}
                         onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                        onBlur={() => void saveSheetUrl()}
+                        aria-label="Google Sheet link"
                       />
                       <button
                         type="button"
@@ -1939,6 +2128,9 @@ export function ExperimentalGradesPage() {
                           gradingSystemSnapshot={gradingSystemSnapshot}
                           initialStudentComputeEnabled={selectedSubject.studentComputeEnabled}
                           records={records}
+                          copySources={subjects
+                            .filter((other) => other.id !== selectedSubjectId)
+                            .map((other) => ({ id: other.id, name: other.name, code: other.code, gradingSystem: other.gradingSystem ?? null }))}
                           saving={saving}
                           embedInDialog
                           settingsOpen={settingsOpen}
@@ -1971,41 +2163,143 @@ export function ExperimentalGradesPage() {
                 </Dialog.Content>
               </Dialog.Root>
 
-              <Dialog.Root open={sendEmailOpen} onOpenChange={setSendEmailOpen}>
+              <Dialog.Root
+                open={sendEmailOpen}
+                onOpenChange={(open) => {
+                  if (!open && emailJob?.state === "running") return; // let the send finish; it keeps going on the server anyway
+                  setSendEmailOpen(open);
+                  if (!open) setEmailJob(null);
+                }}
+              >
                 <Dialog.Content
                   title="Send access emails"
-                  description="Emails include the public grade link and access code. Records without an email are skipped."
+                  description="Emails include the public grade link and access code. They go out one at a time, with a short pause between them, so the mail account is not flagged. Records without a valid email are skipped."
                   className="!max-w-md"
                 >
-                  <p className="mt-3 text-sm text-foreground-muted">
-                    Selected in table: <span className="font-medium text-foreground">{selectedRecordIds.size}</span> record
-                    {selectedRecordIds.size === 1 ? "" : "s"}
-                  </p>
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  {!emailJob && (
+                    <>
+                      <p className="mt-3 text-sm text-foreground-muted">
+                        Selected in table: <span className="font-medium text-foreground">{selectedRecordIds.size}</span> record
+                        {selectedRecordIds.size === 1 ? "" : "s"}. Students who were already emailed are left out.
+                      </p>
+                      <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
+                        <input type="checkbox" checked={resendAll} onChange={(e) => setResendAll(e.target.checked)} />
+                        Email students who were already sent their code again
+                      </label>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <Dialog.Close asChild>
+                          <button type="button" className="rounded border border-border-strong px-3 py-1.5 text-sm hover:bg-surface-hover">
+                            Cancel
+                          </button>
+                        </Dialog.Close>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void sendAccessEmails(false)}
+                          className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50"
+                        >
+                          Send to all records
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving || selectedRecordIds.size === 0}
+                          onClick={() => void sendAccessEmails(true)}
+                          className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        >
+                          Send to selected only
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {emailJob && (
+                    <div className="mt-3 space-y-2 text-sm" role="status">
+                      <p className="font-medium text-foreground">
+                        {emailJob.state === "running" ? "Sending…" : "Done."} {emailJob.sent} of {emailJob.total} sent
+                        {emailJob.failed.length > 0 ? `, ${emailJob.failed.length} failed` : ""}.
+                      </p>
+                      <div className="h-2 overflow-hidden rounded bg-surface-muted">
+                        <div className="h-full bg-primary" style={{ width: `${emailJob.total ? Math.round(((emailJob.sent + emailJob.failed.length) / emailJob.total) * 100) : 100}%` }} />
+                      </div>
+                      <p className="text-foreground-muted">
+                        {emailJob.alreadySent > 0 ? `${emailJob.alreadySent} already emailed (left out). ` : ""}
+                        {emailJob.noEmail > 0 ? `${emailJob.noEmail} without a valid email (skipped).` : ""}
+                      </p>
+                      {emailJob.stoppedReason && <p className="rounded bg-warning-muted px-2 py-1.5 text-warning">{emailJob.stoppedReason}</p>}
+                      {emailJob.failed.length > 0 && (
+                        <ul className="max-h-32 overflow-y-auto rounded border border-border p-2 text-xs">
+                          {emailJob.failed.map((f) => (
+                            <li key={f.studentNumber}>
+                              {f.studentName} ({f.studentNumber}): {f.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {emailJob.state === "running" && <p className="text-xs text-foreground-muted">You can leave this page; sending continues on the server.</p>}
+                      {emailJob.state === "done" && (
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+                            onClick={() => {
+                              setSendEmailOpen(false);
+                              setEmailJob(null);
+                            }}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Dialog.Content>
+              </Dialog.Root>
+
+              <Dialog.Root open={importEmailsOpen} onOpenChange={setImportEmailsOpen}>
+                <Dialog.Content
+                  title="Import emails"
+                  description="Copy the rows from your sheet (name, student number and email) and paste them here. Only the email of students already in this subject is filled in; grades and access codes are not touched."
+                  className="!max-w-lg max-h-[90vh] overflow-y-auto"
+                >
+                  <textarea
+                    aria-label="Pasted sheet rows"
+                    className="mt-3 h-40 w-full rounded border border-border-strong bg-surface px-3 py-2 font-mono text-xs text-foreground"
+                    placeholder={"Name\tStudent number\tEmail\nDELA CRUZ, JUAN\t21-123456\tjuan@example.com"}
+                    value={emailPaste}
+                    onChange={(e) => {
+                      setEmailPaste(e.target.value);
+                      setEmailImportResult(null);
+                    }}
+                  />
+                  <p className="mt-1 text-xs text-foreground-muted">{parsePastedEmails(emailPaste).length} rows read.</p>
+                  {emailImportResult && (
+                    <div className="mt-3 space-y-1 rounded border border-border bg-surface-muted/40 p-3 text-xs" role="status">
+                      <p className="font-medium text-foreground">
+                        {emailImportResult.updated} email{emailImportResult.updated === 1 ? "" : "s"} saved, {emailImportResult.unchanged} already the same.
+                      </p>
+                      {emailImportResult.unmatched.length > 0 && (
+                        <p>Not in this subject ({emailImportResult.unmatched.length}): {emailImportResult.unmatched.map((u) => u.studentNumber || u.studentName).join(", ")}</p>
+                      )}
+                      {emailImportResult.invalid.length > 0 && (
+                        <p>Not a valid email ({emailImportResult.invalid.length}): {emailImportResult.invalid.map((u) => `${u.studentNumber} (${u.email || "empty"})`).join(", ")}</p>
+                      )}
+                      {emailImportResult.nameDiffers.length > 0 && (
+                        <p>Saved, but the name differs ({emailImportResult.nameDiffers.length}): {emailImportResult.nameDiffers.map((u) => `${u.studentNumber}: sheet "${u.sheetName}" vs "${u.recordName}"`).join("; ")}</p>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-end gap-2">
                     <Dialog.Close asChild>
                       <button type="button" className="rounded border border-border-strong px-3 py-1.5 text-sm hover:bg-surface-hover">
-                        Cancel
+                        Close
                       </button>
                     </Dialog.Close>
                     <button
                       type="button"
-                      disabled={saving}
-                      onClick={async () => {
-                        if (await sendAccessEmails(false)) setSendEmailOpen(false);
-                      }}
-                      className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm hover:bg-surface-hover disabled:opacity-50"
-                    >
-                      Send to all records
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving || selectedRecordIds.size === 0}
-                      onClick={async () => {
-                        if (await sendAccessEmails(true)) setSendEmailOpen(false);
-                      }}
+                      disabled={saving || !emailPaste.trim()}
+                      onClick={() => void importEmailsFromPaste()}
                       className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
                     >
-                      Send to selected only
+                      Import emails
                     </button>
                   </div>
                 </Dialog.Content>
@@ -2015,6 +2309,7 @@ export function ExperimentalGradesPage() {
                 <Dialog.Content title="Share access" description="Invite staff to view or edit this grade subject." className="!max-w-lg max-h-[90vh] overflow-y-auto">
                   <form className="mt-4 mb-3 flex flex-wrap gap-2" onSubmit={addViewer}>
                     <select
+                      aria-label="User to share with"
                       className="min-w-[200px] flex-1 rounded border border-border-strong bg-surface px-2 py-1.5 text-sm"
                       value={candidateId}
                       onChange={(e) => setCandidateId(e.target.value)}
@@ -2243,7 +2538,7 @@ export function ExperimentalGradesPage() {
                           </div>
                         </dd>
                       </dl>
-                      <p className="text-[10px] leading-snug text-foreground-muted">
+                      <p className="text-xs leading-snug text-foreground-muted">
                         Score highlights vs column max (default 100): green ≥ passing {passingPercentForHighlights}% from
                         settings, amber within {NEAR_PASSING_BAND_POINTS} points below, red lower. Final shading uses
                         equivalence remarks / pass-fail.
@@ -2449,7 +2744,7 @@ export function ExperimentalGradesPage() {
                 </Dialog.Content>
               </Dialog.Root>
 
-              <p className="text-[10px] text-foreground-muted">
+              <p className="text-xs text-foreground-muted">
                 Score cells vs each column&apos;s max (default 100): green ≥ passing {passingPercentForHighlights}% (grading
                 settings), amber within {NEAR_PASSING_BAND_POINTS} points below, red lower. Final column uses equivalence
                 remarks / pass-fail. Status = required keys filled (formula or visible columns).
@@ -2461,9 +2756,17 @@ export function ExperimentalGradesPage() {
                   placeholder="Search: name, number, email, code, grades, final, remarks…"
                   className="w-full max-w-md rounded border border-border-strong bg-surface px-3 py-1.5 text-sm text-foreground"
                 />
-                <p className="text-xs text-foreground-muted">
-                  Showing {filteredRecords.length} of {records.length}
-                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  {tableScrolls && (
+                    <label className="flex items-center gap-1.5 text-xs text-foreground-muted" title="Keep the name column in view while scrolling sideways. Turn it off if scrolling feels slow.">
+                      <input type="checkbox" checked={freezeNames} onChange={(e) => changeFreezeNames(e.target.checked)} />
+                      Freeze names
+                    </label>
+                  )}
+                  <p className="text-xs text-foreground-muted">
+                    Showing {filteredRecords.length} of {records.length}
+                  </p>
+                </div>
               </div>
               <div>
               {/* A second horizontal scrollbar directly above the headers, mirroring the table's own, so sideways scrolling
@@ -2487,12 +2790,13 @@ export function ExperimentalGradesPage() {
                 className={`max-h-[min(75vh,56rem)] overflow-x-auto overflow-y-auto border border-border ${tableScrolls ? "rounded-b" : "rounded"}`}
               >
                 <table className="min-w-max w-full table-fixed border-separate border-spacing-0 text-sm">
-                  <thead className="bg-surface-muted text-left">
-                    {/* Bottom-aligned, so one-line headers sit on the same baseline as wrapped ones. */}
+                  <thead className="sticky top-0 z-[5] bg-surface-muted text-left">
+                    {/* The header row sticks as ONE element (a sticky cell per column would be a compositor layer each).
+                        Bottom-aligned, so one-line headers sit on the same baseline as wrapped ones. */}
                     <tr className="align-bottom">
-                      {/* The one frozen column: every frozen cell costs a compositor layer per row, which is what made
-                          horizontal scrolling stutter. Checkbox, name and the row's actions live together in it. */}
-                      <th className="sticky top-0 z-[5] box-border w-64 min-w-64 bg-surface-muted px-2 py-2 xl:left-0 xl:z-[7] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
+                      {/* Checkbox, name and the row's actions live together in the first column; it freezes only when the
+                          person turns "Freeze names" on. */}
+                      <th className={`box-border w-64 min-w-64 bg-surface-muted px-2 py-2 ${freezeNames ? "xl:sticky xl:left-0 xl:z-[7] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" : ""}`}>
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
@@ -2503,23 +2807,23 @@ export function ExperimentalGradesPage() {
                           <span>Student</span>
                         </div>
                       </th>
-                      <th className="sticky top-0 z-[5] box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2">
+                      <th className="box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2">
                         Final
                       </th>
                       <th
-                        className="sticky top-0 z-[5] box-border w-24 min-w-24 whitespace-nowrap bg-surface-muted py-2 pl-3 pr-1"
+                        className="box-border w-24 min-w-24 whitespace-nowrap bg-surface-muted py-2 pl-3 pr-1"
                         title="Filled grade keys vs grading formula (or visible columns)"
                       >
                         Status
                       </th>
-                      <th className="sticky top-0 z-[5] box-border w-32 min-w-32 overflow-hidden text-ellipsis whitespace-nowrap border-l border-border bg-surface-muted px-3 py-2">
+                      <th className="box-border w-32 min-w-32 overflow-hidden text-ellipsis whitespace-nowrap border-l border-border bg-surface-muted px-3 py-2">
                         Number
                       </th>
-                      <th className="sticky top-0 z-[5] box-border w-52 min-w-52 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-3 py-2">
+                      <th className="box-border w-52 min-w-52 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-3 py-2">
                         Email
                       </th>
                       <th
-                        className="sticky top-0 z-[5] box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2"
+                        className="box-border w-24 min-w-24 overflow-hidden text-ellipsis whitespace-nowrap bg-surface-muted px-2 py-2"
                         title="Access code — click a cell below to copy"
                       >
                         Code
@@ -2527,7 +2831,7 @@ export function ExperimentalGradesPage() {
                       {gradeColumnKeys.map((key, idx) => (
                         <th
                           key={key}
-                          className={`sticky top-0 z-[5] box-border w-[4.5rem] min-w-[4.5rem] max-w-[4.5rem] bg-surface-muted px-1.5 py-2 text-center align-bottom text-xs font-medium leading-tight text-foreground [overflow-wrap:anywhere] ${idx === 0 ? "border-l border-border" : ""}`}
+                          className={`box-border w-[4.5rem] min-w-[4.5rem] max-w-[4.5rem] bg-surface-muted px-1.5 py-2 text-center align-bottom text-xs font-medium leading-tight text-foreground [overflow-wrap:anywhere] ${idx === 0 ? "border-l border-border" : ""}`}
                           title={key}
                         >
                           {/* Wraps inside the column's width, so a long name makes the header taller, not the column wider. */}
@@ -2539,7 +2843,7 @@ export function ExperimentalGradesPage() {
                   <tbody>
                     {filteredRecords.map((record) => (
                       <tr key={record.id} className="[&>td]:border-t [&>td]:border-border">
-                        <td className="box-border w-64 min-w-64 bg-surface px-2 py-2 xl:sticky xl:left-0 xl:z-[2] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                        <td className={`box-border w-64 min-w-64 bg-surface px-2 py-2 ${freezeNames ? "xl:sticky xl:left-0 xl:z-[2] xl:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]" : ""}`}>
                           <div className="flex items-start gap-2">
                             <input
                               type="checkbox"
@@ -2669,11 +2973,23 @@ export function ExperimentalGradesPage() {
                           </div>
                         </td>
                         <td className="box-border w-52 min-w-52 bg-surface px-3 py-2 text-xs text-foreground">
-                          <div className="truncate" title={record.email ?? undefined}>
-                            {record.email ?? "—"}
+                          <div className="flex items-center gap-1">
+                            <span className="min-w-0 flex-1 truncate" title={record.email ?? undefined}>
+                              {record.email ?? "—"}
+                            </span>
+                            {record.email && record.emailSentAt && (
+                              <span
+                                className="inline-flex shrink-0 items-center rounded-full bg-primary-muted p-0.5 text-primary"
+                                role="img"
+                                aria-label="Access email sent"
+                                title={`Access email sent ${shortSentAt(record.emailSentAt) ?? ""}`}
+                              >
+                                <Check className="h-3 w-3" aria-hidden />
+                              </span>
+                            )}
                           </div>
                           {record.email && record.emailSentAt && (
-                            <div className="mt-0.5 text-[10px] text-foreground-muted">Sent {shortSentAt(record.emailSentAt) ?? ""}</div>
+                            <div className="mt-0.5 text-xs text-foreground-muted">Sent {shortSentAt(record.emailSentAt) ?? ""}</div>
                           )}
                         </td>
                         <td className="box-border w-24 min-w-24 whitespace-nowrap bg-surface px-1 py-1 align-middle font-mono text-xs text-foreground">
@@ -2711,6 +3027,57 @@ export function ExperimentalGradesPage() {
           )}
         </section>
       </div>
+      <Dialog.Root open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <Dialog.Content title="Rename grade subject" description="Students keep their access codes; only the name shown to staff and students changes.">
+          {renameTarget && (
+            <form className="mt-4 space-y-3 text-sm" onSubmit={saveRename}>
+              <label className="flex flex-col gap-1 font-medium text-foreground">
+                Name
+                <input
+                  autoFocus
+                  value={renameTarget.name}
+                  onChange={(e) => setRenameTarget({ ...renameTarget, name: e.target.value })}
+                  className="rounded border border-border-strong bg-surface px-3 py-2 font-normal text-foreground"
+                  maxLength={200}
+                />
+              </label>
+              <label className="flex flex-col gap-1 font-medium text-foreground">
+                Code (optional)
+                <input
+                  value={renameTarget.code}
+                  onChange={(e) => setRenameTarget({ ...renameTarget, code: e.target.value })}
+                  className="rounded border border-border-strong bg-surface px-3 py-2 font-normal text-foreground"
+                  maxLength={50}
+                />
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setRenameTarget(null)} className="rounded border border-border-strong px-3 py-1.5 text-foreground hover:bg-surface-hover">
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving || !renameTarget.name.trim()} className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground disabled:opacity-60">
+                  Save name
+                </button>
+              </div>
+            </form>
+          )}
+        </Dialog.Content>
+      </Dialog.Root>
+      <Dialog.Root open={confirmAsk !== null} onOpenChange={(open) => !open && answerConfirm(false)}>
+        <Dialog.Content title={confirmAsk?.title ?? ""} description={confirmAsk?.text}>
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" onClick={() => answerConfirm(false)} className="rounded border border-border-strong px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => answerConfirm(true)}
+              className={`rounded px-3 py-1.5 text-sm font-medium ${confirmAsk?.danger ? "bg-danger text-danger-foreground" : "bg-primary text-primary-foreground"}`}
+            >
+              {confirmAsk?.label}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Root>
     </div>
   );
 }

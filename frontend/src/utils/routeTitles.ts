@@ -14,6 +14,7 @@ export const routeTitles: Record<string, string> = {
   "/departments": "Manage Departments",
   "/scheduler": "Scheduler",
   "/faculty": "Faculty",
+  "/exam-rooms": "Exam Room Reservation",
   "/schedules/faculty": "Faculty Schedule",
   "/schedules/student-class": "Class Schedule",
   "/schedules/rooms": "Room Availability",
@@ -22,7 +23,7 @@ export const routeTitles: Record<string, string> = {
   "/profile": "Profile",
   "/about": "About",
   "/experimental/grades": "Grades",
-  "/experimental/mmsu-grade-push": "MMSU Grade Push",
+  "/experimental/mmsu-grade-push": "Portal Insert Grade",
 };
 
 export function getPageTitle(pathname: string): string {

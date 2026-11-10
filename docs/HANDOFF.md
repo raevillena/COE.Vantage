@@ -1,46 +1,39 @@
 # Hand-off (read this first)
 
-Last refreshed: 2026-11-09. Refresh it at the end of every session (skill `end-session-handoff`). Keep it under about 70 lines: delete what is done.
+Last refreshed: 2026-11-10. Refresh it at the end of every session (skill `end-session-handoff`). Keep it under about 70 lines: delete what is done.
 
 ## Where things stand
-- Branch `main`, last commit `v0.7.5`. **v0.8.1 is packaged (versions, changelog, k8s tags) but NOT committed**: dozens of modified and new files (see `git status`).
-- Dev servers (`:4000` backend, `:5173` frontend) were NOT running at the start of the 2026-11-09 session; check and start them (`npm run dev` in each). Any started from a Claude session stop when it ends (logs `/tmp/backend.log`, `/tmp/frontend.log`).
+- Branch `main`, last commits `v0.8.0` and `v0.8.1` (the user committed both); v0.8.2 packaged 2026-11-10 and refreshed with Exam Room Reservation, not committed. **Uncommitted: only the list-filters work** (7 modified pages + `components/ui/listFilters.tsx` + `tests/e2e/listFilters.spec.ts` + a doc note). It is NOT in the v0.8.1 release notes; it belongs to the next release (when packaging, add one "Improved" line: filters on the Student classes, Subjects, Rooms, Curriculum, Departments and Trash pages; mention nothing admin-only beyond that).
+- Dev servers (`:4000`, `:5173`) were started from a Claude session on 2026-11-10 (they stop when it ends: `npm run dev` in `backend/` and `frontend/`). **Uncommitted now (also the Portal Insert Grade rename with a rebuilt extension zip v0.2.1 and new guide pictures; also Exam Room Reservation + the faculty menu change, needs migration `20260624000000_exam_room_reservation`; the public lookup redesign; needs migration `20260623000000_grade_subject_sheet_url` in production when released; applied to the dev DB):** list filters, pagination, the Grades import link saved on the server, the Grades-table stutter change, Grades search/confirm dialog, the scheduler-test class fixture. When packaging the next release add "Improved" lines for filters and pages on the long lists (nothing admin-only beyond that).
+- v0.8.2 needs two more migrations (`20260623000000_grade_subject_sheet_url`, `20260624000000_exam_room_reservation`); v0.8.1 needed two (the k8s migrate job runs them): `20260621000000_college_calendar_term`, `20260622000000_curriculum_specializations`. Both are applied to the dev DB. Images `raevillena21/coe-vantage-*:v0.8.1` must be pushed before applying manifests.
 
-## Built since v0.7.5 = v0.8.0 and v0.8.1 (all uncommitted; notes in `docs/dev/`)
-- **Scheduler**: a ⋮ menu on each subject in the left list (edit details, possible rooms, possible faculty); the "Split" marker on blocks no longer gets clipped. Shared dialogs are in `frontend/src/components/subjects/`.
-- **Student classes form**: the year level is read from the class name and a mismatch is warned about; year level and student count can be blank while typing.
-- **MMSU Grade Push** (experimental, flag `mmsuGradePush`; v0.2.0 adds the Vantage access gate + logo, see `docs/dev/mmsu-grade-push.md`): browser extension in `frontend/extensions/mmsu-gradesheet/`, setup page at `/experimental/mmsu-grade-push`, zip in `frontend/public/downloads/`, screenshots in `frontend/public/guides/mmsu-grade-push/`. -> `docs/dev/mmsu-grade-push.md`.
-- **Grades module** (`ExperimentalGradesPage`, `PublicGradesPage`, `docs/dev/grades-module.md`):
-  - Fixed the undefined `bg-background` (see CLAUDE.md), compact wrapped score headers, a bounded table box with a pinned header and a top scrollbar, one frozen column, full student names.
-  - Columns now follow the max-score row (a column exists once any record has a max or a score).
-  - Grade-keys picker replaces the typed comma list. Import finds the header row in the first 20 rows (title rows above it are fine).
-  - **MMSU defaults follow the portal** (2026-11-09): `4 -> CND`, `5 -> FAILED`, and the default passing percent is 50 (`DEFAULT_PASSING_PERCENT`), used by the example template, the settings dialog and the score-colour fallback. Test: `grades.spec.ts` "MMSU grade table defaults".
-  - **INC for blank items** (2026-11-09): a blank formula item (a real column with no score) makes the computed grade INC with no number; entering 0 forces it. Server + preview + staff table + student page. Test: `grades.spec.ts` "INC for blank items". Existing stored grades are unchanged until "Compute grades" is run again (a read-only check said `CPE 180 3B` would become 26 of 27 INC, the other subjects far fewer).
-  - **Terms**: subjects have an optional academic year + semester (migration `20260620000000_grade_subject_term`, **already applied to the dev DB**). Staff filters, header selects; the public page opens on the latest term, has year/semester filters, shows max per item and lists items with no score as "Missing".
-
-- **Current vs Scheduling Semester** (2026-11-09, v0.8.1): see `docs/dev/terms-users-search-nav.md` (last section). New migration `20260621000000_college_calendar_term` (applied to the dev DB). Notifications and audit texts use the new names.
-
-- **Curriculum specializations** (2026-11-09): migration `20260622000000_curriculum_specializations` (applied to the dev DB), curriculum viewer + manager UI, class option on the Student classes form and applied to the Scheduler tree, auto-schedule, GE import, dashboard progress and room requests. See the last section of `docs/dev/curriculum-and-subjects.md`.
-
-## Before a release
-- Apply the migration in production (the k8s migrate job does it). Rebuild the extension zip if `frontend/extensions/` changed (`npm run build:extension`) and bump its version in `manifest.json` and `EXTENSION_VERSION`.
-- Changelog and version files were updated for v0.8.1 on 2026-11-09 (v0.8.0 was already deployed). Release notes deliberately leave out experimental features and admin-only capabilities. Remaining: commit, build and push the images, deploy (k8s migrate job runs the new migration).
+## What exists (notes live in `docs/dev/`, read only the one you need)
+- **Exam Room Reservation** (new, unreleased; user-visible, so it BELONGS in the release notes as New): `docs/dev/exam-rooms.md`. The v0.8.2 packaging was put on hold before it; when releasing, add it and one more migration (`20260624000000_exam_room_reservation`), and mention the faculty menu groups (Management / Schedules).
+- **Grades: Import emails + paced access-email sending + green check beside sent emails** (experimental, uncommitted, no migration, NOT for release notes): see end of `grades-module.md`. Dev backend has real Gmail SMTP in `backend/.env.local`; example.com-style addresses are never sent. Real SMTP was not exercised (ECONNRESET from this machine to Gmail).
+- Grades module, Portal Insert Grade extension + access gate (v0.2.0) -> `grades-module.md`, `mmsu-grade-push.md`, `experimental-features.md` (per-user grants set by the admin on the Users page).
+- Current vs Scheduling Semester (two terms per college; helpers `schedulingTerm`/`calendarTerm`) and the list-filter pieces -> `terms-users-search-nav.md` (last sections).
+- Curriculum specializations (tags, class option, build page; a class with none takes every subject) -> `curriculum-and-subjects.md` (last section).
+- Release-notes policy: experimental features and admin-only capabilities are never listed (skill `package-release`).
 
 ## Open items (most useful first)
-1. **Grades table horizontal scroll stutters in the user's Chrome, not in the VS Code pane.** Cause found: frozen cells cost a compositor layer per row; the frozen column only turns on at 1280px+, so VS Code's narrower pane probably never has it. Not reproduced in headless Chromium. Ask the user to try: narrow the window / zoom 125-150%, Incognito, `chrome://gpu`. Options: drop the frozen column, or freeze only at about 1920px. The top scrollbar strip is JS-synced and can lag the table by a frame. Details in the memory note `grades-table-stutter-redo`.
-2. **`IT11 CE 2B` still stores `4 -> PASSED` and `5 -> PASSED`** (from the old default; the other 5 configured subjects are correct). Its bands equal the default, so "Reset to MMSU Default" + "Save equivalence table" + "Compute grades" in its Grading settings fixes it. Asked the user, not changed. Two subjects (`CPE 164 4B`, `cpe 180 3a`) have no grading system yet.
-3. **Formula keys that are not columns still count as 0 out of 100** in the grade maths (`NSTP1 CPE 1C`: `Essay`, `Reflection paper 1`; `Math 34 CPE 1C`: `PS 1`), which lowers those students' grades. Not fixed. Options: remove the keys in Grading settings, or make the maths skip non-column keys. Asked the user.
-4. The sheet's column order is lost on import (jsonb sorts keys); columns show formula order, then natural alphabetical. Idea: store the order at import.
-5. `IT11 CE 2B` has no term set; students with only that subject see no term filters.
-6. Smaller review leftovers: subject delete uses `window.confirm` while a single record needs a typed code; 10px helper text in the Grades page; the share dialog select has no label.
-7. Optional cleanup: the old admin-Scheduler mentions in README, todo.txt and the v0.7.4 test.
+1. **Scheduler smoke tests are green (2026-11-10):** the whole `smoke.spec.ts` passes (75 passed, 1 skipped). They create their own `QA CE 4A` class (`support.ts` `ensureCeClass`/`removeCeClass`) instead of using the user's `BS CE 4A`. Fixed along the way: a real bug in `AssignmentForm.tsx` (the "Checking room & faculty conflicts…" spinner stayed on and Save stayed disabled when the inputs became incomplete mid-check; the co-instructor check too), outdated selectors in the co-instructor test, and the Split marker (it shortens to "S" in narrow blocks). The split tests now use `actionTimeout: 15s` so a missing element fails on its own line. Not yet in the release notes (add a Fixed line when packaging: the conflict check no longer gets stuck on "Checking…").
+2. **Pagination done (2026-11-10, uncommitted):** Subjects paged by the server, Users / Student classes / Rooms paged in the browser, Trash "Show more". See the last section of `docs/dev/terms-users-search-nav.md`. Not paged: Curriculum, Departments (small). If Rooms or Users ever reach many thousands, move them to server paging the same way as Subjects.
+3. Colleges, Academic years and Scheduling rules have no filters (small by nature). The Grades subject list now has a text search (name, code, owner) next to the year/semester filters.
+4. IUSIS / clipboard curriculum import cannot tag specializations (source has no such column); tags are set in the viewer or build page.
+5. **Grades table scroll stutter: closed for now.** The user reports it only in their Chrome (smooth in the VS Code browser), so it is treated as a browser issue. The name + actions column is frozen again by default; "Freeze names" (checkbox, remembered) turns it off; the header row is one sticky element. See `docs/dev/grades-module.md`. Reopen only if the user raises it again (then: `chrome://gpu`, Incognito, the JS-mirrored top scrollbar strip).
+6. `IT11 CE 2B` stores `4 -> PASSED`, `5 -> PASSED` (fix: Grading settings > Reset to MMSU Default > Save equivalence table > Compute grades) and has no term. Formula keys that are not columns still count as 0 out of 100 (`NSTP1 CPE 1C`: `Essay`, `Reflection paper 1`; `Math 34 CPE 1C`: `PS 1`). Both asked, not decided.
+7. Grade column order is lost on import (jsonb). (Review leftovers done 2026-11-10: in-app confirm dialog instead of `window.confirm` on the Grades page, helper text at least 12px except the compact table badges, share select labelled.)
+8. After deploying v0.8.1: check once on the real site that the Grade Push extension's login cookie reaches the API across the two hosts (only tested on localhost).
 
 ## This machine's state
-- The admin account's experimental preferences were changed by test runs (Grades module enabled); its original value is unknown.
+- The admin account's experimental preferences were changed by test runs (Grades module on); the original value is unknown.
+- College of Engineering terms are Scheduling = 1st Sem 2026-2027, Current = 1st Sem 2026-2027 (restored after an interrupted test; tests that change terms restore them in `finally`).
+- A soft-deleted "Guest College 1794211252580" from a killed run remains in the colleges trash (no permanent-delete path found). The user's test data: curriculum "sample 2" with specialization "spez 2".
 - `portal_*.txt` in the repo root hold real student data (git-ignored); the user should delete them when done.
-- The user set terms on 6 of 7 real grade subjects by hand.
 
 ## Gotchas
-- Windows: stop the backend before `prisma generate`. Heredocs with quotes break in Git Bash. Playwright wipes `tests/e2e/.results/` on every run.
-- The public lookup is rate limited to 80 requests / 15 min / IP (memory counter; restart the backend to clear).
-- A `position: sticky` parent only sticks to its nearest `overflow` ancestor: `<main>` is `overflow-auto` but the page itself scrolls, so sticky strips inside it do not stick.
+- Windows: stop the backend before `prisma generate`. Heredocs with quotes break in Git Bash (use the Write tool). Playwright wipes `tests/e2e/.results/` every run. A foreground command over ~120 s is killed and takes its test worker with it (leaves data behind): run long suites in the background.
+- Do not run long tests in parallel with source edits: Vite reloads pages mid-test.
+- The public lookup is rate limited (80 requests / 15 min / IP; restart the backend to clear).
+- `position: sticky` only sticks to its nearest `overflow` ancestor (`<main>` is `overflow-auto` but the page scrolls).
+- Naming trap: `College.currentAcademicYearId/currentSemester` and API `isActive`/`currentSemester` are the SCHEDULING semester; the Current Semester is `calendar*` / `isCalendar`.

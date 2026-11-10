@@ -2,7 +2,8 @@ import { prisma } from "../../prisma/client.js";
 import { badRequest, notFound, forbidden, conflict } from "../../utils/errors.js";
 import { TEACHING_ROLES } from "../../utils/teachingRoles.js";
 import { resolveSubjectUnits } from "../../utils/workload.js";
-import type { CreateSubjectBody, UpdateSubjectBody } from "./subjectSchemas.js";
+import type { Prisma } from "@prisma/client";
+import type { CreateSubjectBody, ListSubjectsPagedQuery, UpdateSubjectBody } from "./subjectSchemas.js";
 
 /** Caller context: CHAIRMAN sees only subjects in their department's curricula (or unassigned with their department). */
 export interface SubjectListCaller {
@@ -37,6 +38,59 @@ export async function listSubjects(caller?: SubjectListCaller) {
   });
   // `specializationIds` empty = common to every class of the curriculum
   return rows.map(({ specializations, ...s }) => ({ ...s, specializationIds: specializations.map((row) => row.specializationId) }));
+}
+
+const NONE = "__none__";
+
+/** One page of subjects with the filters applied on the server: `total` after the filters, `totalAll` in the caller's scope. */
+export async function listSubjectsPaged(caller: SubjectListCaller | undefined, query: ListSubjectsPagedQuery) {
+  const scope: Prisma.SubjectWhereInput = { isDeleted: false };
+  if (caller?.role === "CHAIRMAN" && caller.departmentId) {
+    scope.OR = [{ curriculum: { departmentId: caller.departmentId } }, { curriculumId: null, departmentId: caller.departmentId }];
+  }
+  const and: Prisma.SubjectWhereInput[] = [];
+  if (query.curriculumId) and.push(query.curriculumId === NONE ? { curriculumId: null } : { curriculumId: query.curriculumId });
+  if (query.departmentId) {
+    and.push(
+      query.departmentId === NONE
+        ? { departmentId: null, OR: [{ curriculumId: null }, { curriculum: { departmentId: null } }] }
+        : { OR: [{ departmentId: query.departmentId }, { departmentId: null, curriculum: { departmentId: query.departmentId } }] }
+    );
+  }
+  if (query.yearLevel) and.push(query.yearLevel === NONE ? { yearLevel: null } : { yearLevel: Number(query.yearLevel) || -1 });
+  if (query.semester) and.push(query.semester === NONE ? { semester: null } : { semester: Number(query.semester) || -1 });
+  if (query.kind === "lab") and.push({ OR: [{ isLab: true }, { labUnits: { gt: 0 } }] });
+  if (query.kind === "lecture") and.push({ isLab: false, labUnits: 0 });
+  if (query.q) {
+    const contains = { contains: query.q, mode: "insensitive" as const };
+    and.push({
+      OR: [
+        { code: contains },
+        { name: contains },
+        { department: { name: contains } },
+        { curriculum: { name: contains } },
+        { curriculum: { department: { name: contains } } },
+      ],
+    });
+  }
+  const where: Prisma.SubjectWhereInput = { AND: [scope, ...and] };
+  const [total, totalAll] = await Promise.all([prisma.subject.count({ where }), prisma.subject.count({ where: scope })]);
+  const pageSize = query.pageSize;
+  const page = Math.min(query.page, Math.max(1, Math.ceil(total / pageSize)));
+  const rows = await prisma.subject.findMany({
+    where,
+    include: {
+      curriculum: { select: { id: true, name: true, code: true, department: { select: { id: true, name: true, code: true } } } },
+      department: { select: { id: true, name: true, code: true } },
+      subjectRooms: { select: { roomId: true, room: { select: { name: true } } } },
+      specializations: { select: { specializationId: true } },
+    },
+    orderBy: [{ code: "asc" }, { id: "asc" }],
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  });
+  const items = rows.map(({ specializations, ...s }) => ({ ...s, specializationIds: specializations.map((row) => row.specializationId) }));
+  return { items, total, totalAll, page, pageSize };
 }
 
 /** A subject's specializations as a flat list; empty = common to every specialization of its curriculum. */

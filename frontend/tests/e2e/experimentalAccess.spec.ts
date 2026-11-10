@@ -34,7 +34,7 @@ test.describe("admin grants experimental access", () => {
       const stored = await (await request.get(`${API}/users/${id}/experimental-features`, { headers })).json();
       expect(stored.granted).toEqual(["gradeModule"]);
 
-      // The user can now switch Grade Module on, but not MMSU Grade Push.
+      // The user can now switch Grade Module on, but not Portal Insert Grade.
       const ok = await request.patch(`${API}/auth/me/experimental-features`, { headers: userHeaders, data: { enabled: true, features: ["gradeModule", "mmsuGradePush"] } });
       expect(await ok.json()).toMatchObject({ enabled: true, features: ["gradeModule"], granted: ["gradeModule"] });
 
@@ -45,7 +45,7 @@ test.describe("admin grants experimental access", () => {
       await login(userPage, email);
       await userPage.goto("/profile");
       await expect(userPage.getByText("Grade Module")).toBeVisible();
-      await expect(userPage.getByText("MMSU Grade Push")).toHaveCount(0);
+      await expect(userPage.getByText("Portal Insert Grade")).toHaveCount(0);
       await context.close();
 
       // The browser extension asks the server with the login cookie only.

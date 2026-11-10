@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Vantage MMSU Grade Push",
-  "version": "0.2.0",
+  "name": "Vantage Portal Insert Grade",
+  "version": "0.2.1",
   "description": "For people signed in to Vantage with access: paste a grade table from Excel or Google Sheets, fill the MMSU portal gradesheet from it, and check that the portal matches your sheet.",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/128.png", "128": "icons/128.png" },
   "permissions": ["storage"],

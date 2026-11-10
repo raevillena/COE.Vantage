@@ -1,7 +1,7 @@
 import { Download } from "lucide-react";
 
 const DOWNLOAD_URL = "/downloads/vantage-mmsu-grade-push.zip";
-const EXTENSION_VERSION = "0.2.0";
+const EXTENSION_VERSION = "0.2.1";
 const PORTAL_GRADESHEETS_URL = "https://my.mmsu.edu.ph/my/class/gradesheet";
 
 /** A picture in a step. `width` and `height` are the CSS size (the files are 2x for sharp screens). */
@@ -47,12 +47,12 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 const kbd = "rounded border border-border bg-surface-muted px-1 py-0.5 font-mono text-xs text-foreground";
 
-/** Setup and usage of the MMSU grade push browser extension (experimental, off unless enabled on the Profile page). */
+/** Setup and usage of the Portal Insert Grade browser extension (experimental, off unless enabled on the Profile page). */
 export function ExperimentalMmsuGradePushPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">MMSU Grade Push</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Portal Insert Grade</h1>
         <p className="mt-1 text-sm text-foreground-muted">
           A browser extension that fills the MMSU portal gradesheet from a table you copy out of Excel or Google Sheets, then checks that the portal
           shows what your sheet says. It runs in your own browser, inside the portal page you are already logged in to. Vantage never sees your portal
@@ -86,11 +86,11 @@ export function ExperimentalMmsuGradePushPage() {
           </Step>
           <Step n={3} title="Load it">
             <p>
-              Click <b>Load unpacked</b> and choose the folder you extracted (the one that contains <span className={kbd}>manifest.json</span>). “Vantage MMSU Grade Push” appears in the list.
+              Click <b>Load unpacked</b> and choose the folder you extracted (the one that contains <span className={kbd}>manifest.json</span>). “Vantage Portal Insert Grade” appears in the list.
             </p>
             <Shot
               file="02-extension-loaded.png"
-              alt="The extension card for Vantage MMSU Grade Push, switched on"
+              alt="The extension card for Vantage Portal Insert Grade, switched on"
               caption="Once loaded, the extension is listed and switched on."
               width={430}
               height={260}
@@ -105,7 +105,7 @@ export function ExperimentalMmsuGradePushPage() {
 
       <Card title="Who can use it">
         <p className="text-sm text-foreground">
-          The extension checks that you are signed in to Vantage <strong>in the same browser</strong>, and that an administrator has allowed MMSU Grade Push for your account and you have switched it on in your Profile (this page appears only then). If not, the panel on the portal says why and offers <em>Check again</em>. The check only asks Vantage who you are and whether you have access; it sends no grades, student data or portal passwords.
+          The extension checks that you are signed in to Vantage <strong>in the same browser</strong>, and that an administrator has allowed Portal Insert Grade for your account and you have switched it on in your Profile (this page appears only then). If not, the panel on the portal says why and offers <em>Check again</em>. The check only asks Vantage who you are and whether you have access; it sends no grades, student data or portal passwords.
         </p>
       </Card>
 
@@ -117,13 +117,13 @@ export function ExperimentalMmsuGradePushPage() {
               <a href={PORTAL_GRADESHEETS_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
                 Grade Sheet list (opens in a new tab)
               </a>
-              , and click <b>Edit</b> on the class. A <b>Vantage grade push</b> tab appears on the right edge of the page. Click it to open the panel.
+              , and click <b>Edit</b> on the class. A <b>Portal Insert Grade</b> tab appears on the right edge of the page. Click it to open the panel.
             </p>
             <p>You can also click the extension's icon in the browser toolbar: it opens that same Grade Sheet list in a new tab.</p>
             <Shot
               file="03-panel-tab.png"
-              alt="The blue Vantage grade push tab on the right edge of a page"
-              caption="The Vantage grade push tab on the right edge of the gradesheet page."
+              alt="The blue Portal Insert Grade tab on the right edge of a page"
+              caption="The Portal Insert Grade tab on the right edge of the gradesheet page."
               width={180}
               height={170}
             />
@@ -188,7 +188,7 @@ export function ExperimentalMmsuGradePushPage() {
 
       <Card title="Troubleshooting">
         <ul className="list-disc space-y-1 pl-5 text-sm text-foreground-muted">
-          <li><b>No “Vantage grade push” tab:</b> make sure you are on the gradesheet <b>Edit</b> page (not the class list), the extension is switched on at <span className={kbd}>chrome://extensions</span>, and reload the page. If the portal's page layout changes, the extension deliberately shows nothing instead of guessing.</li>
+          <li><b>No “Portal Insert Grade” tab:</b> make sure you are on the gradesheet <b>Edit</b> page (not the class list), the extension is switched on at <span className={kbd}>chrome://extensions</span>, and reload the page. If the portal's page layout changes, the extension deliberately shows nothing instead of guessing.</li>
           <li><b>“No student rows found”:</b> the student number column needs numbers like <span className={kbd}>23-050573</span>. Check the column dropdowns.</li>
           <li><b>The check says some grades differ:</b> the portal did not keep them. Read the portal message shown in the panel, fix the cause, and run it again.</li>
         </ul>

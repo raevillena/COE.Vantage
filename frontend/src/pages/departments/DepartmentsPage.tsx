@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
 import type { Department, UserListItem } from "../../types/api";
 import toast from "react-hot-toast";
@@ -32,6 +33,7 @@ export function DepartmentsPage() {
   const [viewFacultiesList, setViewFacultiesList] = useState<UserListItem[]>([]);
   const [viewFacultiesLoading, setViewFacultiesLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterCollege, setFilterCollege] = useState("");
 
   useEffect(() => {
     apiClient.get<College[]>("/colleges").then(({ data }) => setColleges(data)).catch(() => setColleges([]));
@@ -122,9 +124,18 @@ export function DepartmentsPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
-    ? list.filter((d) => d.name.toLowerCase().includes(searchLower))
-    : list;
+  const collegeOptions = optionsFrom(list, (d) => {
+    const college = colleges.find((c) => c.id === d.collegeId);
+    return college ? [college.id, college.name] : null;
+  });
+  const filtersActive = Boolean(searchLower || filterCollege);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterCollege("");
+  };
+  const filteredList = list
+    .filter((d) => !filterCollege || d.collegeId === filterCollege)
+    .filter((d) => !searchLower || d.name.toLowerCase().includes(searchLower) || (d.code ?? "").toLowerCase().includes(searchLower));
 
   const filteredIds = filteredList.map((d) => d.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
@@ -179,19 +190,24 @@ export function DepartmentsPage() {
         {canManage && <Button type="button" onClick={openCreate}>Add Department</Button>}
       </div>
       {list.length > 0 && (
-        <div className="mb-4 relative max-w-md">
+        <ListFilterBar shown={filteredList.length} total={list.length} active={filtersActive} onClear={clearFilters}>
+        <div className="relative w-full max-w-sm">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
           <input
             type="search"
-            placeholder="Search by name…"
+            placeholder="Search by name or code…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
             aria-label="Search departments"
           />
         </div>
+          {collegeOptions.length > 1 && (
+            <FilterSelect label="Filter by college" value={filterCollege} onChange={setFilterCollege} options={collegeOptions} allLabel="All colleges" />
+          )}
+        </ListFilterBar>
       )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
@@ -204,9 +220,9 @@ export function DepartmentsPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No departments match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No departments match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (

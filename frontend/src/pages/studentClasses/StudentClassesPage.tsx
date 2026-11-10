@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Pager, usePaging } from "../../components/ui/pager";
+import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
 import type { StudentClass } from "../../types/api";
 import toast from "react-hot-toast";
@@ -33,6 +35,10 @@ export function StudentClassesPage() {
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterCurriculum, setFilterCurriculum] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [filterSpecialization, setFilterSpecialization] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -139,19 +145,42 @@ export function StudentClassesPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
-    ? list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchLower) ||
-          String(c.yearLevel).includes(searchLower) ||
-          String(c.studentCount).includes(searchLower) ||
-          (c.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
-          (c.specialization?.name ?? "").toLowerCase().includes(searchLower) ||
-          (c.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
-      )
-    : list;
+  const classMatchesFilters = (c: StudentClass) =>
+    (!filterDepartment || c.curriculum?.department?.id === filterDepartment) &&
+    (!filterCurriculum || c.curriculumId === filterCurriculum) &&
+    (!filterYear || String(c.yearLevel) === filterYear) &&
+    (!filterSpecialization || (filterSpecialization === "__none__" ? !c.specializationId : c.specializationId === filterSpecialization));
+  const filtersActive = Boolean(searchLower || filterDepartment || filterCurriculum || filterYear || filterSpecialization);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterDepartment("");
+    setFilterCurriculum("");
+    setFilterYear("");
+    setFilterSpecialization("");
+  };
+  const departmentOptions = optionsFrom(list, (c) => (c.curriculum?.department ? [c.curriculum.department.id, c.curriculum.department.name] : null));
+  const curriculumOptions = optionsFrom(
+    list.filter((c) => !filterDepartment || c.curriculum?.department?.id === filterDepartment),
+    (c) => (c.curriculum ? [c.curriculumId, c.curriculum.name] : null)
+  );
+  const yearOptions = optionsFrom(list, (c) => [String(c.yearLevel), `Year ${c.yearLevel}`]);
+  const specializationOptions = optionsFrom(
+    list.filter((c) => !filterCurriculum || c.curriculumId === filterCurriculum),
+    (c) => (c.specialization ? [c.specialization.id, c.specialization.name] : null)
+  );
+  const filteredList = list.filter(classMatchesFilters).filter(
+    (c) =>
+      !searchLower ||
+      c.name.toLowerCase().includes(searchLower) ||
+      String(c.yearLevel).includes(searchLower) ||
+      String(c.studentCount).includes(searchLower) ||
+      (c.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
+      (c.specialization?.name ?? "").toLowerCase().includes(searchLower) ||
+      (c.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
+  );
 
-  const filteredIds = filteredList.map((c) => c.id);
+  const paging = usePaging(filteredList, [searchLower, filterDepartment, filterCurriculum, filterYear, filterSpecialization].join("|"));
+  const filteredIds = paging.pageRows.map((c) => c.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
   const toggleSelectAll = () => {
     if (allFilteredSelected) {
@@ -204,7 +233,8 @@ export function StudentClassesPage() {
         {!readOnly && <Button type="button" onClick={openCreate}>Add Student Class</Button>}
       </div>
       {list.length > 0 && (
-        <div className="mb-4 relative max-w-md">
+        <ListFilterBar shown={filteredList.length} total={list.length} active={filtersActive} onClear={clearFilters}>
+        <div className="relative w-full max-w-sm">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -217,6 +247,17 @@ export function StudentClassesPage() {
             aria-label="Search student classes"
           />
         </div>
+          {departmentOptions.length > 1 && (
+            <FilterSelect label="Filter by department" value={filterDepartment} onChange={(v) => { setFilterDepartment(v); setFilterCurriculum(""); setFilterSpecialization(""); }} options={departmentOptions} allLabel="All departments" />
+          )}
+          {curriculumOptions.length > 1 && (
+            <FilterSelect label="Filter by curriculum" value={filterCurriculum} onChange={(v) => { setFilterCurriculum(v); setFilterSpecialization(""); }} options={curriculumOptions} allLabel="All curricula" />
+          )}
+          {yearOptions.length > 1 && <FilterSelect label="Filter by year level" value={filterYear} onChange={setFilterYear} options={yearOptions} allLabel="All year levels" />}
+          {specializationOptions.length > 0 && (
+            <FilterSelect label="Filter by specialization" value={filterSpecialization} onChange={setFilterSpecialization} options={[...specializationOptions, { value: "__none__", label: "No specialization" }]} allLabel="All specializations" />
+          )}
+        </ListFilterBar>
       )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
@@ -229,9 +270,9 @@ export function StudentClassesPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No student classes match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No student classes match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (
@@ -270,7 +311,8 @@ export function StudentClassesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredList.map((c) => (
+              {paging.pageRows.map((c) => (
+
                 <tr key={c.id} className={selectedIds.has(c.id) ? "bg-primary-muted/30" : ""}>
                   {!readOnly && (<td className="w-10 px-2 py-2">
                     <input
@@ -315,6 +357,7 @@ export function StudentClassesPage() {
             </tbody>
           </table>
         </div>
+        <Pager page={paging.page} pageSize={paging.pageSize} total={paging.total} onPage={paging.setPage} onPageSize={paging.setPageSize} />
         </>
       )}
       <Dialog.Root open={modalOpen} onOpenChange={setModalOpen}>

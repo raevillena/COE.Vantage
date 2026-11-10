@@ -1,8 +1,15 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, request as pwRequest, type Page } from "@playwright/test";
 
-import { API, PASSWORD, login } from "./support";
+import { API, CE_CLASS, PASSWORD, ensureCeClass, login, removeCeClass } from "./support";
 /** The College of Engineering. The admin names it when a call needs a college, since other colleges may exist. */
 const COE = "00000000-0000-0000-0000-0000000000a2";
+
+// the scheduler tests create their own CE class (see support.ts); remove it when the file is done
+test.afterAll(async () => {
+  const ctx = await pwRequest.newContext();
+  await removeCeClass(ctx);
+  await ctx.dispose();
+});
 
 async function browserLogin(browser: import("@playwright/test").Browser, email: string): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
@@ -31,7 +38,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.8.1" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.8.2" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
@@ -293,7 +300,7 @@ test.describe("scheduler: edit the days of a saved block", () => {
 
     const ay = await get<{ id: string }>("/academic-years/active");
     const faculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Maria Santos"));
-    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const cls = await ensureCeClass(request);
     const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
     const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
     test.skip(!faculty || !cls || !subject || !room, "needs the seeded CE data");
@@ -318,7 +325,7 @@ test.describe("scheduler: edit the days of a saved block", () => {
       await login_(page, "chairman@coe.vantage");
       await page.goto("/scheduler");
       await page.getByRole("combobox", { name: /Student Class|class/i }).first().click();
-      await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+      await page.getByRole("option", { name: CE_CLASS }).first().click();
       await page.getByText("CE101").first().click();
 
       const form = page.getByRole("group", { name: /Repeats on/ });
@@ -395,7 +402,7 @@ test.describe("scheduler: availability panels", () => {
     const get = async <T>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
     const ay = await get<{ id: string }>("/academic-years/active");
     const faculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Maria Santos"));
-    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const cls = await ensureCeClass(request);
     const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
     const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
     test.skip(!faculty || !cls || !subject || !room, "needs the seeded CE data");
@@ -934,11 +941,12 @@ test.describe("scheduler subject list", () => {
     const subjects = (await (await request.get(`${API}/subjects`, { headers })).json()) as { id: string; code: string; name: string }[];
     const subject = subjects.find((x) => x.code === "CE401");
     test.skip(!subject, "needs the CE401 sample subject");
+    await ensureCeClass(request);
 
     await login_(page, "chairman@coe.vantage");
     await page.goto("/scheduler");
     await page.getByRole("combobox", { name: "Student class" }).click();
-    await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+    await page.getByRole("option", { name: CE_CLASS }).first().click();
     const menuButton = page.locator('button[aria-label="Subject options for CE401"]');
     await expect(menuButton).toBeVisible();
 
@@ -2146,14 +2154,17 @@ test.describe("GE sheet parser", () => {
 });
 
 test.describe("splitting a repeated subject", () => {
+  // a click on something that never appears should fail on its own line, not hang until the whole test times out
+  test.use({ actionTimeout: 15_000 });
   test("a co-instructor joins every repeat day and another session starts on a free day", async ({ page, request }) => {
+    test.setTimeout(120_000); // a long flow: several saves and a split
     const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
     const headers = { Authorization: `Bearer ${token}` };
     const get = async <T,>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
     const ay = await get<{ id: string }>("/academic-years/active");
     const faculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Maria Santos"));
     const coFaculty = (await get<{ id: string; name: string }[]>("/users?role=FACULTY")).find((u) => u.name.includes("Revilla"));
-    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const cls = await ensureCeClass(request);
     const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
     const room = (await get<{ id: string; name: string }[]>("/rooms")).find((r) => r.name === "CE-201");
     test.skip(!faculty || !coFaculty || !cls || !subject || !room, "needs the seeded CE data");
@@ -2183,7 +2194,7 @@ test.describe("splitting a repeated subject", () => {
       await login_(page, "chairman@coe.vantage");
       await page.goto("/scheduler");
       await page.getByText("Select class").first().click();
-      await page.getByRole("option", { name: "BS CE 4A" }).click();
+      await page.getByRole("option", { name: CE_CLASS }).click();
       await page.getByText(/D\. Santos/).first().click({ force: true });
 
       // split: the co-instructor takes this block and the saved repeat days too
@@ -2209,12 +2220,14 @@ test.describe("splitting a repeated subject", () => {
       await expect(page.locator('input[type="time"]').first()).toHaveValue(slot);
 
       const save = page.getByRole("button", { name: /^Save/ });
-      await page.getByText("Select faculty").first().click();
+      const facultyBox = page.getByLabel("Faculty", { exact: true }).first(); // a search field, not a text label
+      await facultyBox.click();
       await page.getByRole("option", { name: /Santos/ }).first().click();
       await expect(page.getByText(/same instructor as the original/)).toBeVisible();
       await expect(save).toBeDisabled();
 
-      await page.locator("label", { hasText: /^Faculty$/ }).first().locator("xpath=following-sibling::*[1]").click();
+      await facultyBox.click();
+      await facultyBox.fill("Calaro"); // the list is filtered by what is typed
       await page.getByRole("option", { name: /Calaro/ }).first().click();
       await expect(page.getByText(/same instructor as the original/)).toHaveCount(0);
       await expect(page.getByText("No conflicts. You can save.")).toBeVisible();
@@ -2225,7 +2238,8 @@ test.describe("splitting a repeated subject", () => {
       const labelled = afterSession.filter((l) => l.subject.code === "CE101" && (l as unknown as { isSplit: boolean }).isSplit);
       // the splitting instructor's block and the original instructor's blocks (all repeat days) carry the label
       expect(labelled.length).toBeGreaterThanOrEqual(2);
-      await expect(page.getByText("Split", { exact: true }).first()).toBeVisible();
+      // the marker shows "Split" in a wide block and shortens to "S" in a narrow one (instructors side by side): look for the marker itself
+      await expect(page.getByTitle("The class is split between instructors").first()).toBeVisible();
     } finally {
       for (const l of await loadsOf()) if (l.subject.code === "CE101") await request.delete(`${API}/faculty-loads/${l.id}`, { headers });
     }
@@ -2430,7 +2444,7 @@ test.describe("split rules", () => {
     const ay = await get<{ id: string }>("/academic-years/active");
     const users = await get<{ id: string; name: string }[]>("/users?role=FACULTY");
     const [fa, fb, fc] = ["Maria Santos", "Revilla", "Calaro"].map((n) => users.find((u) => u.name.includes(n)));
-    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const cls = await ensureCeClass(request);
     const subjects = await get<{ id: string; code: string }[]>("/subjects");
     const [s1, s2] = [subjects.find((s) => s.code === "CE101"), subjects.find((s) => s.code === "CE401")];
     const rooms = await get<{ id: string; name: string }[]>("/rooms");
@@ -2471,12 +2485,13 @@ test.describe("split rules", () => {
 });
 
 test.describe("assignment panel day and time", () => {
-  test("after picking a faculty the day and times can still be changed", async ({ page }) => {
+  test("after picking a faculty the day and times can still be changed", async ({ page, request }) => {
+    await ensureCeClass(request);
     await page.setViewportSize({ width: 1400, height: 1500 });
     await login_(page, "chairman@coe.vantage");
     await page.goto("/scheduler");
     await page.getByText("Select class").first().click();
-    await page.getByRole("option", { name: "BS CE 4A" }).click();
+    await page.getByRole("option", { name: CE_CLASS }).click();
     await page.waitForTimeout(800);
 
     // drag a subject out of the tree onto the grid: a new assignment starts in the panel
@@ -2740,7 +2755,7 @@ test.describe("scheduler: raw blocks for the admin", () => {
     const chair = { Authorization: `Bearer ${await tok("chairman@coe.vantage")}` };
     const get = async <T>(path: string) => (await (await request.get(`${API}${path}`, { headers: chair })).json()) as T;
     const ay = await get<{ id: string }>("/academic-years/active");
-    const cls = (await get<{ id: string; name: string }[]>("/student-classes")).find((c) => c.name === "BS CE 4A");
+    const cls = await ensureCeClass(request);
     const subject = (await get<{ id: string; code: string }[]>("/subjects")).find((s) => s.code === "CE101");
     test.skip(!cls || !subject, "needs the seeded CE data");
     const made = await request.post(`${API}/faculty-loads`, {
@@ -2753,7 +2768,7 @@ test.describe("scheduler: raw blocks for the admin", () => {
       await login(page, "admin@coe.vantage");
       await page.goto("/schedules/student-class");
       await page.getByRole("combobox", { name: "Class" }).click();
-      await page.getByRole("option", { name: "BS CE 4A" }).first().click();
+      await page.getByRole("option", { name: CE_CLASS }).first().click();
       await page.getByRole("button", { name: "Edit blocks as a list" }).click();
       const row = page.getByRole("dialog").getByRole("row").filter({ hasText: "Admin Probe" });
       await row.getByRole("button", { name: "Remove" }).click();

@@ -21,6 +21,7 @@ import { reportRoutes } from "./modules/reports/reportRoutes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboardRoutes.js";
 import { deloadingRoutes } from "./modules/deloadings/deloadingRoutes.js";
 import { geImportRoutes } from "./modules/geImport/geImportRoutes.js";
+import { examRoomRoutes } from "./modules/examRooms/examRoomRoutes.js";
 import { feedbackRoutes } from "./modules/feedback/feedbackRoutes.js";
 import { notificationRoutes } from "./modules/notifications/notificationRoutes.js";
 import { roomSharingRoutes } from "./modules/roomSharing/roomSharingRoutes.js";
@@ -72,6 +73,7 @@ app.use("/room-share", roomSharingRoutes);
 app.use("/colleges", collegeRoutes);
 app.use("/university", universityRoutes);
 app.use("/ge-import", geImportRoutes);
+app.use("/exam-rooms", examRoomRoutes);
 app.use("/scheduling-rule-sets", schedulingRuleRoutes);
 app.use("/grade-subjects", gradeSubjectRoutes);
 

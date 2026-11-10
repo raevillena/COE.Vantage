@@ -41,11 +41,15 @@
 - **PDFs** (`reportService.ts`): `gridRange` gives 8 AM-5 PM widened to whole hours for any earlier or later block; `formatHourSlot` draws two centred lines; block text gets a fixed height with an ellipsis; the class name leads the second line of the faculty and room PDFs; `pdfAttachment` names files `prefix-name.pdf` (Windows-unsafe characters dropped, `filename*` for non-ASCII) and the Reports page saves under the server's name. `ScheduleGrid` takes `showClassName` and `showFaculty` for the report previews.
 - **Hours**: slots shared by co-instructors count once in `CurriculumSubjectTree`, `scheduledBySubject` and the room minutes of the auto-scheduler.
 
-### 62. Grades terms, INC, MMSU Grade Push and experimental access (v0.8.0)
+### 62. Grades terms, INC, Portal Insert Grade and experimental access (v0.8.0)
 - Grades: see `docs/dev/grades-module.md` (terms migration `20260620000000_grade_subject_term`, INC rule, MMSU defaults, import header detection, layout).
-- MMSU Grade Push extension: `docs/dev/mmsu-grade-push.md`. Experimental grants (`granted` in the prefs JSON, admin dialog on the Users page): `docs/dev/experimental-features.md`.
+- Portal Insert Grade extension: `docs/dev/mmsu-grade-push.md`. Experimental grants (`granted` in the prefs JSON, admin dialog on the Users page): `docs/dev/experimental-features.md`.
 - Scheduler: manual assignment no longer stops at maximum units (overload allowed); auto-assign still respects the cap. Users page filters. Login form reads autofilled values.
 
 ### 63. Current and Scheduling Semester, curriculum specializations (v0.8.1)
 - Semesters and specializations: see the last sections of `docs/dev/terms-users-search-nav.md` and `docs/dev/curriculum-and-subjects.md` (migrations `20260621000000_college_calendar_term`, `20260622000000_curriculum_specializations`).
-- Release notes policy: experimental features (the grade module, MMSU Grade Push, experimental access) and admin-only capabilities are NOT listed in `CHANGELOG.md` / `changelog.ts` / the README table.
+- Release notes policy: experimental features (the grade module, Portal Insert Grade, experimental access) and admin-only capabilities are NOT listed in `CHANGELOG.md` / `changelog.ts` / the README table.
+
+### 64. Filters, pagination and grade-lookup fixes (v0.8.2)
+- Filters/pages: last sections of `docs/dev/terms-users-search-nav.md`. Grades import link, kept access codes, public lookup redesign: last sections of `docs/dev/grades-module.md` (migration `20260623000000_grade_subject_sheet_url`).
+- v0.8.2 also carries Exam Room Reservation and the faculty menu (`docs/dev/exam-rooms.md`; migration `20260624000000_exam_room_reservation`). Release notes list only the user-visible items (exam rooms, faculty menu, list filters/pages, the Scheduler spinner fix); the grade module changes and the admin-only Users/Trash lists are deliberately not listed.

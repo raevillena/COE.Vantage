@@ -46,6 +46,8 @@ export const updateGradeSubjectSchema = z.object({
     /** Merges shallowly into existing `gradingSystem` on the server; omit keys you are not updating. */
     gradingSystem: z.union([gradingSystemV1PatchSchema, z.null()]).optional(),
     studentComputeEnabled: z.boolean().optional(),
+    /** The Google Sheet link records are imported from; null clears it. */
+    sheetImportUrl: z.string().trim().url("Enter a valid link").max(1000).nullable().optional(),
   }),
 });
 
@@ -132,6 +134,23 @@ export const subjectGradeRecordParamsSchema = z.object({
 export const sendAccessCodesSchema = z.object({
   body: z.object({
     recordIds: z.array(z.string().uuid()).optional(),
+    /** Also email students who were already sent their code (otherwise they are left out). */
+    resend: z.boolean().optional(),
+  }),
+});
+
+export const importEmailsSchema = z.object({
+  body: z.object({
+    rows: z
+      .array(
+        z.object({
+          studentName: z.string().max(300).optional(),
+          studentNumber: z.string().min(1).max(60),
+          email: z.string().max(300),
+        })
+      )
+      .min(1)
+      .max(5000),
   }),
 });
 
@@ -155,6 +174,7 @@ export type CreateGradeRecordBody = z.infer<typeof createGradeRecordSchema>["bod
 export type UpdateGradeRecordBody = z.infer<typeof updateGradeRecordSchema>["body"];
 export type ImportGradeRecordsBody = z.infer<typeof importGradeRecordsSchema>["body"];
 export type PublicLookupQuery = z.infer<typeof publicLookupSchema>["query"];
+export type ImportEmailsBody = z.infer<typeof importEmailsSchema>["body"];
 export type SendAccessCodesBody = z.infer<typeof sendAccessCodesSchema>["body"];
 export type PublicComputeRecordBody = z.infer<typeof publicComputeRecordSchema>["body"];
 export type ImportFromGoogleSheetBody = z.infer<typeof importFromGoogleSheetSchema>["body"];

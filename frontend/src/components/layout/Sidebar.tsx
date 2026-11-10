@@ -25,6 +25,7 @@ import {
   ScrollText,
   Landmark,
   Share2,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
 import { apiClient } from "../../api/apiClient";
@@ -181,12 +182,13 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const locked = !canSwitch || list.length <= 1;
   const viewed = locked ? list[0] ?? null : list.find((c) => c.id === viewId) ?? null;
 
-  const groups: NavGroupDef[] = [
+  const baseGroups: NavGroupDef[] = [
     {
       title: "Scheduling",
       scoped: true,
       items: [
         { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, show: !viewer },
+        { to: "/exam-rooms", label: "Exam Room Reservation", icon: ClipboardCheck, show: is("ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY") },
         { to: "/scheduler", label: "Scheduler", icon: CalendarRange, show: is("CHAIRMAN", "ADMIN") },
         { to: "/requests", label: "Requests", icon: Inbox, show: is("CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"), requests: true },
         { to: "/room-sharing", label: "Room sharing", icon: Share2, show: is("CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"), roomShare: true },
@@ -227,6 +229,27 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     },
   ];
 
+  /**
+   * A faculty member does not schedule, so their menu is organised differently: "Management" (the dashboard) and "Schedules"
+   * (the finished schedules: their reports, the class schedules and the room availability).
+   */
+  const SCHEDULE_PAGES = new Set(["/reports", "/schedules/student-class", "/schedules/rooms"]);
+  const facultyGroups = (all: NavGroupDef[]): NavGroupDef[] => {
+    const moved = all.flatMap((g) => g.items).filter((i) => SCHEDULE_PAGES.has(i.to));
+    const order = ["/reports", "/schedules/student-class", "/schedules/rooms"];
+    moved.sort((a, b) => order.indexOf(a.to) - order.indexOf(b.to));
+    return all.flatMap((g): NavGroupDef[] => {
+      if (g.title === "Scheduling") {
+        return [
+          { ...g, title: "Management", items: g.items.filter((i) => !SCHEDULE_PAGES.has(i.to)) },
+          { title: "Schedules", scoped: true, items: moved },
+        ];
+      }
+      return [{ ...g, items: g.items.filter((i) => !SCHEDULE_PAGES.has(i.to)) }];
+    });
+  };
+  const groups = role === "FACULTY" ? facultyGroups(baseGroups) : baseGroups;
+
   const sidebar = (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-surface">
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-3">
@@ -240,7 +263,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {groups.map((g) => {
           const items = g.items.filter((i) => i.show);
-          if (items.length === 0) return null;
+          // a faculty member's experiments sit in Management, each marked "Experimental"
+          const experiments = role === "FACULTY" && g.title === "Management" ? experimentalFeatures : [];
+          if (items.length === 0 && experiments.length === 0) return null;
           return (
             <div key={g.title} className="mt-3 space-y-1">
               <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
@@ -258,11 +283,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   </NavItem>
                 )
               )}
+              {experiments.map((feature) => (
+                <NavItem key={feature.key} to={feature.routePath} icon={FlaskConical} onClose={onClose}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {feature.sidebarLabel}
+                    <span
+                      role="img"
+                      aria-label="Experimental"
+                      title="Experimental"
+                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded bg-warning-muted text-[10px] font-bold leading-none text-warning"
+                    >
+                      x
+                    </span>
+                  </span>
+                </NavItem>
+              ))}
             </div>
           );
         })}
 
-        {experimentalFeatures.length > 0 && (
+        {experimentalFeatures.length > 0 && role !== "FACULTY" && (
           <div className="mt-3 space-y-1">
             <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-foreground-muted">Experimental</div>
             {experimentalFeatures.map((feature) => (

@@ -7,6 +7,7 @@ import * as controller from "./gradeSubjectController.js";
 import {
   createGradeRecordSchema,
   createGradeSubjectSchema,
+  importEmailsSchema,
   importFromGoogleSheetSchema,
   importGradeRecordsSchema,
   publicComputeRecordParamsSchema,
@@ -63,6 +64,8 @@ router.patch("/:id/records/:recordId", validate(updateGradeRecordSchema), contro
 router.delete("/:id/records/:recordId", controller.deleteSubjectRecord);
 router.post("/:id/compute-grades", controller.computeSubjectGrades);
 router.post("/:id/send-access-codes", validate(sendAccessCodesSchema), controller.sendSubjectAccessCodes);
+router.get("/:id/send-access-codes/status", controller.sendAccessCodesStatus);
+router.post("/:id/records/import-emails", validate(importEmailsSchema), controller.importSubjectEmails);
 
 export const gradeSubjectRoutes = router;
 

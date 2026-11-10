@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FilterSelect, ListFilterBar } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
 import type { Room, Department, Curriculum, Subject, StudentClass, AcademicYear, UserListItem } from "../../types/api";
 import toast from "react-hot-toast";
@@ -63,6 +64,9 @@ export function TrashPage() {
     users: [],
   });
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("");
+  const [limit, setLimit] = useState(50);
   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
   const [permanentDelete, setPermanentDelete] = useState<{ type: EntityType; ids: string[] } | null>(null);
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
@@ -117,6 +121,8 @@ export function TrashPage() {
   useEffect(() => {
     load();
   }, []);
+  // a new search or kind starts again from the first batch
+  useEffect(() => setLimit(50), [query, kind]);
 
   const handleRestore = async (type: EntityType, id: string) => {
     const key = `${type}-${id}`;
@@ -233,6 +239,42 @@ export function TrashPage() {
 
   const selectedCountForType = (type: EntityType) => selected[type].length;
 
+  // Search and "show" filter: the sections below show `visible`; the empty-trash message and counts use the full `trash`.
+  const needle = query.trim().toLowerCase();
+  const hit = (...parts: (string | null | undefined)[]) => !needle || parts.some((part) => (part ?? "").toLowerCase().includes(needle));
+  const show = (type: EntityType) => !kind || kind === type;
+  const matched: TrashState = {
+    rooms: show("rooms") ? trash.rooms.filter((r) => hit(r.name, r.department?.name)) : [],
+    departments: show("departments") ? trash.departments.filter((d) => hit(d.name, d.code)) : [],
+    curriculum: show("curriculum") ? trash.curriculum.filter((c) => hit(c.name, c.department?.name)) : [],
+    subjects: show("subjects") ? trash.subjects.filter((x) => hit(x.code, x.name, x.curriculum?.name)) : [],
+    studentClasses: show("student-classes") ? trash.studentClasses.filter((c) => hit(c.name, c.curriculum?.name)) : [],
+    academicYears: show("academic-years") ? trash.academicYears.filter((y) => hit(y.name)) : [],
+    users: show("users") ? trash.users.filter((u) => hit(u.name, u.email, u.role)) : [],
+  };
+  const visibleCount = matched.rooms.length + matched.departments.length + matched.curriculum.length + matched.subjects.length + matched.studentClasses.length + matched.academicYears.length + matched.users.length;
+  // Each kind shows its first `limit` rows; "Show more" reveals the next batch. Search and the kind filter always cover everything.
+  const visible: TrashState = {
+    rooms: matched.rooms.slice(0, limit),
+    departments: matched.departments.slice(0, limit),
+    curriculum: matched.curriculum.slice(0, limit),
+    subjects: matched.subjects.slice(0, limit),
+    studentClasses: matched.studentClasses.slice(0, limit),
+    academicYears: matched.academicYears.slice(0, limit),
+    users: matched.users.slice(0, limit),
+  };
+  const hiddenCount = visibleCount - (visible.rooms.length + visible.departments.length + visible.curriculum.length + visible.subjects.length + visible.studentClasses.length + visible.academicYears.length + visible.users.length);
+  const filtersActive = Boolean(needle || kind);
+  const kindOptions = [
+    { value: "rooms", label: `Rooms (${trash.rooms.length})` },
+    { value: "departments", label: `Departments (${trash.departments.length})` },
+    { value: "curriculum", label: `Curricula (${trash.curriculum.length})` },
+    { value: "subjects", label: `Subjects (${trash.subjects.length})` },
+    { value: "student-classes", label: `Student classes (${trash.studentClasses.length})` },
+    { value: "academic-years", label: `Academic years (${trash.academicYears.length})` },
+    { value: "users", label: `Users (${trash.users.length})` },
+  ].filter((o) => !o.label.endsWith("(0)"));
+
   if (loading) {
     return (
       <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
@@ -250,13 +292,41 @@ export function TrashPage() {
         Items moved to trash can be restored or permanently deleted here. Only admins can access Trash.
       </p>
 
+      {totalCount > 0 && (
+        <ListFilterBar shown={visibleCount} total={totalCount} active={filtersActive} onClear={() => { setQuery(""); setKind(""); }}>
+          <input
+            type="search"
+            placeholder="Search the trash by name, code or email…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full max-w-sm rounded border border-border-strong px-3 py-2 text-sm focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+            aria-label="Search trash"
+          />
+          <FilterSelect label="Show" value={kind} onChange={setKind} options={kindOptions} allLabel="All kinds" />
+        </ListFilterBar>
+      )}
+
+      {hiddenCount > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-foreground-muted" data-testid="trash-more">
+          <span>Showing the first {limit} of each kind; {hiddenCount} more match.</span>
+          <button type="button" onClick={() => setLimit((n) => n + 50)} className="rounded border border-border-strong bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover">
+            Show more
+          </button>
+        </div>
+      )}
+
       {totalCount === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted">Trash is empty.</p>
         </div>
+      ) : visibleCount === 0 ? (
+        <div className="rounded border border-border bg-surface p-8 text-center">
+          <p className="mb-3 text-foreground-muted">Nothing in the trash matches these filters.</p>
+          <button type="button" onClick={() => { setQuery(""); setKind(""); }} className="rounded text-sm font-medium text-primary hover:underline">Clear filters</button>
+        </div>
       ) : (
         <div className="space-y-8">
-          {trash.rooms.length > 0 && (
+          {visible.rooms.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Rooms</h2>
@@ -291,17 +361,17 @@ export function TrashPage() {
                           aria-label="Select all rooms"
                           checked={
                             selected.rooms.length > 0 &&
-                            selected.rooms.length === trash.rooms.length
+                            selected.rooms.length === visible.rooms.length
                           }
                           indeterminate={
                             selected.rooms.length > 0 &&
-                            selected.rooms.length < trash.rooms.length
+                            selected.rooms.length < visible.rooms.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "rooms",
-                                trash.rooms.map((r) => r.id),
+                                visible.rooms.map((r) => r.id),
                               );
                             } else {
                               clearSelectionForType("rooms");
@@ -318,7 +388,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.rooms.map((r) => (
+                    {visible.rooms.map((r) => (
                       <tr key={r.id}>
                         <td className="px-4 py-2">
                           <input
@@ -343,7 +413,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.departments.length > 0 && (
+          {visible.departments.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Departments</h2>
@@ -378,17 +448,17 @@ export function TrashPage() {
                           aria-label="Select all departments"
                           checked={
                             selected.departments.length > 0 &&
-                            selected.departments.length === trash.departments.length
+                            selected.departments.length === visible.departments.length
                           }
                           indeterminate={
                             selected.departments.length > 0 &&
-                            selected.departments.length < trash.departments.length
+                            selected.departments.length < visible.departments.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "departments",
-                                trash.departments.map((d) => d.id),
+                                visible.departments.map((d) => d.id),
                               );
                             } else {
                               clearSelectionForType("departments");
@@ -403,7 +473,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.departments.map((d) => (
+                    {visible.departments.map((d) => (
                       <tr key={d.id}>
                         <td className="px-4 py-2">
                           <input
@@ -426,7 +496,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.curriculum.length > 0 && (
+          {visible.curriculum.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Curriculum</h2>
@@ -461,17 +531,17 @@ export function TrashPage() {
                           aria-label="Select all curriculum items"
                           checked={
                             selected.curriculum.length > 0 &&
-                            selected.curriculum.length === trash.curriculum.length
+                            selected.curriculum.length === visible.curriculum.length
                           }
                           indeterminate={
                             selected.curriculum.length > 0 &&
-                            selected.curriculum.length < trash.curriculum.length
+                            selected.curriculum.length < visible.curriculum.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "curriculum",
-                                trash.curriculum.map((c) => c.id),
+                                visible.curriculum.map((c) => c.id),
                               );
                             } else {
                               clearSelectionForType("curriculum");
@@ -487,7 +557,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.curriculum.map((c) => (
+                    {visible.curriculum.map((c) => (
                       <tr key={c.id}>
                         <td className="px-4 py-2">
                           <input
@@ -511,7 +581,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.subjects.length > 0 && (
+          {visible.subjects.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Subjects</h2>
@@ -546,17 +616,17 @@ export function TrashPage() {
                           aria-label="Select all subjects"
                           checked={
                             selected.subjects.length > 0 &&
-                            selected.subjects.length === trash.subjects.length
+                            selected.subjects.length === visible.subjects.length
                           }
                           indeterminate={
                             selected.subjects.length > 0 &&
-                            selected.subjects.length < trash.subjects.length
+                            selected.subjects.length < visible.subjects.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "subjects",
-                                trash.subjects.map((s) => s.id),
+                                visible.subjects.map((s) => s.id),
                               );
                             } else {
                               clearSelectionForType("subjects");
@@ -572,7 +642,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.subjects.map((s) => (
+                    {visible.subjects.map((s) => (
                       <tr key={s.id}>
                         <td className="px-4 py-2">
                           <input
@@ -596,7 +666,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.studentClasses.length > 0 && (
+          {visible.studentClasses.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Student classes</h2>
@@ -631,17 +701,17 @@ export function TrashPage() {
                           aria-label="Select all student classes"
                           checked={
                             selected["student-classes"].length > 0 &&
-                            selected["student-classes"].length === trash.studentClasses.length
+                            selected["student-classes"].length === visible.studentClasses.length
                           }
                           indeterminate={
                             selected["student-classes"].length > 0 &&
-                            selected["student-classes"].length < trash.studentClasses.length
+                            selected["student-classes"].length < visible.studentClasses.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "student-classes",
-                                trash.studentClasses.map((c) => c.id),
+                                visible.studentClasses.map((c) => c.id),
                               );
                             } else {
                               clearSelectionForType("student-classes");
@@ -657,7 +727,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.studentClasses.map((c) => (
+                    {visible.studentClasses.map((c) => (
                       <tr key={c.id}>
                         <td className="px-4 py-2">
                           <input
@@ -681,7 +751,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.academicYears.length > 0 && (
+          {visible.academicYears.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Academic years</h2>
@@ -716,17 +786,17 @@ export function TrashPage() {
                           aria-label="Select all academic years"
                           checked={
                             selected["academic-years"].length > 0 &&
-                            selected["academic-years"].length === trash.academicYears.length
+                            selected["academic-years"].length === visible.academicYears.length
                           }
                           indeterminate={
                             selected["academic-years"].length > 0 &&
-                            selected["academic-years"].length < trash.academicYears.length
+                            selected["academic-years"].length < visible.academicYears.length
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
                               selectAllForType(
                                 "academic-years",
-                                trash.academicYears.map((y) => y.id),
+                                visible.academicYears.map((y) => y.id),
                               );
                             } else {
                               clearSelectionForType("academic-years");
@@ -740,7 +810,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.academicYears.map((y) => (
+                    {visible.academicYears.map((y) => (
                       <tr key={y.id}>
                         <td className="px-4 py-2">
                           <input
@@ -762,7 +832,7 @@ export function TrashPage() {
             </section>
           )}
 
-          {trash.users.length > 0 && (
+          {visible.users.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <h2 className="text-lg font-medium text-foreground">Users</h2>
@@ -797,17 +867,17 @@ export function TrashPage() {
                             aria-label="Select all users"
                             checked={
                               selected.users.length > 0 &&
-                              selected.users.length === trash.users.length
+                              selected.users.length === visible.users.length
                             }
                             indeterminate={
                               selected.users.length > 0 &&
-                              selected.users.length < trash.users.length
+                              selected.users.length < visible.users.length
                             }
                             onChange={(e) => {
                               if (e.target.checked) {
                                 selectAllForType(
                                   "users",
-                                  trash.users.map((u) => u.id),
+                                  visible.users.map((u) => u.id),
                                 );
                               } else {
                                 clearSelectionForType("users");
@@ -823,7 +893,7 @@ export function TrashPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {trash.users.map((u) => (
+                    {visible.users.map((u) => (
                       <tr key={u.id}>
                         <td className="px-4 py-2">
                           <input

@@ -1,9 +1,9 @@
 ---
 name: rebuild-mmsu-extension
-description: Use whenever any file under frontend/extensions/mmsu-gradesheet/ changes, or the MMSU Grade Push page or its screenshots need updating. Rebuilds the extension, bumps versions, refreshes the committed download zip and the guide pictures.
+description: Use whenever any file under frontend/extensions/mmsu-gradesheet/ changes, or the Portal Insert Grade page or its screenshots need updating. Rebuilds the extension, bumps versions, refreshes the committed download zip and the guide pictures.
 ---
 
-# Rebuild the MMSU Grade Push extension
+# Rebuild the Portal Insert Grade extension
 
 The extension lives in `frontend/extensions/mmsu-gradesheet/` (`src/*.ts`, `manifest.json`). The download zip `frontend/public/downloads/vantage-mmsu-grade-push.zip` is **committed** and served by the app. `npm run build` does **not** rebuild it, and the frontend Dockerfile only copies `src` and `public`, so a stale zip means users download an old extension.
 

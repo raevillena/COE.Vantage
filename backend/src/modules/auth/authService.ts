@@ -160,7 +160,7 @@ export type ExtensionAccess =
   | { allowed: false; reason: "signed_out" | "role" | "not_granted" | "not_enabled"; user?: { name: string; email: string }; appUrl: string };
 
 /**
- * Lets the MMSU Grade Push browser extension ask "may the person signed in to Vantage in this browser use me?".
+ * Lets the Portal Insert Grade browser extension ask "may the person signed in to Vantage in this browser use me?".
  * It reads the Vantage login cookie but does not rotate it (the extension must never log the web app out) and hands
  * back no token, only the answer. Access = the role fits, an administrator granted the feature and the person switched it on.
  */

@@ -1,6 +1,6 @@
 /**
  * Who may use the extension: the person signed in to Vantage in this same browser, if an administrator granted them
- * "MMSU Grade Push" and they switched it on in their Profile. The Vantage server answers; the extension holds no
+ * "Portal Insert Grade" and they switched it on in their Profile. The Vantage server answers; the extension holds no
  * password or token. (This keeps honest people honest: the extension's code runs on the person's own computer, so it
  * cannot stop someone who edits it. It is an access list, not a security boundary.)
  */
@@ -64,13 +64,13 @@ export async function requestAccess(force = false): Promise<Access> {
 export function describeDenied(access: Extract<Access, { allowed: false }>): { title: string; text: string } {
   switch (access.reason) {
     case "signed_out":
-      return { title: "Sign in to Vantage", text: "Sign in to Vantage in this browser, then check again. The grade push only works for people signed in to Vantage." };
+      return { title: "Sign in to Vantage", text: "Sign in to Vantage in this browser, then check again. This tool only works for people signed in to Vantage." };
     case "not_granted":
-      return { title: "No access yet", text: `${access.name ?? "Your account"} has not been given access to MMSU Grade Push. Ask a Vantage administrator to allow it for you (Users, Experimental access).` };
+      return { title: "No access yet", text: `${access.name ?? "Your account"} has not been given access to Portal Insert Grade. Ask a Vantage administrator to allow it for you (Users, Experimental access).` };
     case "not_enabled":
-      return { title: "Turn it on in Vantage", text: "An administrator allowed you to use MMSU Grade Push. Switch it on in your Vantage Profile (Experimental features), then check again." };
+      return { title: "Turn it on in Vantage", text: "An administrator allowed you to use Portal Insert Grade. Switch it on in your Vantage Profile (Experimental features), then check again." };
     case "role":
-      return { title: "Not available for your role", text: "MMSU Grade Push is not available for your Vantage role." };
+      return { title: "Not available for your role", text: "Portal Insert Grade is not available for your Vantage role." };
     default:
       return { title: "Could not reach Vantage", text: "The Vantage server did not answer, so access could not be checked. Check your connection and try again." };
   }

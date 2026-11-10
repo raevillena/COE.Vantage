@@ -53,7 +53,7 @@ router.patch(
   updateMyExperimentalFeatures
 );
 
-// Read by the MMSU Grade Push browser extension with the person's Vantage login cookie (no bearer token).
+// Read by the Portal Insert Grade browser extension with the person's Vantage login cookie (no bearer token).
 router.get("/extension-access/mmsu-grade-push", async (req, res) => {
   const access = await getExtensionAccess(req.cookies?.refreshToken, "mmsuGradePush");
   res.setHeader("Cache-Control", "no-store");

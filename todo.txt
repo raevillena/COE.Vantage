@@ -108,11 +108,16 @@ Room request badges and the raw blocks list
 Wider room requests and smoother scheduler dragging
  - room request and drafting windows are wide; drafting shows the room's week with the block in place and checks day and time at once (no class needed first); room-share times compare as minutes (was text). Scheduler: block text wraps when it fits, a carried block keeps its size, the snap preview matches the block. done (v0.7.3, no migration)
 
-Grades module upgrades, MMSU Grade Push and experimental access
+Grades module upgrades, Portal Insert Grade and experimental access
  - grade subjects have an academic year and semester (filters, latest semester on the student lookup), INC for blank formula items, MMSU portal defaults, missing items on the student lookup. done (v0.8.0, needs migration 20260620000000_grade_subject_term)
- - MMSU Grade Push browser extension (experimental, off by default). done (v0.8.0)
+ - Portal Insert Grade browser extension (experimental, off by default). done (v0.8.0)
  - admin chooses which users may use each experimental feature; Users page filters; the scheduler allows overload. done (v0.8.0)
 
 Current and Scheduling Semester, curriculum specializations
  - two terms per college (Scheduling = what is being scheduled, Current = what is running); faculty pages follow Current. done (v0.8.1, needs migration 20260621000000_college_calendar_term)
  - curriculum specializations (common / unique / shared subjects), class option, build page. done (v0.8.1, needs migration 20260622000000_curriculum_specializations)
+
+Filters and pages on the long lists
+ - filters and pagination on student classes, subjects, rooms, curriculum, departments, users and trash; subjects paged by the server. done (v0.8.2)
+ - grade import link saved with the subject, access codes kept on re-import, public grade lookup redesigned (experimental, not in the release notes). done (v0.8.2, needs migration 20260623000000_grade_subject_sheet_url)
+ - Exam Room Reservation (exam rounds opened by the college secretary, first plotted first served, chairman removal and requests), faculty menu Management / Schedules, Scheduler conflict-check spinner fix. done (v0.8.2, needs migration 20260624000000_exam_room_reservation)

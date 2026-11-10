@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { Pager, usePaging } from "../../components/ui/pager";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { ClipboardList, Mail, MoreVertical, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
@@ -409,6 +410,7 @@ export function UsersPage() {
     if (filterMaxUnits === "unset" && u.maxUnits != null) return false;
     return true;
   });
+  const paging = usePaging(filteredList, [searchLower, filterCollege, filterDepartment, filterRole, filterStatus, filterMaxUnits].join("|"));
   const roleOptions = Array.from(new Set(list.map((u) => u.role))).sort();
   const statusOptions = Array.from(new Set(list.map((u) => u.status).filter((s): s is string => Boolean(s)))).sort();
   const departmentOptions = departments
@@ -547,7 +549,7 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredList.map((u) => (
+              {paging.pageRows.map((u) => (
                 <tr key={u.id}>
                   <td className="px-4 py-2 text-foreground">
                     <div className="flex items-center gap-2.5">
@@ -648,6 +650,7 @@ export function UsersPage() {
           </table>
         </div>
       )}
+      {filteredList.length > 0 && <Pager page={paging.page} pageSize={paging.pageSize} total={paging.total} onPage={paging.setPage} onPageSize={paging.setPageSize} />}
 
       {experimentalTarget && (
         <ExperimentalAccessDialog person={{ id: experimentalTarget.id, name: experimentalTarget.name, role: experimentalTarget.role }} onClose={() => setExperimentalTarget(null)} />

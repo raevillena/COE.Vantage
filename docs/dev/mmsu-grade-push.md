@@ -1,6 +1,6 @@
 <!-- Moved unchanged from dev.md (lines 152-162). Index: dev.md -->
 
-## MMSU Grade Push (Experimental Browser Extension)
+## Portal Insert Grade (Experimental Browser Extension)
 
 - **What:** a Chrome/Edge extension (Manifest V3) that fills the MMSU portal gradesheet (`my.mmsu.edu.ph/my/class/gradesheet/*`) from a table pasted out of Excel / Google Sheets, then re-reads the portal and reports whether it matches the sheet. Replaces the server-side Puppeteer approach of the old `gradesheet_updater` project: it runs in the user's own logged-in tab, so Vantage never holds portal credentials or grades.
 - **Where:** `frontend/extensions/mmsu-gradesheet/` (`src/paste.ts` table parsing + column detection, `grade.ts` grade -> portal option, `portal.ts` reads the gradesheet form, `plan.ts` source vs portal diff, `fill.ts` apply + verify, `job.ts` keeps the fill across the reload that saving causes, `panel.ts` shadow-DOM UI).
@@ -18,3 +18,6 @@
 - Icons in `extensions/mmsu-gradesheet/icons/` come from the site favicons.
 - **Not verified:** the cookie being sent cross-site in production (site and API are different hosts, cookie is `SameSite=Lax; Secure`). Chrome sends it for extensions with host permission, but test it once on the real deployment.
 - Tests: `mmsuPush.spec.ts` (gate states, Check again, no portal leaks), `experimentalAccess.spec.ts` (endpoint reasons, no rotation).
+
+### Renamed "Portal Insert Grade" (2026-11-10, extension v0.2.1)
+- The feature's visible name is now **Portal Insert Grade** (menu, page title, Profile / Experimental access lists, extension name, panel pill and header, setup text). Kept on purpose so nothing breaks: the feature key `mmsuGradePush`, the route `/experimental/mmsu-grade-push`, the zip file name `vantage-mmsu-grade-push.zip`, the folder `extensions/mmsu-gradesheet/` and this doc's name. The setup pictures were regenerated (`MMSU_SCREENSHOTS=1`). The experimental badge in the faculty menu is a small "x" with the title "Experimental".

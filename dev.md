@@ -8,7 +8,7 @@ the file below). Start every session with `docs/HANDOFF.md` (current state, open
 |---|---|---|
 | [docs/dev/grades-module.md](docs/dev/grades-module.md) | 117 | Grade module (experimental): backend module, grade records, import/compute, subject terms and year/semester filters |
 | [docs/dev/experimental-features.md](docs/dev/experimental-features.md) | 42 | The per-user experimental features framework: registry, profile toggle, sidebar, route gating |
-| [docs/dev/mmsu-grade-push.md](docs/dev/mmsu-grade-push.md) | 11 | MMSU Grade Push browser extension: what it does, files, build/zip, portal facts, tests |
+| [docs/dev/mmsu-grade-push.md](docs/dev/mmsu-grade-push.md) | 11 | Portal Insert Grade browser extension: what it does, files, build/zip, portal facts, tests |
 | [docs/dev/scheduler-grid.md](docs/dev/scheduler-grid.md) | 231 | Scheduler: dragging, resizing, pending blocks, overlays, assignment form, conflict prompt (sections 1-6) |
 | [docs/dev/curriculum-and-subjects.md](docs/dev/curriculum-and-subjects.md) | 213 | Curriculum by year/semester, auto room assignment, subject-faculty priorities, curriculum builder, subject dialogs, imports (sections 7-14) |
 | [docs/dev/forms-theme-auth.md](docs/dev/forms-theme-auth.md) | 219 | Form validation, theme, schedule palettes, auth and branding, removed Excel report (sections 15-20) |
@@ -117,8 +117,10 @@ Numbered sections of the scheduler / platform notes and the file that holds each
 - 59. Room sharing (v0.7.0)
 - 60. Waiting requests, head-count dashboard and admin Scheduler (v0.7.4)
 - 61. Schedule hold, PDF timetables and teaching-role edits (v0.7.5)
-- 62. Grades terms, INC, MMSU Grade Push and experimental access (v0.8.0)
+- 62. Grades terms, INC, Portal Insert Grade and experimental access (v0.8.0)
 - 63. Current and Scheduling Semester, curriculum specializations (v0.8.1)
+- 64. Filters, pagination and grade-lookup fixes (v0.8.2)
+- 65. Exam Room Reservation and the faculty menu (`docs/dev/exam-rooms.md`)
 
 **parked.md**
 

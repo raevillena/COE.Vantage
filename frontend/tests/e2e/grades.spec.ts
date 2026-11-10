@@ -2,12 +2,12 @@ import { expect, test } from "@playwright/test";
 import { API, PASSWORD, login } from "./support";
 
 /**
- * Grades area: the MMSU Grade Push page, the staff Grades page (layout, columns, terms, grade keys, import) and the
+ * Grades area: the Portal Insert Grade page, the staff Grades page (layout, columns, terms, grade keys, import) and the
  * public grade lookup. Every test makes its own "QA ..." subjects with made-up students and deletes them in `finally`.
  * Run just this file: npx playwright test tests/e2e/grades.spec.ts
  */
 
-test.describe("MMSU grade push module", () => {
+test.describe("Portal Insert Grade module", () => {
   test("is off until switched on, then shows the setup page and serves the extension zip", async ({ page, request }) => {
     const auth = await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } });
     const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
@@ -17,7 +17,7 @@ test.describe("MMSU grade push module", () => {
       // Off: the page is not offered and a typed URL goes back to the profile.
       expect((await set({ enabled: true, features: original.features.filter((f) => f !== "mmsuGradePush") })).status()).toBe(200);
       await login(page, "chairman@coe.vantage");
-      await expect(page.getByRole("link", { name: "MMSU Grade Push" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Portal Insert Grade" })).toHaveCount(0);
       await page.goto("/experimental/mmsu-grade-push");
       await page.waitForURL("**/profile");
 
@@ -27,8 +27,8 @@ test.describe("MMSU grade push module", () => {
       await page.context().clearCookies();
       await page.evaluate(() => sessionStorage.clear());
       await login(page, "chairman@coe.vantage");
-      await page.getByRole("link", { name: "MMSU Grade Push" }).click();
-      await expect(page.getByRole("heading", { name: "MMSU Grade Push", level: 1 })).toBeVisible();
+      await page.getByRole("link", { name: "Portal Insert Grade" }).click();
+      await expect(page.getByRole("heading", { name: "Portal Insert Grade", level: 1 })).toBeVisible();
       await expect(page.getByRole("heading", { name: "1. Get the extension" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "2. Use it on a gradesheet" })).toBeVisible();
       const link = page.getByRole("link", { name: /Download extension/ });
@@ -101,14 +101,17 @@ test.describe("grades module layout", () => {
       expect(imported.status(), await imported.text()).toBe(201);
       await request.post(`${API}/grade-subjects/${subjectId}/compute-grades`, { headers });
 
-      const measure = async (width: number, height: number, scheme: "light" | "dark" = "light") => {
+      const measure = async (width: number, height: number, scheme: "light" | "dark" = "light", freeze = true) => {
         const context = await browser.newContext({ viewport: { width, height }, colorScheme: scheme });
         const page = await context.newPage();
         page.setDefaultTimeout(10_000);
         await login(page, "admin@coe.vantage");
         await page.goto("/experimental/grades");
-        await page.getByRole("button", { name: "QA Layout Check" }).click();
+        await page.getByRole("button", { name: "QA Layout Check", exact: true }).click();
         await expect(page.getByText("Showing 43 of 43")).toBeVisible();
+        // The name + actions column is frozen by default; "Freeze names" turns it off (a slow browser can need that).
+        const freezeBox = page.getByLabel("Freeze names");
+        if (!freeze && (await freezeBox.count()) > 0) await freezeBox.uncheck();
         const result = await page.evaluate(() => {
           const rect = (e: Element) => e.getBoundingClientRect();
           const alpha = (css: string) => {
@@ -144,6 +147,24 @@ test.describe("grades module layout", () => {
         });
         return { context, page, result };
       };
+
+      // Frozen by default: one frozen column (name + actions) and the header row. Turning "Freeze names" off leaves the header row
+      // as the only sticky element, and the choice is remembered.
+      {
+        const { context, page, result } = await measure(1440, 900, "light", false);
+        expect(result.frozen, "frozen columns after turning Freeze names off").toBe(0);
+        const stickyCells = await page.evaluate(() => ({
+          head: getComputedStyle(document.querySelector("thead") as Element).position,
+          cells: Array.from(document.querySelectorAll("th, td")).filter((c) => getComputedStyle(c).position === "sticky").length,
+        }));
+        expect(stickyCells.head, "the header row is pinned").toBe("sticky");
+        expect(stickyCells.cells, "no sticky cell besides the header row").toBe(0);
+        await page.reload();
+        await page.getByRole("button", { name: "QA Layout Check", exact: true }).click();
+        await expect(page.getByLabel("Freeze names")).not.toBeChecked();
+        await page.getByLabel("Freeze names").check(); // back to the default
+        await context.close();
+      }
 
       for (const [width, height] of [[1440, 900], [1280, 800]]) {
         const { context, page, result } = await measure(width, height);
@@ -455,7 +476,7 @@ test.describe("grading settings grade keys", () => {
 
       await login(page, "admin@coe.vantage");
       await page.goto("/experimental/grades");
-      await page.getByRole("button", { name: "QA Keys Picker" }).click();
+      await page.getByRole("button", { name: "QA Keys Picker", exact: true }).click();
       await page.getByRole("button", { name: "Grading settings" }).click();
       const dialog = page.getByRole("dialog");
 
@@ -633,7 +654,7 @@ test.describe("public lookup missing items", () => {
       const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
       const pub = await context.newPage();
       pub.setDefaultTimeout(10_000);
-      const card = (name: string) => pub.locator("div.rounded.border", { has: pub.getByRole("heading", { name, level: 3 }) });
+      const card = (name: string) => pub.locator("article", { has: pub.getByRole("heading", { name, level: 3 }) });
       const labels = (name: string) => card(name).locator("div.border-b > span:first-child").allTextContents();
 
       // A student with scores for one item out of three.
@@ -702,7 +723,7 @@ test.describe("columns follow the max scores", () => {
 
       await login(page, "admin@coe.vantage");
       await page.goto("/experimental/grades");
-      await page.getByRole("button", { name: "QA Columns Follow Max" }).click();
+      await page.getByRole("button", { name: "QA Columns Follow Max", exact: true }).click();
       await expect(page.getByText("Showing 2 of 2")).toBeVisible();
 
       // All four columns, formula items first (Finals, Lab 2), then the rest with Lab 10 after Lab 2 in natural order.
@@ -749,7 +770,7 @@ test.describe("MMSU grade table defaults", () => {
 
       await login(page, "admin@coe.vantage");
       await page.goto("/experimental/grades");
-      await page.getByRole("button", { name: "QA MMSU Defaults" }).click();
+      await page.getByRole("button", { name: "QA MMSU Defaults", exact: true }).click();
       await page.getByRole("button", { name: "Grading settings" }).click();
       const dialog = page.getByRole("dialog");
 
@@ -906,6 +927,229 @@ test.describe("INC for blank items", () => {
       await context.close();
     } finally {
       for (const id of made) await request.delete(`${API}/grade-subjects/${id}`, { headers });
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: prefs.enabled, features: prefs.features } });
+    }
+  });
+});
+
+test.describe("grades subject list search and confirmations", () => {
+  test("subjects can be searched, and deleting one asks in the app, not in a browser popup", async ({ page, request }) => {
+    test.setTimeout(90_000);
+    page.setDefaultTimeout(10_000);
+    const auth = await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
+    const prefs = (await (await request.get(`${API}/auth/me/experimental-features`, { headers })).json()) as { enabled: boolean; features: string[] };
+    const made: string[] = [];
+    try {
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
+      for (const name of ["QA Search Alpha", "QA Search Beta"]) {
+        const r = await request.post(`${API}/grade-subjects`, { headers, data: { name } });
+        expect(r.status(), await r.text()).toBe(201);
+        made.push(((await r.json()) as { id: string }).id);
+      }
+      let browserPopup = false;
+      page.on("dialog", (d) => {
+        browserPopup = true;
+        void d.dismiss();
+      });
+      await login(page, "admin@coe.vantage");
+      await page.goto("/experimental/grades");
+      const search = page.getByLabel("Search grade subjects");
+      await search.fill("search alpha");
+      await expect(page.getByRole("button", { name: "QA Search Alpha", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "QA Search Beta", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Clear filters" }).click();
+      await expect(search).toHaveValue("");
+      await expect(page.getByRole("button", { name: "QA Search Beta", exact: true })).toBeVisible();
+
+      // Cancel keeps it; confirm removes it.
+      await search.fill("search beta");
+      await page.getByRole("button", { name: "Delete QA Search Beta", exact: true }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText("Delete this grade subject?")).toBeVisible();
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(page.getByRole("button", { name: "QA Search Beta", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Delete QA Search Beta", exact: true }).click();
+      await dialog.getByRole("button", { name: "Delete subject" }).click();
+      await expect(page.getByRole("button", { name: "QA Search Beta", exact: true })).toHaveCount(0);
+      expect(browserPopup, "no browser popup").toBe(false);
+    } finally {
+      for (const id of made) await request.delete(`${API}/grade-subjects/${id}`, { headers });
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: prefs.enabled, features: prefs.features } });
+    }
+  });
+});
+
+test.describe("grades import link", () => {
+  test("the Google Sheet link is saved with the subject, so another browser still has it", async ({ browser, request }) => {
+    test.setTimeout(90_000);
+    const auth = await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
+    const prefs = (await (await request.get(`${API}/auth/me/experimental-features`, { headers })).json()) as { enabled: boolean; features: string[] };
+    const made: string[] = [];
+    const sheetOf = async (id: string) => ((await (await request.get(`${API}/grade-subjects/${id}`, { headers })).json()) as { sheetImportUrl?: string | null }).sheetImportUrl ?? null;
+    const open = async (name: string, preset?: { id: string; url: string }) => {
+      const context = await browser.newContext(); // a fresh browser profile: nothing in local storage unless preset
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      if (preset) {
+        await page.addInitScript(([id, url]) => localStorage.setItem("coe.vantage.gradeSubject.importSheetUrl.v1", JSON.stringify({ [id]: url })), [preset.id, preset.url]);
+      }
+      await login(page, "admin@coe.vantage");
+      await page.goto("/experimental/grades");
+      await page.getByRole("button", { name, exact: true }).click();
+      await page.getByRole("button", { name: "Import data" }).click(); // the link box is in the import dialog
+      return { context, page };
+    };
+    try {
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
+      const a = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Link Typed" } })).json()) as { id: string }).id;
+      const b = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Link Old Browser" } })).json()) as { id: string }).id;
+      made.push(a, b);
+
+      // typing a link and leaving the box saves it with the subject (no import needed)
+      const url = "https://docs.google.com/spreadsheets/d/QA-LINK-TEST/edit";
+      const first = await open("QA Link Typed");
+      const box = first.page.getByLabel("Google Sheet link");
+      await box.fill(url);
+      await first.page.keyboard.press("Escape"); // closing the dialog saves it too
+      await expect.poll(() => sheetOf(a)).toBe(url);
+      await first.context.close();
+      // a different browser (nothing stored there) shows it
+      const second = await open("QA Link Typed");
+      await expect(second.page.getByLabel("Google Sheet link")).toHaveValue(url);
+      await second.context.close();
+
+      // a link only an old browser remembered is shown and moved up to the server once
+      const oldUrl = "https://docs.google.com/spreadsheets/d/QA-OLD-BROWSER/edit";
+      const third = await open("QA Link Old Browser", { id: b, url: oldUrl });
+      await expect(third.page.getByLabel("Google Sheet link")).toHaveValue(oldUrl);
+      await expect.poll(() => sheetOf(b)).toBe(oldUrl);
+      await third.context.close();
+
+      // not a link: refused by the server, nothing saved
+      expect((await request.patch(`${API}/grade-subjects/${a}`, { headers, data: { sheetImportUrl: "not a link" } })).status()).toBe(400);
+      expect(await sheetOf(a)).toBe(url);
+    } finally {
+      for (const id of made) await request.delete(`${API}/grade-subjects/${id}`, { headers });
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: prefs.enabled, features: prefs.features } });
+    }
+  });
+});
+
+test.describe("re-importing a subject", () => {
+  test("students keep the access code they were sent; only new students get a new one", async ({ request }) => {
+    test.setTimeout(60_000);
+    const auth = await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
+    let id = "";
+    try {
+      id = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Keep Codes" } })).json()) as { id: string }).id;
+      const row = (n: number, extra: object = {}) => ({ studentName: `KEEP, STUDENT ${n}`, studentNumber: `99-77000${n}`, grades: { "Quiz 1": 10 + n }, maxScores: { "Quiz 1": 20 }, ...extra });
+      const importRows = async (rows: object[]) => {
+        const r = await request.post(`${API}/grade-subjects/${id}/records/import`, { headers, data: { records: rows } });
+        expect(r.status(), await r.text()).toBe(201);
+      };
+      const codes = async () => {
+        const recs = (await (await request.get(`${API}/grade-subjects/${id}/records`, { headers })).json()) as { studentNumber: string; code: string }[];
+        return Object.fromEntries(recs.map((r) => [r.studentNumber, r.code]));
+      };
+
+      await importRows([row(1), row(2)]);
+      const first = await codes();
+      expect(Object.keys(first)).toHaveLength(2);
+
+      // import again (new scores, one new student): the old students keep their codes
+      await importRows([row(1, { grades: { "Quiz 1": 3 } }), row(2), row(3)]);
+      const second = await codes();
+      expect(second["99-770001"]).toBe(first["99-770001"]);
+      expect(second["99-770002"]).toBe(first["99-770002"]);
+      expect(second["99-770003"]).toBeTruthy();
+      expect(Object.values(first)).not.toContain(second["99-770003"]);
+
+      // a code written in the sheet still wins
+      await importRows([row(1, { code: "SHEETCODE1" }), row(2), row(3)]);
+      const third = await codes();
+      expect(third["99-770001"]).toBe("SHEETCODE1");
+      expect(third["99-770002"]).toBe(first["99-770002"]);
+    } finally {
+      if (id) await request.delete(`${API}/grade-subjects/${id}`, { headers });
+    }
+  });
+});
+
+test.describe("grading weights", () => {
+  test("a category total is the sum of its components, and older settings convert without changing a result", async ({ page, request }) => {
+    test.setTimeout(90_000);
+    const auth = await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } });
+    const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
+    const prefs = (await (await request.get(`${API}/auth/me/experimental-features`, { headers })).json()) as { enabled: boolean; features: string[] };
+    let subjectId = "";
+    try {
+      await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
+      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Weights" } })).json()) as { id: string }).id;
+      // Saved the old way: category weights 40 / 60, components as shares inside a category (Quizzes 1 : Project 3, Final 7 alone).
+      const old = await request.patch(`${API}/grade-subjects/${subjectId}`, {
+        headers,
+        data: {
+          gradingSystem: {
+            categories: [
+              { name: "Class work", weight: 40, components: [{ name: "Quizzes", weight: 1, gradeKeys: ["Q1", "Q2"] }, { name: "Project", weight: 3, gradeKeys: ["P1"] }] },
+              { name: "Exams", weight: 60, components: [{ name: "Final", weight: 7, gradeKeys: ["E1"] }] },
+            ],
+          },
+        },
+      });
+      expect(old.status(), await old.text()).toBe(200);
+      const maxScores = { Q1: 20, Q2: 20, P1: 100, E1: 100 };
+      for (const [name, number, grades] of [["WEIGHT, A", "99-881001", { Q1: 15, Q2: 18, P1: 90, E1: 70 }], ["WEIGHT, B", "99-881002", { Q1: 5, Q2: 12, P1: 60, E1: 95 }]] as const) {
+        const r = await request.post(`${API}/grade-subjects/${subjectId}/records`, { headers, data: { studentName: name, studentNumber: number, code: `WT${number.slice(-3)}`, grades, maxScores } });
+        expect(r.status(), await r.text()).toBe(201);
+      }
+      const finals = async () => {
+        expect((await request.post(`${API}/grade-subjects/${subjectId}/compute-grades`, { headers })).status()).toBeLessThan(300);
+        const recs = (await (await request.get(`${API}/grade-subjects/${subjectId}/records`, { headers })).json()) as { studentName: string; computedGrade: { finalGrade: number } | null }[];
+        return Object.fromEntries(recs.map((r) => [r.studentName, r.computedGrade?.finalGrade]));
+      };
+      const before = await finals();
+      expect(before["WEIGHT, A"]).toBeGreaterThan(0);
+
+      await login(page, "admin@coe.vantage");
+      await page.goto("/experimental/grades");
+      await page.getByRole("button", { name: "QA Weights", exact: true }).click();
+      await page.getByRole("button", { name: "Grading settings" }).click();
+      const dialog = page.getByRole("dialog");
+
+      // Opened: the old shares are shown as a share of the final, with a note that nothing changes for students.
+      await expect(dialog.getByText(/shown here as a share of the final grade/)).toBeVisible();
+      const total = (name: string) => dialog.getByLabel(`${name} total, the sum of its components`);
+      await expect(total("Class work")).toHaveValue("40");
+      await expect(total("Exams")).toHaveValue("60");
+      await expect(total("Class work")).toHaveJSProperty("readOnly", true); // worked out, not typed
+      const shares = dialog.getByLabel("% of final");
+      await expect(shares).toHaveCount(3);
+      await expect(shares.nth(0)).toHaveValue("10");
+      await expect(shares.nth(1)).toHaveValue("30");
+      await expect(shares.nth(2)).toHaveValue("60");
+
+      // Changing a component moves its category total and the 100 check.
+      await shares.nth(1).fill("20");
+      await expect(total("Class work")).toHaveValue("30");
+      await expect(dialog.getByText(/add up to 100 \(now 90\.00\)/).first()).toBeVisible();
+      await shares.nth(1).fill("30");
+      await expect(total("Class work")).toHaveValue("40");
+
+      // Saving the converted form keeps every student's result.
+      await dialog.getByRole("button", { name: "Save formula" }).click();
+      await expect
+        .poll(async () => {
+          const s = (await (await request.get(`${API}/grade-subjects/${subjectId}`, { headers })).json()) as { gradingSystem: { categories: { weight: number; components: { weight: number }[] }[] } };
+          return JSON.stringify(s.gradingSystem.categories.map((c) => [c.weight, c.components.map((x) => x.weight)]));
+        })
+        .toBe(JSON.stringify([[40, [10, 30]], [60, [60]]]));
+      expect(await finals()).toEqual(before);
+    } finally {
+      if (subjectId) await request.delete(`${API}/grade-subjects/${subjectId}`, { headers });
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: prefs.enabled, features: prefs.features } });
     }
   });

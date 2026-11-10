@@ -86,28 +86,27 @@ export function defaultGradeEquivalenceMmsu(): GradeEquivalenceRowV1[] {
   ];
 }
 
-/** Example aligned with CSV template + policy defaults. */
+/**
+ * The default weights: "Major Exams" (Midterms 15% + Finals 15%, 30% in all) and "Major Outputs" (the other 70%).
+ * Each component's weight is its share of the final grade, and a category's weight is the sum of its components.
+ */
 export function defaultGradingSystemTemplate(): GradingSystemV1 {
   return {
     categories: [
       {
         id: newId(),
-        name: "Overall grade",
-        weight: 100,
+        name: "Major Exams",
+        weight: 30,
         components: [
-          {
-            id: newId(),
-            name: "Quizzes",
-            weight: 40,
-            gradeKeys: ["Quiz 1"],
-          },
-          {
-            id: newId(),
-            name: "Exams",
-            weight: 60,
-            gradeKeys: ["Midterms", "Finals"],
-          },
+          { id: newId(), name: "Midterms", weight: 15, gradeKeys: ["Midterms"] },
+          { id: newId(), name: "Finals", weight: 15, gradeKeys: ["Finals"] },
         ],
+      },
+      {
+        id: newId(),
+        name: "Major Outputs",
+        weight: 70,
+        components: [{ id: newId(), name: "Major Outputs", weight: 70, gradeKeys: ["Major Outputs"] }],
       },
     ],
     passingGrade: DEFAULT_PASSING_PERCENT,
@@ -219,6 +218,84 @@ function validateEquivalenceOverlap(rows: GradeEquivalenceRowV1[]): { ok: true }
   return { ok: true };
 }
 
+const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+/**
+ * A category's weight is the sum of its components' weights, so each component weight is its share of the FINAL grade
+ * (for example 20 + 30 + 50 across a quiz, a project and an exam). The category total is worked out, never typed.
+ * The stored shape and the grade maths are unchanged: a category's weight times a component's share of the category is
+ * exactly the component weight when the category weight is the sum of its components.
+ */
+export function deriveCategoryWeights(categories: GradingCategoryV1[]): GradingCategoryV1[] {
+  return categories.map((cat) => ({ ...cat, weight: round4(cat.components.reduce((s, c) => s + (Number.isFinite(c.weight) ? c.weight : 0), 0)) }));
+}
+
+/**
+ * Settings saved before this change had a free category weight with component weights as shares inside the category.
+ * Opening them converts the component weights to a share of the final grade (category weight x share), which gives every
+ * student the same result as before. `converted` says whether anything had to change.
+ */
+export function toPercentOfFinal(categories: GradingCategoryV1[]): { categories: GradingCategoryV1[]; converted: boolean } {
+  let converted = false;
+  const next = categories.map((cat) => {
+    const sum = cat.components.reduce((s, c) => s + (Number.isFinite(c.weight) ? c.weight : 0), 0);
+    if (sum <= 0 || Math.abs(sum - cat.weight) < 0.0001) return cat;
+    converted = true;
+    return { ...cat, components: cat.components.map((c) => ({ ...c, weight: round4((cat.weight * c.weight) / sum) })) };
+  });
+  return { categories: deriveCategoryWeights(next), converted };
+}
+
+const keyOf = (key: string) => key.trim().toLowerCase();
+
+/**
+ * Copies another subject's formula onto this subject's columns. A grade key is matched by name (ignoring case and spaces)
+ * against the columns this subject has; a component keeps the keys that match and is SKIPPED when none of its keys do. A
+ * category left with no component is skipped too. Weights are copied as they are (as a share of the final grade), so the
+ * total can fall short of 100 after skipping: the editor then says so and the teacher adjusts.
+ */
+export function copyFormulaFrom(
+  source: unknown,
+  availableKeys: string[]
+): { categories: GradingCategoryV1[]; copied: number; skipped: string[] } {
+  const own = new Map(availableKeys.map((key) => [keyOf(key), key]));
+  const sourceCategories = toPercentOfFinal(normalizeGradingSystemFromUnknown(source).categories).categories;
+  const skipped: string[] = [];
+  let copied = 0;
+  const categories: GradingCategoryV1[] = [];
+  for (const cat of sourceCategories) {
+    const components: GradingComponentV1[] = [];
+    for (const comp of cat.components) {
+      const keys = Array.from(new Set(comp.gradeKeys.map((k) => own.get(keyOf(k))).filter((k): k is string => Boolean(k))));
+      if (keys.length === 0) {
+        skipped.push(`${cat.name} › ${comp.name}`);
+        continue;
+      }
+      copied += 1;
+      components.push({ id: newId(), name: comp.name, weight: comp.weight, gradeKeys: keys });
+    }
+    if (components.length > 0) categories.push({ id: newId(), name: cat.name, weight: 0, components });
+  }
+  return { categories: deriveCategoryWeights(categories), copied, skipped };
+}
+
+/**
+ * The default weights, tied to a subject's own columns: each component takes the column of the same name (ignoring case,
+ * spaces and a trailing "s", so "Midterm" fits "Midterms"), and has no column picked when nothing fits, which the teacher
+ * then chooses. The structure and the weights are always all there.
+ */
+export function defaultFormulaFor(availableKeys: string[]): GradingCategoryV1[] {
+  const loose = (key: string) => key.trim().toLowerCase().replace(/\s+/g, " ").replace(/s$/, "");
+  const own = new Map(availableKeys.map((key) => [loose(key), key]));
+  return defaultGradingSystemTemplate().categories.map((cat) => ({
+    ...cat,
+    components: cat.components.map((comp) => ({
+      ...comp,
+      gradeKeys: Array.from(new Set(comp.gradeKeys.map((k) => own.get(loose(k))).filter((k): k is string => Boolean(k)))),
+    })),
+  }));
+}
+
 /** Categories + weights + components only (for the formula panel save). */
 export function validateGradingCategories(categories: GradingCategoryV1[]): { ok: true } | { ok: false; message: string } {
   if (categories.length === 0) return { ok: true };
@@ -227,7 +304,7 @@ export function validateGradingCategories(categories: GradingCategoryV1[]): { ok
   if (Math.abs(catSum - 100) >= 0.02) {
     return {
       ok: false,
-      message: `Category weights must sum to 100 (currently ${catSum.toFixed(2)}).`,
+      message: `The component weights of all categories must add up to 100 (currently ${catSum.toFixed(2)}).`,
     };
   }
 
@@ -245,7 +322,7 @@ export function validateGradingCategories(categories: GradingCategoryV1[]): { ok
     if (!Number.isFinite(compSum) || compSum <= 0) {
       return {
         ok: false,
-        message: `Under category "${cat.name}", component weights must sum to a positive number (they are relative shares inside that category; preview and compute scale them automatically).`,
+        message: `Under category "${cat.name}", the component weights must add up to more than zero.`,
       };
     }
     for (const comp of cat.components) {

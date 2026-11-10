@@ -2,6 +2,16 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.8.2 - 2026-11-10
+
+Exam room reservation, a new faculty menu, and filters and pages on the long lists
+
+- **New:** Exam Room Reservation: plot your exams into rooms for the Midterm and Final exam weeks. Pick a room, then drag one of your subjects onto its date-and-time grid (or pick it and click a time). It is first plotted, first served: a room cannot be double-booked and a class cannot have two exams at once, and you can use several rooms at the same time. The college secretary sets the exam dates and opens each round for plotting. The chairman of a room's department can remove a block in their rooms, or ask its owner to free it, and the owner accepts or declines.
+- **Improved:** The faculty menu is organised as Management (Dashboard and Exam Room Reservation) and Schedules (Reports, Class schedule and Room availability).
+- **Improved:** Student classes, Subjects, Rooms and Curriculum have filters next to the search box (department, curriculum, year level, semester, type and more), with a one-click Clear filters and a count of what matches.
+- **Improved:** Long lists of student classes, subjects and rooms are split into pages of 25, 50, 100 or 200. Search and filters always look through every row, not only the page on screen, and the Subjects page loads one page at a time so it stays quick with many subjects.
+- **Fixed:** In the Scheduler's assignment panel, "Checking room & faculty conflicts…" could stay on forever with Save disabled when a field was changed while a check was running.
+
 ## v0.8.1 - 2026-11-09
 
 Current and Scheduling Semester, and curriculum specializations

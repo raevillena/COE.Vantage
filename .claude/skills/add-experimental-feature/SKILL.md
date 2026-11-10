@@ -19,7 +19,7 @@ An experimental feature has a key (for example `mmsuGradePush`). A user sees it 
 
 No database migration is needed: preferences are a JSON column on the user.
 
-## Test (copy `grades.spec.ts` › "MMSU grade push module")
+## Test (copy `grades.spec.ts` › "Portal Insert Grade module")
 - Read the user's current preferences with `GET /auth/me/experimental-features`, then `PATCH` them (`{ enabled, features }`) through the API.
 - Off: the sidebar link is absent and the typed URL redirects to `/profile`. On: the link shows and the page opens.
 - **Always restore the original preferences in `finally`.**

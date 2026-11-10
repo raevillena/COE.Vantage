@@ -182,3 +182,16 @@ Filtering is case-insensitive and substring-based. No backend changes; all filte
 - (An app-bar badge showing both semesters was tried and removed at the user's request.) The Academic years page has two cards and two table columns.
 - Test: `tests/e2e/semesters.spec.ts`.
 - Labels: the semester select on scheduling pages is labelled "Scheduling Semester" (dashboard, Scheduler, rooms, room sharing, schedules, GE subjects, faculty page, deloading, prioritization); on the faculty dashboard it is "Current Semester"; on Faculty schedule and Reports it depends on the role (FACULTY = Current). The Grades module and the student lookup pick a subject's own term, so their selects stay "Semester" (they open on the Current Semester).
+
+### List filters (2026-11-09)
+- Shared pieces in `frontend/src/components/ui/listFilters.tsx`: `FilterSelect`, `ListFilterBar` ("Showing x of y" + "Clear filters"), `optionsFrom`. Filters are client-side (the lists are loaded whole), so they stay cheap but a list with many thousands of rows would need server paging.
+- Filters per page: Users (college, department, role, status, max units), Student classes (department, curriculum, year level, specialization), Subjects (curriculum, department, year level, semester, lecture/lab), Rooms (department, type, availability, equipment), Curriculum (department), Departments (college), Trash (search + kind). Dropdowns that would offer a single choice are hidden. Already filtered/paged before: Audit log, Feedback, Requests, Faculty page, dashboard details.
+- Not filtered (small by nature): Colleges, Academic years, Scheduling rules. The Grades page subject list has only year/semester filters.
+- Test: `tests/e2e/listFilters.spec.ts`, `userFilters.spec.ts`.
+
+### Pagination (2026-11-10)
+- **Subjects: server-side.** `GET /subjects?page=&pageSize=&q=&curriculumId=&departmentId=&yearLevel=&semester=&kind=` returns `{ items, total, totalAll, page, pageSize }`; search and every filter run in the database over ALL subjects, then one page is returned (page size 5-200, default 50; a page past the end is clamped). Without `?page=` the endpoint still returns the plain array that the pickers, the Scheduler tree and the build page use. Code: `listSubjectsPaged` (`subjectService.ts`), `listSubjectsPagedQuerySchema`; page: `SubjectsPage.tsx` (debounced search, a request counter so a slow older answer cannot overwrite a newer one).
+- **Users, Student classes, Rooms: client-side.** The list is loaded whole, search/filters run over all rows, the result is split into pages (`usePaging` + `Pager` in `components/ui/pager.tsx`; page size 25/50/100/200, back to page 1 whenever the search or a filter changes). "Select all" on Student classes means the current page.
+- **Trash:** each kind shows its first 50 matches with a "Show more" button; search and the kind filter cover everything.
+- Not paged: Curriculum, Departments, Colleges, Academic years, Scheduling rules (small); Audit log, Feedback and Requests already had paging or filters.
+- Test: `tests/e2e/pagination.spec.ts` (60 subjects + 60 classes), `listFilters.spec.ts`.

@@ -1,7 +1,7 @@
 import { fetchAccess } from "./access";
 
 // Clicking the extension's toolbar icon opens the portal's Grade Sheet list in a new tab, where the
-// gradesheet to push to is chosen (the grade push panel then appears on that class's Edit page).
+// gradesheet to push to is chosen (the Portal Insert Grade panel then appears on that class's Edit page).
 const GRADESHEETS_URL = "https://my.mmsu.edu.ph/my/class/gradesheet";
 
 function openGradesheets(): void {

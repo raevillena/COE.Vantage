@@ -33,6 +33,21 @@ export const updateSubjectSchema = z.object({
   }),
 });
 
+/** Paged, filtered list for the Subjects page. Without `page` the plain full list is returned (pickers and the scheduler use it). */
+export const listSubjectsPagedQuerySchema = z.object({
+  page: z.coerce.number().int().min(1),
+  pageSize: z.coerce.number().int().min(5).max(200).default(50),
+  q: z.string().trim().max(200).optional(),
+  /** A curriculum id, or "__none__" for subjects without one. */
+  curriculumId: z.string().max(64).optional(),
+  /** A department id (the subject's own, else its curriculum's), or "__none__". */
+  departmentId: z.string().max(64).optional(),
+  yearLevel: z.string().max(10).optional(),
+  semester: z.string().max(10).optional(),
+  kind: z.enum(["lecture", "lab"]).optional(),
+});
+export type ListSubjectsPagedQuery = z.infer<typeof listSubjectsPagedQuerySchema>;
+
 export type CreateSubjectBody = z.infer<typeof createSubjectSchema>["body"];
 export type UpdateSubjectBody = z.infer<typeof updateSubjectSchema>["body"];
 

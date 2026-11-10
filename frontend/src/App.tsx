@@ -36,6 +36,7 @@ import { AuditLogPage } from "./pages/audit/AuditLogPage";
 import { UniversityPage } from "./pages/university/UniversityPage";
 import { CollegesPage } from "./pages/university/CollegesPage";
 import { PublicGradesPage } from "./pages/publicGrades/PublicGradesPage";
+import { ExamRoomReservationPage } from "./pages/examRooms/ExamRoomReservationPage";
 
 function App() {
   return (
@@ -55,6 +56,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="dashboard/details/:metric" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"]}><DashboardDetailPage /></ProtectedRoute>} />
+        <Route path="exam-rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"]}><ExamRoomReservationPage /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><UsersPage /></ProtectedRoute>} />
         <Route path="rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><RoomsPage /></ProtectedRoute>} />
         <Route path="curriculum" element={<ProtectedRoute allowedRoles={["ADMIN", "OFFICER", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><CurriculumPage /></ProtectedRoute>} />

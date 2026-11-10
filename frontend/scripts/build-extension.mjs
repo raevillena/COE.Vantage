@@ -1,6 +1,6 @@
-// Builds the "Vantage MMSU Grade Push" browser extension.
+// Builds the "Vantage Portal Insert Grade" browser extension.
 //   dist  -> extensions/mmsu-gradesheet/dist   (load this folder as an unpacked extension while developing)
-//   zip   -> public/downloads/vantage-mmsu-grade-push.zip   (what the Vantage "MMSU Grade Push" page offers)
+//   zip   -> public/downloads/vantage-mmsu-grade-push.zip   (what the Vantage "Portal Insert Grade" page offers)
 // Run: npm run build:extension
 import { build } from "esbuild";
 import { deflateRawSync } from "node:zlib";
@@ -13,7 +13,7 @@ const extDir = join(root, "extensions", "mmsu-gradesheet");
 const outDir = join(extDir, "dist");
 const zipPath = join(root, "public", "downloads", "vantage-mmsu-grade-push.zip");
 
-const README = `Vantage MMSU Grade Push
+const README = `Vantage Portal Insert Grade
 =======================
 
 Install (Chrome or Edge):
@@ -21,10 +21,10 @@ Install (Chrome or Edge):
 2. Open chrome://extensions (Edge: edge://extensions) and turn on "Developer mode".
 3. Click "Load unpacked" and choose the extracted folder.
 
-Access: you must be signed in to Vantage in this same browser, and an administrator must have allowed "MMSU Grade Push" for you (then switch it on in your Vantage Profile).
+Access: you must be signed in to Vantage in this same browser, and an administrator must have allowed "Portal Insert Grade" for you (then switch it on in your Vantage Profile).
 
-Use: open a class gradesheet on my.mmsu.edu.ph (Grade Sheet > Edit). A "Vantage grade push" tab appears
-on the right edge of the page. Clicking the extension's toolbar icon opens the portal's Grade Sheet list in a new tab. Full instructions are on the Vantage "MMSU Grade Push" page.
+Use: open a class gradesheet on my.mmsu.edu.ph (Grade Sheet > Edit). A "Portal Insert Grade" tab appears
+on the right edge of the page. Clicking the extension's toolbar icon opens the portal's Grade Sheet list in a new tab. Full instructions are on the Vantage "Portal Insert Grade" page.
 `;
 
 await rm(outDir, { recursive: true, force: true });

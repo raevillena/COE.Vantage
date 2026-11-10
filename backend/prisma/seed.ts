@@ -54,11 +54,12 @@ async function main() {
 
   const departments = [deptCoe, deptCe, deptEce];
 
-  // 2. Users (1 ADMIN, 1 DEAN, 1 CHAIRMAN, 4 FACULTY, 1 OFFICER)
+  // 2. Users (1 ADMIN, 1 DEAN, 1 CHAIRMAN, 1 COLLEGE_SECRETARY, 4 FACULTY, 1 OFFICER, 1 PRESIDENT)
   const usersData = [
     { email: "admin@coe.vantage", role: "ADMIN" as const, name: "System Administrator", departmentId: deptCoe.id },
     { email: "dean@coe.vantage", role: "DEAN" as const, name: "Dr. Jane Dean", departmentId: deptCoe.id },
     { email: "chairman@coe.vantage", role: "CHAIRMAN" as const, name: "Prof. John Chairman", departmentId: deptCe.id },
+    { email: "secretary@coe.vantage", role: "COLLEGE_SECRETARY" as const, name: "College Secretary", departmentId: deptCoe.id },
     { email: "faculty1@coe.vantage", role: "FACULTY" as const, name: "Dr. Maria Santos", departmentId: deptCe.id },
     { email: "faculty2@coe.vantage", role: "FACULTY" as const, name: "Engr. Carlos Reyes", departmentId: deptCe.id },
     { email: "faculty3@coe.vantage", role: "FACULTY" as const, name: "Prof. Ana Lopez", departmentId: deptEce.id },
@@ -340,7 +341,7 @@ async function main() {
   console.log(`  Curricula: 2 | Subjects: ${totalSubjects} (BSCE: ${bsceSubjects.length}, BSEE: ${bseeSubjects.length}) | Student classes: 3`);
   console.log(`  Faculty loads: ${totalLoads} (${ay2526.name}: ${loadsData.length}, ${ay2425.name}: ${loadsData2425.length})`);
   console.log(`\nTest password for all users: ${TEST_PASSWORD}`);
-  console.log("Example logins: admin@coe.vantage, dean@coe.vantage, chairman@coe.vantage, faculty1@coe.vantage, officer@coe.vantage");
+  console.log("Example logins: admin@coe.vantage, dean@coe.vantage, chairman@coe.vantage, secretary@coe.vantage, faculty1@coe.vantage (to faculty4), officer@coe.vantage, president@coe.vantage");
 }
 
 main()

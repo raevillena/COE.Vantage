@@ -46,6 +46,8 @@ model User {
   deloadings                       FacultyDeloading[]
   feedbacks                        Feedback[]
   notifications                    Notification[]
+  examReservations                 ExamReservation[]
+  examRemovalRequests              ExamRemovalRequest[]
   avatar                           UserAvatar?
   crossDepartmentRequestsRequested CrossDepartmentLoadRequest[] @relation("RequestedBy")
   crossDepartmentRequestsResponded CrossDepartmentLoadRequest[] @relation("RespondedBy")
@@ -71,38 +73,41 @@ model University {
 }
 
 model College {
-  id                    String    @id @default(uuid())
-  universityId          String
-  name                  String
-  code                  String?
+  id                     String    @id @default(uuid())
+  universityId           String
+  name                   String
+  code                   String?
   /// The SCHEDULING semester (shown to people as "Scheduling Semester"): the term this college is scheduling now; both null = it has not started.
   /// Despite the "current" in the column names these are the scheduling term. Academic years are shared, each college picks its own.
-  currentAcademicYearId String?
-  currentSemester       Int?
+  currentAcademicYearId  String?
+  currentSemester        Int?
   /// The CURRENT semester (shown as "Current Semester"): the term that is running now, used by faculty-facing pages and grades.
   /// Both null = not set, and the scheduling term stands in for it.
   calendarAcademicYearId String?
   calendarSemester       Int?
-  isDeleted             Boolean   @default(false)
-  deletedAt             DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  isDeleted              Boolean   @default(false)
+  deletedAt              DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  university          University                   @relation(fields: [universityId], references: [id])
-  currentAcademicYear AcademicYear?                @relation("CollegeCurrentYear", fields: [currentAcademicYearId], references: [id], onDelete: SetNull)
-  calendarAcademicYear AcademicYear?               @relation("CollegeCalendarYear", fields: [calendarAcademicYearId], references: [id], onDelete: SetNull)
-  users               User[]
-  departments         Department[]
-  curricula           Curriculum[]
-  subjects            Subject[]
-  studentClasses      StudentClass[]
-  rooms               Room[]
-  facultyLoads        FacultyLoad[]
-  ruleSets            SchedulingRuleSet[]
-  geOfferingSets      GeOfferingSet[]
-  termLocks           TermLock[]
-  image               CollegeImage?
-  requests            CrossDepartmentLoadRequest[]
+  university           University                   @relation(fields: [universityId], references: [id])
+  currentAcademicYear  AcademicYear?                @relation("CollegeCurrentYear", fields: [currentAcademicYearId], references: [id], onDelete: SetNull)
+  calendarAcademicYear AcademicYear?                @relation("CollegeCalendarYear", fields: [calendarAcademicYearId], references: [id], onDelete: SetNull)
+  users                User[]
+  departments          Department[]
+  curricula            Curriculum[]
+  subjects             Subject[]
+  studentClasses       StudentClass[]
+  rooms                Room[]
+  facultyLoads         FacultyLoad[]
+  ruleSets             SchedulingRuleSet[]
+  geOfferingSets       GeOfferingSet[]
+  termLocks            TermLock[]
+  examPeriods          ExamPeriod[]
+  examReservations     ExamReservation[]
+  examRemovalRequests  ExamRemovalRequest[]
+  image                CollegeImage?
+  requests             CrossDepartmentLoadRequest[]
 
   @@index([universityId])
 }
@@ -140,6 +145,8 @@ model GradeSubject {
   academicYearId        String?
   semester              Int? // 1 = 1st, 2 = 2nd, 3 = Mid Year
   gradingSystem         Json?
+  /// The Google Sheet link this subject's records are imported from. Kept on the server so it survives another browser, cleared site data and so on.
+  sheetImportUrl        String?
   studentComputeEnabled Boolean   @default(false)
   isDeleted             Boolean   @default(false)
   deletedAt             DateTime?
@@ -209,6 +216,7 @@ model Room {
   department                  Department                   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   controlDepartment           Department?                  @relation("ControlDepartment", fields: [controlDepartmentId], references: [id], onDelete: SetNull)
   facultyLoads                FacultyLoad[]
+  examReservations            ExamReservation[]
   termAvailability            RoomTermAvailability[]
   subjectRooms                SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
@@ -239,6 +247,8 @@ model AcademicYear {
   deloadings                   FacultyDeloading[]
   geOfferingSets               GeOfferingSet[]
   termLocks                    TermLock[]
+  examPeriods                  ExamPeriod[]
+  examReservations             ExamReservation[]
   collegesCurrent              College[]                     @relation("CollegeCurrentYear")
   collegesCalendar             College[]                     @relation("CollegeCalendarYear")
   gradeSubjects                GradeSubject[]
@@ -257,11 +267,11 @@ model Curriculum {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  department      Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department      Department?                @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   subjects        Subject[]
   studentClasses  StudentClass[]
   specializations CurriculumSpecialization[]
-  college         College?                 @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+  college         College?                   @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@index([isDeleted])
   @@index([collegeId])
@@ -316,6 +326,7 @@ model Subject {
   curriculum                  Curriculum?                  @relation(fields: [curriculumId], references: [id], onDelete: SetNull)
   department                  Department?                  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   facultyLoads                FacultyLoad[]
+  examReservations            ExamReservation[]
   subjectFacultyPriorities    SubjectFacultyPriority[]
   subjectRooms                SubjectRoom[]
   crossDepartmentLoadRequests CrossDepartmentLoadRequest[]
@@ -328,22 +339,23 @@ model Subject {
 }
 
 model StudentClass {
-  id           String    @id @default(uuid())
-  collegeId    String?
-  name         String // e.g. BSCE-3A
-  yearLevel    Int
-  curriculumId String
+  id               String    @id @default(uuid())
+  collegeId        String?
+  name             String // e.g. BSCE-3A
+  yearLevel        Int
+  curriculumId     String
   /// The curriculum specialization this class follows (null = none / the curriculum has none). Not used by the screens yet.
   specializationId String?
-  studentCount Int
-  isDeleted    Boolean   @default(false)
-  deletedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  studentCount     Int
+  isDeleted        Boolean   @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   curriculum                   Curriculum                    @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
   specialization               CurriculumSpecialization?     @relation(fields: [specializationId], references: [id], onDelete: SetNull)
   facultyLoads                 FacultyLoad[]
+  examReservations             ExamReservation[]
   crossDepartmentLoadRequests  CrossDepartmentLoadRequest[]
   schedulingRuleSetAssignments SchedulingRuleSetAssignment[]
   college                      College?                      @relation(fields: [collegeId], references: [id], onDelete: Restrict)
@@ -771,5 +783,89 @@ model GeOfferingSet {
   college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
 
   @@unique([collegeId, academicYearId, semester])
+  @@index([collegeId])
+}
+
+enum ExamKind {
+  MIDTERM
+  FINAL
+}
+
+enum ExamRemovalStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+/// One exam round (midterm or final) of a college in a term: its dates, and whether the college secretary has opened it
+/// for plotting. Faculty can reserve rooms only while it is open.
+model ExamPeriod {
+  id             String    @id @default(uuid())
+  collegeId      String?
+  academicYearId String
+  semester       Int // 1 = 1st, 2 = 2nd, 3 = Mid Year
+  kind           ExamKind
+  startDate      DateTime  @db.Date
+  endDate        DateTime  @db.Date
+  isOpen         Boolean   @default(false)
+  openedByName   String?
+  openedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  college      College?     @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
+  @@unique([collegeId, academicYearId, semester, kind])
+  @@index([collegeId])
+}
+
+/// A faculty member's exam block in a room: first plotted, first served.
+model ExamReservation {
+  id             String   @id @default(uuid())
+  collegeId      String?
+  academicYearId String
+  semester       Int
+  kind           ExamKind
+  roomId         String
+  subjectId      String
+  studentClassId String
+  ownerId        String
+  date           DateTime @db.Date
+  startTime      String // "HH:MM"
+  endTime        String // "HH:MM"
+  createdAt      DateTime @default(now())
+
+  academicYear    AcademicYear         @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  room            Room                 @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  subject         Subject              @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  studentClass    StudentClass         @relation(fields: [studentClassId], references: [id], onDelete: Cascade)
+  owner           User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  college         College?             @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+  removalRequests ExamRemovalRequest[]
+
+  @@index([roomId, date])
+  @@index([studentClassId, date])
+  @@index([ownerId])
+  @@index([academicYearId, semester, kind])
+  @@index([collegeId])
+}
+
+/// A chairman asks the owner of a block in a room of the chairman's department to free it.
+model ExamRemovalRequest {
+  id            String            @id @default(uuid())
+  collegeId     String?
+  reservationId String
+  requestedById String
+  status        ExamRemovalStatus @default(PENDING)
+  message       String?
+  createdAt     DateTime          @default(now())
+
+  reservation ExamReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  requestedBy User            @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  college     College?        @relation(fields: [collegeId], references: [id], onDelete: Restrict)
+
+  @@index([reservationId, status])
+  @@index([requestedById])
   @@index([collegeId])
 }

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * The MMSU grade push extension, loaded for real into Chromium and pointed at a fake copy of the portal.
+ * The Portal Insert Grade extension, loaded for real into Chromium and pointed at a fake copy of the portal.
  * The fake portal reproduces the markup of the real gradesheet page (form, grade dropdowns, Save and Remove
  * buttons, redirect after save) with made-up students. It needs no Vantage backend or frontend.
  */
@@ -138,7 +138,7 @@ const SAMPLE = tsv([
 async function open(context: BrowserContext, url = SHEET_URL): Promise<Page> {
   const page = await context.newPage();
   await page.goto(url);
-  await page.getByRole("button", { name: "Vantage grade push" }).click();
+  await page.getByRole("button", { name: "Portal Insert Grade" }).click();
   return page;
 }
 
@@ -148,7 +148,7 @@ async function paste(page: Page, text: string) {
 
 const selectValue = (page: Page, id: number) => page.locator(`#grade_${id}`).inputValue();
 
-test.describe("MMSU grade push extension", () => {
+test.describe("Portal Insert Grade extension", () => {
   test.describe.configure({ mode: "serial" });
   let context: BrowserContext;
   let userDataDir: string;
@@ -300,7 +300,7 @@ test.describe("MMSU grade push extension", () => {
 
     // The person never saved; coming back later, the check says the portal does not have the grades.
     await page.reload();
-    await page.getByRole("button", { name: "Vantage grade push" }).click();
+    await page.getByRole("button", { name: "Portal Insert Grade" }).click();
     await page.getByRole("button", { name: "Check the portal" }).click();
     await expect(page.getByText("1 of 4 match. 3 differ or are missing.")).toBeVisible();
   });
@@ -327,7 +327,7 @@ test.describe("MMSU grade push extension", () => {
     await page.goto(SHEET_URL);
     await expect(page.locator("#vantage-mmsu-push")).toHaveCount(0);
   });
-  // Regenerates the pictures used on the "MMSU Grade Push" page: MMSU_SCREENSHOTS=1 npx playwright test mmsuPush -g screenshots
+  // Regenerates the pictures used on the "Portal Insert Grade" page: MMSU_SCREENSHOTS=1 npx playwright test mmsuPush -g screenshots
   test("screenshots for the setup page", async () => {
     test.skip(!process.env.MMSU_SCREENSHOTS, "set MMSU_SCREENSHOTS=1 to regenerate the guide pictures");
     const outDir = join(frontendRoot, "public", "guides", "mmsu-grade-push");
@@ -347,11 +347,11 @@ test.describe("MMSU grade push extension", () => {
     // The tab on the right edge of a gradesheet page.
     const sheet = await context.newPage();
     await sheet.goto(SHEET_URL);
-    await sheet.getByRole("button", { name: "Vantage grade push" }).waitFor();
+    await sheet.getByRole("button", { name: "Portal Insert Grade" }).waitFor();
     await sheet.screenshot({ path: shot("03-panel-tab.png"), clip: { x: 1100, y: 380, width: 180, height: 170 } });
 
     // Paste and review.
-    await sheet.getByRole("button", { name: "Vantage grade push" }).click();
+    await sheet.getByRole("button", { name: "Portal Insert Grade" }).click();
     await paste(sheet, SAMPLE);
     await expect(sheet.getByText("4 to change")).toBeVisible();
     await panelOf(sheet).screenshot({ path: shot("04-paste-and-review.png") });

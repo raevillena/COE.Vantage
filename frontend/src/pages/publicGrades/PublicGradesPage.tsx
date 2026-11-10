@@ -54,7 +54,8 @@ const termOf = (record: PublicRecord): GradeTerm => ({
 
 const semesterValue = (semester: number | null) => (semester === null ? NO_SEMESTER : String(semester));
 
-const selectClass = "w-full rounded border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
+const selectClass = "w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
+const inputClass = "rounded-md border border-border-strong bg-surface px-3 py-2.5 text-base font-normal text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 sm:text-sm";
 
 export function PublicGradesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -220,165 +221,185 @@ export function PublicGradesPage() {
     return only ? `Showing ${only}${isLatest ? " (latest term)" : ""} — ${subjects}.` : `Showing ${subjects}.`;
   })();
 
+  // The student, once, for the whole page (every record on this page belongs to the same student).
+  const student = records[0] ? { name: records[0].studentName, number: records[0].studentNumber } : null;
+  // One plain line about what is on screen: counts of the subjects shown, never a wall of numbers.
+  const tally = (() => {
+    const incomplete = visible.filter((r) => r.computedGrade?.incomplete).length;
+    const passed = visible.filter((r) => !r.computedGrade?.incomplete && r.computedGrade?.passed === true).length;
+    const failed = visible.filter((r) => !r.computedGrade?.incomplete && r.computedGrade?.passed === false).length;
+    return { incomplete, passed, failed };
+  })();
+
   const renderRecord = (record: PublicRecord) => {
     // Every expected item, so a blank shows up as "Missing" instead of the row simply not being there.
     const scored = (key: string) => typeof record.grades[key] === "number";
     const expected = record.items && record.items.length > 0 ? record.items : Object.keys(record.grades);
     const rows = [...expected, ...Object.keys(record.grades).filter((key) => !expected.includes(key))];
     const missing = rows.filter((key) => !scored(key));
+    const computed = record.computedGrade;
+    const incomplete = Boolean(computed?.incomplete);
     return (
-    <div key={record.id} className="rounded border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-base font-semibold text-foreground">{record.subject.name}</h3>
-          <p className="text-xs text-foreground-muted">
-            {record.studentName} - {record.studentNumber}
-          </p>
-          {rows.length > 0 && (
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground-muted">
-              {missing.length > 0 ? (
-                <>
-                  <span className="rounded-full bg-warning-muted px-2 py-0.5 font-medium text-warning">{missing.length} missing</span>
-                  <span>of {rows.length} items</span>
-                </>
-              ) : (
-                <span>All {rows.length} items have a score.</span>
-              )}
-            </p>
-          )}
-        </div>
-        <div className="text-right text-sm font-medium text-foreground">
-          <div>Final: {record.computedGrade?.incomplete ? "INC" : (record.computedGrade?.finalGrade ?? "Not computed")}</div>
-          {record.computedGrade?.incomplete && (
-            <div className="mt-0.5 text-xs font-semibold text-warning">
-              Incomplete{missing.length > 0 ? ` — ${missing.length} item${missing.length === 1 ? "" : "s"} missing` : ""}
-            </div>
-          )}
-          {!record.computedGrade?.incomplete && record.computedGrade?.letterGrade && (
-            <div className="mt-0.5 text-xs font-semibold text-foreground-muted">
-              {record.computedGrade.letterGrade}
-              {record.computedGrade.remarks ? ` — ${record.computedGrade.remarks}` : ""}
-            </div>
-          )}
-          {record.computedGrade?.passed !== null && record.computedGrade?.passed !== undefined && (
-            <div className={`mt-0.5 text-xs font-medium ${record.computedGrade.passed ? "text-success" : "text-danger"}`}>
-              {record.computedGrade.passed ? "Pass" : "Fail"}
-            </div>
-          )}
-        </div>
-      </div>
-      {record.subject.studentComputeEnabled && (
-        <button
-          type="button"
-          disabled={computingRecordId === record.id}
-          onClick={() => void computeRecord(record.id)}
-          className="mt-2 rounded border border-border-strong bg-surface px-3 py-1 text-xs hover:bg-surface-hover disabled:opacity-60"
-        >
-          {computingRecordId === record.id ? "Computing..." : "Compute my grade"}
-        </button>
-      )}
-      <div className="mt-3 grid gap-1 text-sm">
-        {rows.map((key) => {
-          const max = record.maxScores?.[key];
-          const hasMax = typeof max === "number" && Number.isFinite(max);
-          const isMissing = !scored(key);
-          return (
-            <div
-              key={key}
-              className={`flex items-center justify-between gap-3 border-b border-border/50 py-1 ${isMissing ? "-mx-2 rounded bg-warning-muted/60 px-2" : ""}`}
-            >
-              <span className={isMissing ? "font-medium text-foreground" : "text-foreground-muted"}>{key}</span>
-              <span className="tabular-nums text-foreground">
-                {isMissing ? (
-                  <span className="rounded-full border border-warning/40 bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning">Missing</span>
+      <article key={record.id} className="rounded-lg border border-border bg-surface p-4 sm:p-5" aria-label={record.subject.name}>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0 flex-1 basis-56">
+            <h3 className="text-lg font-semibold leading-snug text-foreground [text-wrap:balance]">{record.subject.name}</h3>
+            {rows.length > 0 && (
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-foreground-muted">
+                {missing.length > 0 ? (
+                  <>
+                    <span className="rounded-full bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning">{missing.length} missing</span>
+                    <span>of {rows.length} items</span>
+                  </>
                 ) : (
-                  record.grades[key]
+                  <span>All {rows.length} items have a score.</span>
                 )}
-                {hasMax && <span className="text-foreground-muted"> / {max}</span>}
+              </p>
+            )}
+          </div>
+          <div className="w-full text-left sm:w-auto sm:text-right">
+            <p className="text-base font-semibold tabular-nums text-foreground">Final: {incomplete ? "INC" : (computed?.finalGrade ?? "Not computed")}</p>
+            {incomplete && (
+              <p className="mt-0.5 text-sm font-medium text-warning">
+                Incomplete{missing.length > 0 ? ` — ${missing.length} item${missing.length === 1 ? "" : "s"} missing` : ""}
+              </p>
+            )}
+            {!incomplete && computed?.letterGrade && (
+              <p className="mt-0.5 text-sm text-foreground-muted">
+                {computed.letterGrade}
+                {computed.remarks ? ` — ${computed.remarks}` : ""}
+              </p>
+            )}
+            {computed?.passed !== null && computed?.passed !== undefined && (
+              <span
+                className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${computed.passed ? "bg-success-muted text-success" : "bg-danger-muted text-danger"}`}
+              >
+                {computed.passed ? "Pass" : "Fail"}
               </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            )}
+          </div>
+        </div>
+        {incomplete && (
+          <p className="mt-3 rounded-md bg-warning-muted px-3 py-2 text-sm text-foreground">
+            INC means the grade cannot be computed until every item has a score. Ask your instructor to enter the missing score{missing.length === 1 ? "" : "s"} below.
+          </p>
+        )}
+        {record.subject.studentComputeEnabled && (
+          <button
+            type="button"
+            disabled={computingRecordId === record.id}
+            onClick={() => void computeRecord(record.id)}
+            className="mt-3 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-60"
+          >
+            {computingRecordId === record.id ? "Computing..." : "Compute my grade"}
+          </button>
+        )}
+        <div className="mt-4 grid text-sm">
+          {rows.map((key) => {
+            const max = record.maxScores?.[key];
+            const hasMax = typeof max === "number" && Number.isFinite(max);
+            const isMissing = !scored(key);
+            return (
+              <div
+                key={key}
+                className={`flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-b-0 ${isMissing ? "-mx-2 rounded bg-warning-muted/60 px-2" : ""}`}
+              >
+                <span className={isMissing ? "font-medium text-foreground" : "text-foreground-muted"}>{key}</span>
+                <span className="shrink-0 tabular-nums text-foreground">
+                  {isMissing ? (
+                    <span className="rounded-full border border-warning/40 bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning">Missing</span>
+                  ) : (
+                    <span className="font-medium">{record.grades[key]}</span>
+                  )}
+                  {hasMax && <span className="text-foreground-muted"> / {max}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </article>
     );
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+    <main className="mx-auto max-w-3xl space-y-5 px-4 py-6 sm:px-6 md:py-10">
+      <header className="flex items-center gap-3 border-b border-border pb-4">
+        <img src="/favicon-32x32.png" alt="" width={32} height={32} className="h-9 w-9 rounded-md bg-white p-1 ring-1 ring-border" />
+        <div className="leading-tight">
+          <p className="text-base font-semibold text-foreground">Vantage</p>
+          <p className="text-xs text-foreground-muted">MMSU College of Engineering</p>
+        </div>
+      </header>
+
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Grade Lookup</h1>
-        <p className="mt-1 text-sm text-foreground-muted">
-          Enter your student number and access code to view your records.
+        <h1 className="text-2xl font-semibold text-foreground [text-wrap:balance] sm:text-3xl">Grade Lookup</h1>
+        <p className="mt-1.5 max-w-prose text-sm text-foreground-muted">
+          Enter your student number and the access code from your instructor to see your scores.
         </p>
       </div>
 
-      <form className="grid gap-3 rounded border border-border bg-surface p-4 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={lookup}>
-        <label className="flex flex-col gap-1 text-xs font-medium text-foreground-muted">
+      <form className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:p-5 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={lookup}>
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
           Student number
-          <input
-            className="rounded border border-border-strong bg-surface px-3 py-2 text-sm font-normal text-foreground"
-            value={studentNumber}
-            onChange={(e) => setStudentNumber(e.target.value)}
-            autoComplete="off"
-            required
-          />
+          <input className={inputClass} value={studentNumber} onChange={(e) => setStudentNumber(e.target.value)} autoComplete="off" inputMode="text" required />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-foreground-muted">
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
           Access code
-          <input
-            className="rounded border border-border-strong bg-surface px-3 py-2 text-sm font-normal text-foreground"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            autoComplete="off"
-            required
-          />
+          <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" required />
         </label>
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+          className="rounded-md bg-primary px-5 py-2.5 text-base font-medium text-primary-foreground hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 disabled:opacity-60 sm:text-sm"
         >
           {loading ? "Checking..." : "View grades"}
         </button>
       </form>
 
-      {error && <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+      {error && (
+        <div role="alert" className="rounded-md border border-danger/30 bg-danger-muted px-3 py-2.5 text-sm text-danger">
+          {error}
+        </div>
+      )}
 
-      {showFilters && (
-        <section aria-label="Filter by term" className="space-y-2 rounded border border-border bg-surface p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs font-medium text-foreground-muted">
-              Academic year
-              <select className={selectClass} value={yearFilter} onChange={(e) => changeYear(e.target.value)}>
-                <option value={ALL}>All years</option>
-                {years.map((year) => (
-                  <option key={year.yearId} value={year.yearId!}>
-                    {year.yearName}
-                    {latest?.yearId === year.yearId ? " (latest)" : ""}
-                  </option>
-                ))}
-                {hasUndated && <option value={NO_YEAR}>No term set</option>}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-foreground-muted">
-              Semester
-              <select
-                className={`${selectClass} disabled:opacity-60`}
-                value={semesterFilter}
-                onChange={(e) => setSemesterFilter(e.target.value)}
-                disabled={yearFilter === NO_YEAR}
-              >
-                <option value={ALL}>All semesters</option>
-                {semesters.map((semester) => (
-                  <option key={semester ?? "unset"} value={semesterValue(semester)}>
-                    {semester === null ? "Semester not set" : SEMESTER_LABEL[semester]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-muted">
+      {student && (
+        <section aria-label="Your results" className="rounded-lg border border-border bg-surface-muted/50 p-4 sm:p-5">
+          <p className="text-lg font-semibold text-foreground">{student.name}</p>
+          <p className="text-sm tabular-nums text-foreground-muted">{student.number}</p>
+          {showFilters && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2" role="group" aria-label="Filter by term">
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
+                Academic year
+                <select className={selectClass} value={yearFilter} onChange={(e) => changeYear(e.target.value)}>
+                  <option value={ALL}>All years</option>
+                  {years.map((year) => (
+                    <option key={year.yearId} value={year.yearId!}>
+                      {year.yearName}
+                      {latest?.yearId === year.yearId ? " (latest)" : ""}
+                    </option>
+                  ))}
+                  {hasUndated && <option value={NO_YEAR}>No term set</option>}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
+                Semester
+                <select
+                  className={`${selectClass} disabled:opacity-60`}
+                  value={semesterFilter}
+                  onChange={(e) => setSemesterFilter(e.target.value)}
+                  disabled={yearFilter === NO_YEAR}
+                >
+                  <option value={ALL}>All semesters</option>
+                  {semesters.map((semester) => (
+                    <option key={semester ?? "unset"} value={semesterValue(semester)}>
+                      {semester === null ? "Semester not set" : SEMESTER_LABEL[semester]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-foreground-muted">
             <p role="status" aria-live="polite">
               {summary}
               {hidden > 0 && ` ${hidden} more in other terms.`}
@@ -386,7 +407,7 @@ export function PublicGradesPage() {
             {filtered && (
               <button
                 type="button"
-                className="font-medium text-primary underline-offset-2 hover:underline"
+                className="rounded font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
                 onClick={() => {
                   setYearFilter(ALL);
                   setSemesterFilter(ALL);
@@ -396,6 +417,13 @@ export function PublicGradesPage() {
               </button>
             )}
           </div>
+          {visible.length > 0 && (tally.incomplete > 0 || tally.passed > 0 || tally.failed > 0) && (
+            <ul className="mt-3 flex flex-wrap gap-2 text-sm" aria-label="Results on this page">
+              {tally.incomplete > 0 && <li className="rounded-full bg-warning-muted px-3 py-1 font-medium text-warning">{tally.incomplete} incomplete</li>}
+              {tally.passed > 0 && <li className="rounded-full bg-success-muted px-3 py-1 font-medium text-success">{tally.passed} passed</li>}
+              {tally.failed > 0 && <li className="rounded-full bg-danger-muted px-3 py-1 font-medium text-danger">{tally.failed} failed</li>}
+            </ul>
+          )}
         </section>
       )}
 
@@ -403,10 +431,10 @@ export function PublicGradesPage() {
         {groups.map((group) => (
           <section key={termKey(group.term)} className="space-y-3" aria-label={termLabel(group.term)}>
             {(groups.length > 1 || (!filtered && showFilters)) && (
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
                 {termLabel(group.term)}
                 {termKey(group.term) === latestKey && (
-                  <span className="rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">Latest</span>
+                  <span className="rounded-full bg-primary-muted px-2 py-0.5 text-xs font-medium text-primary">Latest</span>
                 )}
               </h2>
             )}
@@ -417,13 +445,13 @@ export function PublicGradesPage() {
           <p className="text-sm text-foreground-muted">No grades for this term. Choose another year or semester, or show all terms.</p>
         )}
         {!loading && records.length === 0 && !error && (
-          <p className="text-sm text-foreground-muted">
+          <p className="max-w-prose text-sm text-foreground-muted">
             {hasSearched
-              ? "No matching records for that student number and access code."
-              : "No records loaded yet. Enter your details above or open the link copied from your instructor."}
+              ? "No matching records for that student number and access code. Check both and try again, or ask your instructor to resend your code."
+              : "Nothing to show yet. Enter your details above, or open the link your instructor sent you."}
           </p>
         )}
       </div>
-    </div>
+    </main>
   );
 }

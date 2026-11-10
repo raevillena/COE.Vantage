@@ -37,4 +37,19 @@ test.describe("login form errors", () => {
     await signIn.click();
     await page.waitForURL("**/dashboard", { timeout: 15_000 });
   });
+
+  test("every dev quick-sign-in account signs in", async ({ browser }) => {
+    test.setTimeout(90_000);
+    const labels = ["Admin", "Chairman", "Dean", "Secretary", "Faculty 1", "Faculty 2", "Faculty 3", "Faculty 4", "Officer", "President"];
+    for (const label of labels) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      page.setDefaultTimeout(10_000);
+      await page.goto("/login");
+      await page.getByRole("button", { name: label, exact: true }).click();
+      await page.waitForURL((url) => !url.pathname.startsWith("/login"));
+      await expect(page.getByText("Invalid email or password"), `${label} signs in`).toHaveCount(0);
+      await context.close();
+    }
+  });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import type { Curriculum, CurriculumSpecialization, ExtractedSubject } from "../../types/api";
@@ -53,6 +54,7 @@ export function CurriculumPage() {
   const [applying, setApplying] = useState(false);
   const [applyResult, setApplyResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -278,13 +280,15 @@ export function CurriculumPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
-    ? list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(searchLower) ||
-          (c.department?.name ?? "").toLowerCase().includes(searchLower)
-      )
-    : list;
+  const departmentOptions = optionsFrom(list, (c) => (c.department ? [c.department.id, c.department.name] : null));
+  const filtersActive = Boolean(searchLower || filterDepartment);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterDepartment("");
+  };
+  const filteredList = list
+    .filter((c) => !filterDepartment || (filterDepartment === "__none__" ? !c.department : c.department?.id === filterDepartment))
+    .filter((c) => !searchLower || c.name.toLowerCase().includes(searchLower) || (c.department?.name ?? "").toLowerCase().includes(searchLower));
 
   return (
     <div>
@@ -302,7 +306,8 @@ export function CurriculumPage() {
         )}
       </div>
       {list.length > 0 && (
-        <div className="mb-4 relative max-w-md">
+        <ListFilterBar shown={filteredList.length} total={list.length} active={filtersActive} onClear={clearFilters}>
+        <div className="relative w-full max-w-sm">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -315,6 +320,10 @@ export function CurriculumPage() {
             aria-label="Search curriculum"
           />
         </div>
+          {departmentOptions.length > 1 && (
+            <FilterSelect label="Filter by department" value={filterDepartment} onChange={setFilterDepartment} options={[...departmentOptions, { value: "__none__", label: "No department" }]} allLabel="All departments" />
+          )}
+        </ListFilterBar>
       )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
@@ -327,9 +336,9 @@ export function CurriculumPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No curriculum match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No curriculum match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (

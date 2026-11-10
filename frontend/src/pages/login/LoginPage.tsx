@@ -44,8 +44,13 @@ export function LoginPage() {
     { email: "admin@coe.vantage", label: "Admin" },
     { email: "chairman@coe.vantage", label: "Chairman" },
     { email: "dean@coe.vantage", label: "Dean" },
+    { email: "secretary@coe.vantage", label: "Secretary" },
     { email: "faculty1@coe.vantage", label: "Faculty 1" },
+    { email: "faculty2@coe.vantage", label: "Faculty 2" },
+    { email: "faculty3@coe.vantage", label: "Faculty 3" },
+    { email: "faculty4@coe.vantage", label: "Faculty 4" },
     { email: "officer@coe.vantage", label: "Officer" },
+    { email: "president@coe.vantage", label: "President" },
   ] as const;
 
   const clearErrors = () => {
@@ -208,6 +213,7 @@ export function LoginPage() {
                     key={testEmail}
                     type="button"
                     onClick={() => handleTestUserAndSubmit(testEmail)}
+                    title={testEmail}
                     disabled={loading}
                     className="rounded border border-border bg-surface-muted px-2 py-1.5 text-xs font-medium text-foreground hover:bg-surface-hover focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 disabled:opacity-50"
                   >

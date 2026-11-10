@@ -16,7 +16,7 @@ test.describe("admin users page filters", () => {
     const { total } = await counts();
     expect(total).toBeGreaterThan(1);
     const rows = page.locator("tbody tr");
-    await expect(rows).toHaveCount(total);
+    await expect(rows).toHaveCount(Math.min(total, 50)); // pages hold 50 rows
 
     // Department: pick the first real department; every visible row must show it in the Department column (6th cell).
     const dept = page.getByLabel("Filter by department");
@@ -26,7 +26,7 @@ test.describe("admin users page filters", () => {
     const afterDept = await counts();
     expect(afterDept.shown).toBeGreaterThan(0);
     expect(afterDept.shown).toBeLessThanOrEqual(total);
-    await expect(rows).toHaveCount(afterDept.shown);
+    await expect(rows).toHaveCount(Math.min(afterDept.shown, 50));
     for (const text of await rows.locator("td:nth-child(6)").allTextContents()) expect(text).toContain(name);
 
     // Role on top of the department narrows further (or equal).

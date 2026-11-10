@@ -8,6 +8,7 @@ import type {
   PublicLookupQuery,
   PublicComputeRecordBody,
   SendAccessCodesBody,
+  ImportEmailsBody,
   UpdateGradeRecordBody,
   UpdateGradeSubjectBody,
   UpsertViewerBody,
@@ -129,6 +130,14 @@ export async function computeSubjectGrades(req: Request, res: Response): Promise
 export async function publicLookup(req: Request, res: Response): Promise<void> {
   const query = req.query as unknown as PublicLookupQuery;
   res.json(await service.publicLookup(query.studentNumber, query.code));
+}
+
+export async function sendAccessCodesStatus(req: Request, res: Response): Promise<void> {
+  res.json(await service.accessEmailStatus(req.params.id, getCaller(req)));
+}
+
+export async function importSubjectEmails(req: Request, res: Response): Promise<void> {
+  res.json(await service.importEmails(req.params.id, getCaller(req), req.body as ImportEmailsBody));
 }
 
 export async function sendSubjectAccessCodes(req: Request, res: Response): Promise<void> {

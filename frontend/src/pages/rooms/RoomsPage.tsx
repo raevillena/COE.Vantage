@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Pager, usePaging } from "../../components/ui/pager";
+import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, Department, Room } from "../../types/api";
@@ -64,6 +66,10 @@ export function RoomsPage() {
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterKind, setFilterKind] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterFeature, setFilterFeature] = useState("");
 
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [academicYearId, setAcademicYearId] = useState("");
@@ -265,17 +271,31 @@ export function RoomsPage() {
   };
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
-    ? list.filter(
-        (r) =>
-          r.name.toLowerCase().includes(searchLower) ||
-          String(r.capacity).includes(searchLower) ||
-          (r.department?.name ?? "").toLowerCase().includes(searchLower) ||
-          (r.isLab ? "yes" : "no").includes(searchLower)
-      )
-    : list;
-  const myRooms = filteredList.filter((r) => r.departmentId === ownDeptId);
-  const otherRooms = filteredList.filter((r) => r.departmentId !== ownDeptId);
+  const roomDepartmentOptions = optionsFrom(list, (r) => (r.department ? [r.departmentId, r.department.name] : null));
+  const filtersActive = Boolean(searchLower || filterDepartment || filterKind || filterStatus || filterFeature);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterDepartment("");
+    setFilterKind("");
+    setFilterStatus("");
+    setFilterFeature("");
+  };
+  const filteredList = list
+    .filter((r) => !filterDepartment || r.departmentId === filterDepartment)
+    .filter((r) => !filterKind || (filterKind === "lab" ? r.isLab : !r.isLab))
+    .filter((r) => !filterStatus || (filterStatus === "open" ? availability[r.id] === true : availability[r.id] !== true))
+    .filter((r) => !filterFeature || (filterFeature === "computers" ? r.hasComputer : r.hasAC))
+    .filter(
+      (r) =>
+        !searchLower ||
+        r.name.toLowerCase().includes(searchLower) ||
+        String(r.capacity).includes(searchLower) ||
+        (r.department?.name ?? "").toLowerCase().includes(searchLower) ||
+        (r.isLab ? "yes" : "no").includes(searchLower)
+    );
+  const paging = usePaging(filteredList, [searchLower, filterDepartment, filterKind, filterStatus, filterFeature].join("|"));
+  const myRooms = paging.pageRows.filter((r) => r.departmentId === ownDeptId);
+  const otherRooms = paging.pageRows.filter((r) => r.departmentId !== ownDeptId);
 
   const statusCell = (r: Room) =>
     availability[r.id] === true ? (
@@ -468,7 +488,8 @@ export function RoomsPage() {
       </div>
 
       {list.length > 0 && (
-        <div className="relative mb-4 max-w-md">
+        <ListFilterBar shown={filteredList.length} total={list.length} active={filtersActive} onClear={clearFilters}>
+        <div className="relative w-full max-w-sm">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -481,6 +502,13 @@ export function RoomsPage() {
             aria-label="Search rooms"
           />
         </div>
+          {roomDepartmentOptions.length > 1 && (
+            <FilterSelect label="Filter by department" value={filterDepartment} onChange={setFilterDepartment} options={roomDepartmentOptions} allLabel="All departments" />
+          )}
+          <FilterSelect label="Filter by type" value={filterKind} onChange={setFilterKind} options={[{ value: "lecture", label: "Lecture rooms" }, { value: "lab", label: "Laboratories" }]} allLabel="Lecture and lab" />
+          <FilterSelect label="Filter by availability" value={filterStatus} onChange={setFilterStatus} options={[{ value: "open", label: "Open for the term" }, { value: "closed", label: "Closed for the term" }]} allLabel="Open and closed" />
+          <FilterSelect label="Filter by equipment" value={filterFeature} onChange={setFilterFeature} options={[{ value: "computers", label: "Has computers" }, { value: "ac", label: "Air-conditioned" }]} allLabel="Any equipment" />
+        </ListFilterBar>
       )}
 
       {loading ? (
@@ -494,9 +522,9 @@ export function RoomsPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="mb-4 text-foreground-muted">No rooms match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="rounded text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
-            Clear search
+          <p className="mb-4 text-foreground-muted">No rooms match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="rounded text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
+            Clear search and filters
           </button>
         </div>
       ) : (
@@ -514,8 +542,9 @@ export function RoomsPage() {
               {renderTable(otherRooms, "Other rooms", "Only rooms that are open for the term can be assigned in your schedules.")}
             </>
           ) : (
-            renderTable(filteredList)
+            renderTable(paging.pageRows)
           )}
+          <Pager page={paging.page} pageSize={paging.pageSize} total={paging.total} onPage={paging.setPage} onPageSize={paging.setPageSize} />
         </>
       )}
 

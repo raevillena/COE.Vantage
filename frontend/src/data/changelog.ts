@@ -15,6 +15,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.8.2",
+    date: "2026-11-10",
+    title: "Exam room reservation, a new faculty menu, and filters and pages on the long lists",
+    changes: [
+      { kind: "new", text: "Exam Room Reservation: plot your exams into rooms for the Midterm and Final exam weeks. Pick a room, then drag one of your subjects onto its date-and-time grid (or pick it and click a time). It is first plotted, first served: a room cannot be double-booked and a class cannot have two exams at once, and you can use several rooms at the same time. The college secretary sets the exam dates and opens each round for plotting. The chairman of a room's department can remove a block in their rooms, or ask its owner to free it, and the owner accepts or declines." },
+      { kind: "improved", text: "The faculty menu is organised as Management (Dashboard and Exam Room Reservation) and Schedules (Reports, Class schedule and Room availability)." },
+      { kind: "improved", text: "Student classes, Subjects, Rooms and Curriculum have filters next to the search box (department, curriculum, year level, semester, type and more), with a one-click Clear filters and a count of what matches." },
+      { kind: "improved", text: "Long lists of student classes, subjects and rooms are split into pages of 25, 50, 100 or 200. Search and filters always look through every row, not only the page on screen, and the Subjects page loads one page at a time so it stays quick with many subjects." },
+      { kind: "fixed", text: "In the Scheduler's assignment panel, \"Checking room & faculty conflicts…\" could stay on forever with Save disabled when a field was changed while a check was running." },
+    ],
+  },
+  {
     version: "v0.8.1",
     date: "2026-11-09",
     title: "Current and Scheduling Semester, and curriculum specializations",

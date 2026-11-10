@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import * as subjectService from "./subjectService.js";
 import type { CreateSubjectBody, UpdateSubjectBody, PutPrioritizedFacultyBody, CopyPrioritizedFacultyBody, PutSubjectRoomsBody } from "./subjectSchemas.js";
-import { prioritizedTermQuerySchema } from "./subjectSchemas.js";
+import { listSubjectsPagedQuerySchema, prioritizedTermQuerySchema } from "./subjectSchemas.js";
 import { audited } from "../audit/auditService.js";
 import { badRequest } from "../../utils/errors.js";
 
@@ -10,6 +10,13 @@ function caller(req: Request) {
 }
 
 export async function list(req: Request, res: Response): Promise<void> {
+  // With ?page= the Subjects page gets one filtered page; without it everyone else gets the plain full list.
+  if (req.query.page !== undefined) {
+    const parsed = listSubjectsPagedQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw badRequest("Invalid page, size or filter");
+    res.json(await subjectService.listSubjectsPaged(caller(req), parsed.data));
+    return;
+  }
   const list = await subjectService.listSubjects(caller(req));
   res.json(list);
 }

@@ -5,6 +5,9 @@ import { apiClient } from "../../api/apiClient";
 import { computeFinalGradeWithPolicy } from "./computeFinalGradeClient";
 import {
   collectGradeKeys,
+  copyFormulaFrom,
+  defaultFormulaFor,
+  deriveCategoryWeights,
   DEFAULT_PASSING_PERCENT,
   defaultGradeEquivalenceMmsu,
   defaultGradeEquivalencePh,
@@ -21,6 +24,7 @@ import {
   type GradingCategoryV1,
   type GradingComponentV1,
   type GradingSystemV1,
+  toPercentOfFinal,
 } from "./gradingSystemModel";
 
 type GradeRecord = {
@@ -45,6 +49,8 @@ type Props = {
   gradingSystemSnapshot: string;
   initialStudentComputeEnabled: boolean;
   records: GradeRecord[];
+  /** Other subjects whose formula can be copied here. */
+  copySources?: { id: string; name: string; code?: string | null; gradingSystem?: Record<string, unknown> | null }[];
   saving: boolean;
   /** When true, no outer card or duplicate page title (e.g. inside a dialog that already has a title). */
   embedInDialog?: boolean;
@@ -61,7 +67,7 @@ function newId(): string {
 
 /** Browser tooltip on the category/component section title (replaces long inline copy). */
 const CATEGORY_WEIGHTS_TOOLTIP =
-  "Category weights = each category's share of the final (all categories should sum to 100). Component weights = relative split inside that category only: they can be any positive totals (e.g. 30+70 or 3+7); preview and compute scale them proportionally, same as if they summed to 100. Example: 30% exams + 70% outputs of the final → two categories weighted 30 and 70 on the left; under each category, components are shares of that slice.";
+  "Each component weight is its share of the final grade, and all components together should add up to 100. A category total is the sum of its components, so it is worked out for you. Example: quizzes 20 + projects 20 + exams 60 gives a Class work category of 40 and an Exams category of 60.";
 
 const PASSING_SAVE_FOOTNOTE =
   "Updates passing grade and whether students can compute their grade from this panel. Formula and equivalence stay as last saved on the server.";
@@ -239,12 +245,12 @@ function emptyCategory(gradeKeys: string[]): GradingCategoryV1 {
   return {
     id: newId(),
     name: "New category",
-    weight: 100,
+    weight: 0,
     components: [
       {
         id: newId(),
         name: "Component A",
-        weight: 100,
+        weight: 0,
         gradeKeys,
       },
     ],
@@ -257,6 +263,7 @@ export function GradingSystemSettingsPanel({
   gradingSystemSnapshot,
   initialStudentComputeEnabled,
   records,
+  copySources = [],
   saving,
   embedInDialog = false,
   settingsOpen = true,
@@ -264,8 +271,22 @@ export function GradingSystemSettingsPanel({
   onSaved,
 }: Props) {
   const [categories, setCategories] = useState<GradingCategoryV1[]>(
-    () => normalizeGradingSystemFromUnknown(initialGradingSystem).categories
+    () => toPercentOfFinal(normalizeGradingSystemFromUnknown(initialGradingSystem).categories).categories
   );
+  /** Set as soon as the teacher shapes the formula, so the default weights are never put back over their work. */
+  const [formulaTouched, setFormulaTouched] = useState(false);
+  /** True while the editor shows the default weights nobody saved yet. */
+  const [startedFromDefault, setStartedFromDefault] = useState(false);
+  const [copyFrom, setCopyFrom] = useState("");
+  const [copyNote, setCopyNote] = useState<{ ok: boolean; text: string } | null>(null);
+  /** True when older settings were converted to "% of final" on opening (results unchanged). */
+  const [weightsConverted, setWeightsConverted] = useState(() => toPercentOfFinal(normalizeGradingSystemFromUnknown(initialGradingSystem).categories).converted);
+  /** Applies loaded categories: component weights become a share of the final and category totals are derived. */
+  const adoptCategories = (cats: GradingCategoryV1[]) => {
+    const adopted = toPercentOfFinal(cats);
+    setCategories(adopted.categories);
+    setWeightsConverted(adopted.converted);
+  };
   const [passingGradeInput, setPassingGradeInput] = useState(() => {
     const n = normalizeGradingSystemFromUnknown(initialGradingSystem);
     return n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT);
@@ -298,7 +319,7 @@ export function GradingSystemSettingsPanel({
     }
 
     const n = normalizeGradingSystemFromUnknown(raw);
-    setCategories(n.categories);
+    adoptCategories(n.categories);
     setPassingGradeInput(n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(n.gradeEquivalence ?? []);
     setStudentComputeEnabled(initialStudentComputeEnabled);
@@ -330,6 +351,31 @@ export function GradingSystemSettingsPanel({
     }
     return Array.from(keys).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   }, [records]);
+
+  // A subject with no saved formula starts from the default weights (Major Exams 15 + 15, Major Outputs 70), tied to its columns.
+  const serverHasFormula = useMemo(() => {
+    try {
+      return normalizeGradingSystemFromUnknown(JSON.parse(gradingSystemSnapshot) as unknown).categories.length > 0;
+    } catch {
+      return false;
+    }
+  }, [gradingSystemSnapshot]);
+  const availableKeysSignature = availableKeys.join("|");
+  useEffect(() => {
+    if (embedInDialog && !settingsOpen) return;
+    if (serverHasFormula || formulaTouched) return;
+    setCategories(defaultFormulaFor(availableKeys));
+    setWeightsConverted(false);
+    setStartedFromDefault(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedInDialog, settingsOpen, serverHasFormula, formulaTouched, availableKeysSignature]);
+  // closing the dialog drops unsaved shaping, so the next opening starts from what is saved (or the defaults again)
+  useEffect(() => {
+    if (embedInDialog && !settingsOpen) {
+      setFormulaTouched(false);
+      setStartedFromDefault(false);
+    }
+  }, [embedInDialog, settingsOpen]);
 
   /** A new component starts on the first column no component counts yet (none when they are all taken). */
   const unusedKeys = (): string[] => {
@@ -381,7 +427,7 @@ export function GradingSystemSettingsPanel({
         const { data } = await apiClient.patch<GradeSubjectPatchResponse>(`/grade-subjects/${subjectId}`, {
           gradingSystem: buildGradingPatchFromNormalized(normalized),
         });
-        setCategories(normalized.categories);
+        adoptCategories(normalized.categories);
         setPassingGradeInput(normalized.passingGrade !== undefined ? String(normalized.passingGrade) : String(DEFAULT_PASSING_PERCENT));
         setGradeEquivalence(normalized.gradeEquivalence ?? []);
         setAdvancedOpen(false);
@@ -455,7 +501,10 @@ export function GradingSystemSettingsPanel({
 
   const loadTemplate = () => {
     const t = defaultGradingSystemTemplate();
-    setCategories(t.categories);
+    setCategories(defaultFormulaFor(availableKeys));
+    setWeightsConverted(false);
+    setFormulaTouched(true);
+    setStartedFromDefault(false);
     setPassingGradeInput(t.passingGrade !== undefined ? String(t.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(t.gradeEquivalence ?? []);
     setLocalSettingsError(null);
@@ -495,20 +544,52 @@ export function GradingSystemSettingsPanel({
     setGradeEquivalence((prev) => [...prev].sort((a, b) => a.minPercent - b.minPercent));
   };
 
+  /** Copies the chosen subject's formula onto this subject's columns; components with no matching column are skipped. Nothing is saved until "Save formula". */
+  const copyFormula = () => {
+    const source = copySources.find((x) => x.id === copyFrom);
+    if (!source) return;
+    const result = copyFormulaFrom(source.gradingSystem, availableKeys);
+    if (result.categories.length === 0) {
+      setCopyNote({ ok: false, text: `Nothing was copied: none of the components of "${source.name}" match a column of this subject${result.skipped.length > 0 ? ` (${result.skipped.join(", ")})` : ""}.` });
+      return;
+    }
+    setCategories(result.categories);
+    setWeightsConverted(false);
+    setFormulaTouched(true);
+    setStartedFromDefault(false);
+    setLocalSettingsError(null);
+    const total = result.categories.reduce((sum, c) => sum + c.weight, 0);
+    setCopyNote({
+      ok: true,
+      text:
+        `Copied ${result.copied} component${result.copied === 1 ? "" : "s"} from "${source.name}".` +
+        (result.skipped.length > 0 ? ` Skipped ${result.skipped.length} that match no column here: ${result.skipped.join(", ")}.` : "") +
+        (Math.abs(total - 100) >= 0.02 ? ` The weights now add up to ${total.toFixed(2)}: adjust them to reach 100.` : "") +
+        " Review, then press Save formula to keep it.",
+    });
+  };
+
+  /** Every edit goes through here so a category's weight is always the sum of its components. */
+  const editCategories = (change: (prev: GradingCategoryV1[]) => GradingCategoryV1[]) => {
+    setFormulaTouched(true);
+    setStartedFromDefault(false);
+    setCategories((prev) => deriveCategoryWeights(change(prev)));
+  };
+
   const addCategory = () => {
-    setCategories((prev) => [...prev, emptyCategory(unusedKeys())]);
+    editCategories((prev) => [...prev, emptyCategory(unusedKeys())]);
   };
 
   const removeCategory = (index: number) => {
-    setCategories((prev) => prev.filter((_, i) => i !== index));
+    editCategories((prev) => prev.filter((_, i) => i !== index));
   };
 
   const updateCategory = (index: number, patch: Partial<GradingCategoryV1>) => {
-    setCategories((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+    editCategories((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
 
   const addComponent = (catIndex: number) => {
-    setCategories((prev) =>
+    editCategories((prev) =>
       prev.map((c, i) =>
         i === catIndex
           ? {
@@ -524,7 +605,7 @@ export function GradingSystemSettingsPanel({
   };
 
   const removeComponent = (catIndex: number, compIndex: number) => {
-    setCategories((prev) =>
+    editCategories((prev) =>
       prev.map((c, i) =>
         i === catIndex ? { ...c, components: c.components.filter((_, j) => j !== compIndex) } : c
       )
@@ -532,7 +613,7 @@ export function GradingSystemSettingsPanel({
   };
 
   const updateComponent = (catIndex: number, compIndex: number, patch: Partial<GradingComponentV1>) => {
-    setCategories((prev) =>
+    editCategories((prev) =>
       prev.map((c, i) => {
         if (i !== catIndex) return c;
         return {
@@ -769,7 +850,7 @@ export function GradingSystemSettingsPanel({
         <div className="mb-3 rounded border border-warning/40 bg-warning/10 px-2 py-2 text-xs text-warning">
           {localSettingsError}
           {!localSettingsError && !categoryWeightOk && (
-            <p>Category weights should sum to 100 (now {categoryWeightSum.toFixed(2)}).</p>
+            <p>The component weights of all categories should add up to 100 (now {categoryWeightSum.toFixed(2)}).</p>
           )}
         </div>
       )}
@@ -787,7 +868,7 @@ export function GradingSystemSettingsPanel({
         }
         summaryClosed={
           <p className="mt-1 text-xs text-foreground-muted">
-            Example template, advanced JSON, and category / component weights (hover section title for weight rules).
+            Default weights, copy from another subject, advanced JSON, and category / component weights (hover section title for weight rules).
           </p>
         }
         summaryOpen={
@@ -800,7 +881,7 @@ export function GradingSystemSettingsPanel({
             onClick={loadTemplate}
             className="rounded border border-border-strong bg-surface px-2 py-1 text-xs text-foreground hover:bg-surface-hover"
           >
-            Load example template
+            Load default weights
           </button>
           <button
             type="button"
@@ -845,6 +926,49 @@ export function GradingSystemSettingsPanel({
           </p>
         )}
 
+        {copySources.some((x) => Array.isArray((x.gradingSystem as { categories?: unknown } | null | undefined)?.categories) && ((x.gradingSystem as { categories: unknown[] }).categories.length > 0)) && (
+          <div className="mb-3 rounded border border-border bg-surface-muted/40 p-3 text-xs">
+            <p className="mb-2 font-medium text-foreground">Copy the formula from another subject</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex min-w-[12rem] flex-1 flex-col gap-0.5 text-xs font-medium text-foreground">
+                Subject
+                <select
+                  aria-label="Copy formula from"
+                  className="rounded border border-border bg-surface px-2 py-1 text-sm font-normal text-foreground"
+                  value={copyFrom}
+                  onChange={(e) => {
+                    setCopyFrom(e.target.value);
+                    setCopyNote(null);
+                  }}
+                >
+                  <option value="">Choose a subject…</option>
+                  {copySources
+                    .filter((x) => Array.isArray((x.gradingSystem as { categories?: unknown } | null | undefined)?.categories) && (x.gradingSystem as { categories: unknown[] }).categories.length > 0)
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}{x.code ? ` (${x.code})` : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={!copyFrom}
+                onClick={copyFormula}
+                className="rounded border border-border-strong bg-surface px-3 py-1 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-50"
+              >
+                Copy formula
+              </button>
+            </div>
+            <p className="mt-2 text-foreground-muted">Components are matched by their grade columns; one that matches nothing in this subject is skipped. This replaces the formula below, but nothing is saved until you press Save formula.</p>
+            {copyNote && (
+              <p className={`mt-2 rounded px-2 py-1.5 ${copyNote.ok ? "bg-primary-muted text-foreground" : "bg-warning-muted text-warning"}`} role="status">
+                {copyNote.text}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="border-t border-border pt-3">
           <h4
             className="mb-3 w-fit cursor-help text-sm font-semibold text-foreground underline decoration-dotted decoration-border-strong underline-offset-4"
@@ -852,12 +976,25 @@ export function GradingSystemSettingsPanel({
           >
             Category &amp; component weights
           </h4>
+          <p className="-mt-1 mb-3 text-xs text-foreground-muted">
+            Type each component&apos;s share of the final grade. A category total is the sum of its components, so all components together should add up to 100.
+          </p>
+          {startedFromDefault && (
+            <p className="mb-3 rounded bg-primary-muted px-2 py-1.5 text-xs text-foreground" role="status">
+              This subject has no formula yet, so it starts from the default weights: Major Exams (Midterms 15 + Finals 15) and Major Outputs (70). Columns were matched by name; pick a column for any component that has none, adjust the weights if you need to, then press Save formula.
+            </p>
+          )}
+          {weightsConverted && (
+            <p className="mb-3 rounded bg-primary-muted px-2 py-1.5 text-xs text-foreground" role="status">
+              These settings were saved with weights inside each category. They are shown here as a share of the final grade, which gives every student the same result as before. Save the formula to keep the new form.
+            </p>
+          )}
         </div>
 
         <div className="space-y-3">
         {categories.length === 0 && (
           <p className="text-xs text-foreground">
-            No grading structure yet. Add a category or load the example template so &quot;Compute grades&quot; has a formula to run.
+            No grading structure yet. Add a category or load the default weights so &quot;Compute grades&quot; has a formula to run.
           </p>
         )}
         {categories.map((cat, ci) => {
@@ -877,13 +1014,16 @@ export function GradingSystemSettingsPanel({
                     onChange={(e) => updateCategory(ci, { name: e.target.value })}
                   />
                 </label>
-                <label className="flex w-[7.5rem] flex-col gap-0.5 text-xs font-medium text-foreground">
-                  % of final
+                <label className="flex w-[8.5rem] flex-col gap-0.5 text-xs font-medium text-foreground">
+                  Total % of final
                   <input
                     type="number"
-                    className="rounded border border-border px-2 py-1 text-sm font-normal text-foreground"
+                    readOnly
+                    tabIndex={-1}
+                    aria-label={`${cat.name} total, the sum of its components`}
+                    title="The sum of this category's component weights"
+                    className="rounded border border-border bg-surface-muted px-2 py-1 text-sm font-semibold text-foreground"
                     value={Number.isFinite(cat.weight) ? cat.weight : 0}
-                    onChange={(e) => updateCategory(ci, { weight: Number(e.target.value) })}
                   />
                 </label>
                 <button type="button" className="text-xs text-danger" onClick={() => removeCategory(ci)}>
@@ -892,14 +1032,12 @@ export function GradingSystemSettingsPanel({
               </div>
               {!compWeightsPositive && (
                 <p className="mb-2 text-xs text-warning">
-                  Component weights here must be non-negative and sum to a number greater than zero (now{" "}
+                  Component weights here must be zero or more and add up to more than zero (now{" "}
                   {Number.isFinite(compSum) ? compSum.toFixed(2) : "—"}).
                 </p>
               )}
-              {compWeightsPositive && cat.components.length > 0 && !compSumIsHundred && (
-                <p className="mb-2 text-xs text-foreground">
-                  Weights sum to {compSum.toFixed(2)}—treated as <strong>relative</strong> shares (same outcome as scaling them to 100).
-                </p>
+              {compWeightsPositive && cat.components.length > 0 && compSumIsHundred && (
+                <p className="mb-2 text-xs text-foreground-muted">This category alone is the whole final grade.</p>
               )}
               <div className="space-y-2 border-t border-border pt-2">
                 {cat.components.map((comp, xi) => (
@@ -913,7 +1051,7 @@ export function GradingSystemSettingsPanel({
                       />
                     </label>
                     <label className="flex w-[5.5rem] flex-col gap-0.5 text-xs font-medium text-foreground">
-                      % in category
+                      % of final
                       <input
                         type="number"
                         className="rounded border border-border bg-surface px-2 py-1 text-sm font-normal text-foreground"

@@ -20,10 +20,10 @@ export const experimentalFeatureCatalog: Record<ExperimentalFeatureKey, Experime
   },
   mmsuGradePush: {
     key: "mmsuGradePush",
-    label: "MMSU Grade Push",
+    label: "Portal Insert Grade",
     description: "Browser extension that fills the MMSU portal gradesheet from a table you paste, then checks the portal matches your sheet.",
     routePath: "/experimental/mmsu-grade-push",
-    sidebarLabel: "MMSU Grade Push",
+    sidebarLabel: "Portal Insert Grade",
     allowedRoles: ["ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"],
   },
 };

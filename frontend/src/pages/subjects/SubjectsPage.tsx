@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FilterSelect } from "../../components/ui/listFilters";
+import { Pager } from "../../components/ui/pager";
 import { apiClient } from "../../api/apiClient";
 import type { Subject } from "../../types/api";
 import toast from "react-hot-toast";
@@ -19,10 +21,19 @@ export function SubjectsPage() {
   /** The college secretary can view everything the dean can but never change it. */
   const role = useAppSelector((st) => st.auth.user?.role);
   const readOnly = role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
+  /** The current page of subjects; search and filters run on the server over ALL subjects. */
   const [list, setList] = useState<Subject[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalAll, setTotalAll] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [curriculaLoaded, setCurriculaLoaded] = useState(false);
   /** "" = all curricula, "__none__" = subjects without a curriculum, otherwise a curriculum id. */
   const [curriculumFilter, setCurriculumFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const loadSeqRef = useRef(0);
   /** The subject form: null = closed, subject null = adding one. */
   const [formState, setFormState] = useState<{ subject: Subject | null } | null>(null);
   const [curricula, setCurricula] = useState<{ id: string; name: string; createdAt?: string; departmentId?: string | null }[]>([]);
@@ -36,23 +47,58 @@ export function SubjectsPage() {
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [filterSemester, setFilterSemester] = useState("");
+  const [filterKind, setFilterKind] = useState("");
 
+  /** Everything the server needs to pick the page: filters and search apply to all subjects, not just the visible page. */
+  const query = () => ({
+    page,
+    pageSize,
+    ...(debouncedQuery ? { q: debouncedQuery } : {}),
+    ...(curriculumFilter ? { curriculumId: curriculumFilter } : {}),
+    ...(filterDepartment ? { departmentId: filterDepartment } : {}),
+    ...(filterYear ? { yearLevel: filterYear } : {}),
+    ...(filterSemester ? { semester: filterSemester } : {}),
+    ...(filterKind ? { kind: filterKind } : {}),
+  });
   const load = async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const { data } = await apiClient.get<Subject[]>("/subjects");
-      setList(data);
+      const { data } = await apiClient.get<{ items: Subject[]; total: number; totalAll: number; page: number }>("/subjects", { params: query() });
+      if (seq !== loadSeqRef.current) return; // a newer search already replaced this one
+      setList(data.items);
+      setTotal(data.total);
+      setTotalAll(data.totalAll);
+      if (data.page !== page) setPage(data.page);
     } catch {
-      toast.error("Failed to load subjects");
+      if (seq === loadSeqRef.current) toast.error("Failed to load subjects");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
-    apiClient.get("/curriculum").then(({ data }) => setCurricula(data));
+    apiClient.get("/curriculum").then(({ data }) => setCurricula(data)).finally(() => setCurriculaLoaded(true));
+    apiClient.get<{ id: string; name: string }[]>("/departments").then(({ data }) => setDepartments(data)).catch(() => setDepartments([]));
   }, []);
+
+  // the search waits for a pause in typing
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
+
+  // load the page whenever the page, its size, the search or a filter changes (after the curriculum filter has its starting value)
+  const ready = curriculaLoaded && (filterInitialized || curricula.length === 0);
+  useEffect(() => {
+    if (ready) void load();
+  }, [ready, page, pageSize, debouncedQuery, curriculumFilter, filterDepartment, filterYear, filterSemester, filterKind]);
 
   // Start on the most recently added curriculum instead of "All curricula".
   useEffect(() => {
@@ -82,28 +128,29 @@ export function SubjectsPage() {
     }
   };
 
-  const searchLower = searchQuery.trim().toLowerCase();
   const curriculumOptions = (() => {
-    const seen = new Map<string, string>();
-    for (const c of curricula) seen.set(c.id, c.name);
-    for (const s of list) if (s.curriculumId && !seen.has(s.curriculumId)) seen.set(s.curriculumId, s.curriculum?.name ?? "Curriculum");
-    const opts = [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-    if (list.some((s) => !s.curriculumId)) opts.push({ value: "__none__", label: "No curriculum" });
+    const opts = curricula.map((c) => ({ value: c.id, label: c.name })).sort((a, b) => a.label.localeCompare(b.label));
+    opts.push({ value: "__none__", label: "No curriculum" });
     return opts;
   })();
-  const byCurriculum = curriculumFilter
-    ? list.filter((s) => (curriculumFilter === "__none__" ? !s.curriculumId : s.curriculumId === curriculumFilter))
-    : list;
-  const filteredList = searchLower
-    ? byCurriculum.filter(
-        (s) =>
-          s.code.toLowerCase().includes(searchLower) ||
-          s.name.toLowerCase().includes(searchLower) ||
-          (s.curriculum?.name ?? "").toLowerCase().includes(searchLower) ||
-          (s.department?.name ?? "").toLowerCase().includes(searchLower) ||
-          (s.curriculum?.department?.name ?? "").toLowerCase().includes(searchLower)
-      )
-    : byCurriculum;
+  const departmentOptions = departments.map((d) => ({ value: d.id, label: d.name })).sort((a, b) => a.label.localeCompare(b.label));
+  const yearOptions = [1, 2, 3, 4, 5].map((y) => ({ value: String(y), label: `Year ${y}` }));
+  const filtersActive = Boolean(searchQuery.trim() || filterDepartment || filterYear || filterSemester || filterKind);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setDebouncedQuery("");
+    setFilterDepartment("");
+    setFilterYear("");
+    setFilterSemester("");
+    setFilterKind("");
+    setPage(1);
+  };
+  /** Changing a filter always goes back to the first page. */
+  const withReset = (setter: (v: string) => void) => (v: string) => {
+    setter(v);
+    setPage(1);
+  };
+  const filteredList = list;
 
   const filteredIds = filteredList.map((s) => s.id);
   const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
@@ -157,14 +204,14 @@ export function SubjectsPage() {
         </div>
         {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
       </div>
-      {list.length > 0 && (
+      {(totalAll > 0 || filtersActive || curriculumFilter) && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[220px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Curriculum</label>
           <SearchableSelect
             options={curriculumOptions}
             value={curriculumFilter || "__all__"}
-            onValueChange={(v) => setCurriculumFilter(v === "__all__" ? "" : v)}
+            onValueChange={(v) => { setCurriculumFilter(v === "__all__" ? "" : v); setPage(1); }}
             noneOption={{ value: "__all__", label: "All curricula" }}
             placeholder="Search curriculum…"
             aria-label="Filter subjects by curriculum"
@@ -183,22 +230,42 @@ export function SubjectsPage() {
             aria-label="Search subjects"
           />
         </div>
+        {departmentOptions.length > 1 && (
+          <FilterSelect label="Filter by department" value={filterDepartment} onChange={withReset(setFilterDepartment)} options={[...departmentOptions, { value: "__none__", label: "No department" }]} allLabel="All departments" />
+        )}
+        {(totalAll > 0 || yearOptions.length > 0) && (
+          <FilterSelect label="Filter by year level" value={filterYear} onChange={withReset(setFilterYear)} options={[...yearOptions, { value: "__none__", label: "No year level" }]} allLabel="All year levels" />
+        )}
+        <FilterSelect
+          label="Filter by semester"
+          value={filterSemester}
+          onChange={withReset(setFilterSemester)}
+          options={[{ value: "1", label: "1st Sem" }, { value: "2", label: "2nd Sem" }, { value: "3", label: "Mid Year" }, { value: "__none__", label: "Any semester (not set)" }]}
+          allLabel="All semesters"
+        />
+        <FilterSelect label="Filter by type" value={filterKind} onChange={withReset(setFilterKind)} options={[{ value: "lecture", label: "Lecture only" }, { value: "lab", label: "With laboratory" }]} allLabel="Lecture and lab" />
+        {filtersActive && (
+          <button type="button" onClick={clearFilters} className="rounded text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
+            Clear filters
+          </button>
+        )}
+        <span className="text-sm text-foreground-muted" aria-live="polite">{total} matching of {totalAll} subjects</span>
         </div>
       )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
         </div>
-      ) : list.length === 0 ? (
+      ) : totalAll === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
           <p className="text-foreground-muted mb-4">No subjects yet. Add one to get started.</p>
           {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
         </div>
-      ) : filteredList.length === 0 ? (
+      ) : total === 0 ? (
         <div className="rounded border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No subjects match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No subjects match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (
@@ -299,6 +366,7 @@ export function SubjectsPage() {
             </tbody>
           </table>
         </div>
+        <Pager page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} busy={loading} />
         </>
       )}
       <SubjectFormDialog

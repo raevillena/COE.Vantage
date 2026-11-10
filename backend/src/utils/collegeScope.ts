@@ -20,6 +20,9 @@ export const SCOPED_MODELS = new Set([
   "GeOfferingSet",
   "TermLock",
   "CrossDepartmentLoadRequest",
+  "ExamPeriod",
+  "ExamReservation",
+  "ExamRemovalRequest",
 ]);
 
 const FILTER_ACTIONS = new Set([
@@ -61,6 +64,8 @@ async function parentCollege(client: PrismaClient, model: string, data: Data): P
       return pick("curriculum", data.curriculumId);
     case "FacultyLoad":
     case "CrossDepartmentLoadRequest":
+      return pick("studentClass", data.studentClassId);
+    case "ExamReservation":
       return pick("studentClass", data.studentClassId);
     default:
       return undefined;

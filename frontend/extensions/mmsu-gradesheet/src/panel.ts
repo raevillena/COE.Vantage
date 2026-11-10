@@ -93,7 +93,7 @@ class Panel {
     this.sheet = sheet;
     const host = h("div", { attrs: { id: "vantage-mmsu-push" } });
     this.root = host.attachShadow({ mode: "open" });
-    this.pill = h("button", { cls: "pill", text: "Vantage grade push", on: { click: () => this.toggle(true) } });
+    this.pill = h("button", { cls: "pill", text: "Portal Insert Grade", on: { click: () => this.toggle(true) } });
     // The paste box is created once: re-rendering it on every keystroke would drop the cursor.
     this.top = h("div");
     this.below = h("div");
@@ -101,8 +101,8 @@ class Panel {
     this.area.addEventListener("input", () => this.onPaste(this.area.value));
     this.pasteSection = h("section", {}, h("h3", { text: "1. Paste your sheet" }), this.area);
     const close = h("button", { text: "Hide", on: { click: () => this.toggle(false) } });
-    this.panel = h("div", { cls: "panel hidden", attrs: { role: "dialog", "aria-label": "Vantage grade push" } },
-      h("header", {}, h("strong", { text: "Vantage grade push" }), close),
+    this.panel = h("div", { cls: "panel hidden", attrs: { role: "dialog", "aria-label": "Portal Insert Grade" } },
+      h("header", {}, h("strong", { text: "Portal Insert Grade" }), close),
       this.top, this.pasteSection, this.below);
     this.root.append(h("style", { text: STYLE }), this.pill, this.panel);
     document.body.append(host);
