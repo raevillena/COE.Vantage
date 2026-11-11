@@ -53,6 +53,7 @@ const ACTION_TONE: Record<string, string> = {
 
 export const KIND_LABEL: Record<string, string> = {
   ACADEMIC_YEAR: "Academic year",
+  ASSIGNMENT_REQUEST: "Assignment request",
   CURRICULUM: "Curriculum",
   SUBJECT: "Subject",
   STUDENT_CLASS: "Student class",

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useReloadTick } from "../../context/PageReloadContext";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import { Button } from "../../components/ui/button";
@@ -241,6 +243,7 @@ const PAGE_SIZE = 25;
 
 /** Paginated rows behind one dashboard number. Filters live in the URL so alert links can deep-link. */
 export function DashboardDetailPage() {
+  const reloadTick = useReloadTick();
   const { metric } = useParams<{ metric: string }>();
   const def = metric ? METRICS[metric as Metric] : undefined;
   const [params, setParams] = useSearchParams();
@@ -276,7 +279,7 @@ export function DashboardDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [def, apiParams]);
+  }, [def, apiParams, reloadTick]);
 
   // Debounce the search box into the URL.
   useEffect(() => {
@@ -337,7 +340,7 @@ export function DashboardDetailPage() {
 <HelpTip>
           {def.blurb}
           {data ? ` ${data.note}` : ""}
-        </HelpTip>
+        </HelpTip><PageReloadButton />
 </div>
       <p className="mb-4 text-sm text-foreground-muted">
         {data ? `${data.context.academicYear.name}, ${["", "1st sem", "2nd sem", "Mid year"][data.context.semester]}` : ""}

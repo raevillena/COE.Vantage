@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
@@ -27,6 +29,7 @@ export function CollegesPage() {
   const [removeTarget, setRemoveTarget] = useState<College | null>(null);
   const [saving, setSaving] = useState(false);
 
+  useRegisterReload(() => load());
   const load = async () => {
     try {
       const [c, u] = await Promise.all([apiClient.get<College[]>("/colleges"), apiClient.get<{ university: { name: string; code: string | null } }>("/university")]);
@@ -129,7 +132,7 @@ export function CollegesPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold text-foreground">Colleges</h1>
-          <HelpTip>Each college has its own departments, people, rooms, curricula and schedules, and sees only its own. Create the college here, then add its people on the Users page and choose this college for them.</HelpTip>
+          <HelpTip>Each college has its own departments, people, rooms, curricula and schedules, and sees only its own. Create the college here, then add its people on the Users page and choose this college for them.</HelpTip><PageReloadButton />
         </div>
         <Button type="button" onClick={() => openForm({ id: null, name: "", code: "" })}>Add college</Button>
       </div>

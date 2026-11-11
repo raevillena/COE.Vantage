@@ -198,7 +198,9 @@ function SubjectTreeBody(props: SubjectTreeBodyProps) {
     }
     const scheduledHours = scheduled / 60;
     const requiredHours = required / 60;
-    const label = `${scheduledHours}/${requiredHours} hrs`;
+    // minutes are not always whole hours (a block of 58 minutes): show at most two decimals, not 3.966666666666667
+    const hoursText = (h: number) => String(Number(h.toFixed(2)));
+    const label = `${hoursText(scheduledHours)}/${hoursText(requiredHours)} hrs`;
     if (scheduled === 0) return { status: "none", label };
     if (scheduled < required) return { status: "partial", label };
     if (scheduled > required) return { status: "over", label };

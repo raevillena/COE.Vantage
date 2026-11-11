@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReloadTick } from "../../context/PageReloadContext";
 import { calendarTerm, yearLabel } from "../../utils/currentTerm";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
@@ -19,6 +20,7 @@ export function FacultyDashboard() {
   const [semester, setSemester] = useState(1);
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loadingGrid, setLoadingGrid] = useState(false);
+  const reloadTick = useReloadTick();
 
   useEffect(() => {
     apiClient
@@ -49,7 +51,7 @@ export function FacultyDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [academicYearId, semester, user]);
+  }, [academicYearId, semester, user, reloadTick]);
 
   return (
     <section className="mb-8" aria-labelledby="my-term-heading">

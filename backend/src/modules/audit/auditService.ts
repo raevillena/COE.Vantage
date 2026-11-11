@@ -6,6 +6,7 @@ import { currentActor, scopeCollegeId } from "../../utils/auditContext.js";
 export const ENTITY_LABEL: Record<string, string> = {
   ACADEMIC_YEAR: "Academic year",
   ROOM_SHARE: "Room request",
+  ASSIGNMENT_REQUEST: "Assignment request",
   CURRICULUM: "Curriculum",
   SUBJECT: "Subject",
   STUDENT_CLASS: "Student class",

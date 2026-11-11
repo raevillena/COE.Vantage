@@ -2,6 +2,21 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.9.1 - 2026-11-11
+
+Reload on every page, requests by semester, Split Class with the same instructor, and Scheduler fixes
+
+- **New:** Reload: every page that lists data has a small reload icon beside its title (next to History where there is one). It fetches the page's data again and keeps your filters, search and selections.
+- **New:** Requests: the list is per scheduling semester, opens on the current scheduling semester, and can be switched to another year or semester. New filters for who asked and the asker's department, and a History button for the admin, dean and college secretary.
+- **New:** Scheduler: a Reload button beside Block colors, and "Locked" shown beside "Scheduling <class>", on the schedule label and in the semester, class and faculty dropdowns when the semester is locked.
+- **Improved:** Split Class can now give a group to the same instructor at a different time, not only to another instructor. A split is made of numbered groups, and the hours still count one group. The repeat-on-days option turns off as soon as you press Split Class.
+- **Improved:** Changing an approved block of another department's faculty (moving it, resizing it, or changing its room or person) now needs that department's approval again. The block stays as approved until then. Changing it again while it waits updates the same request, so there is one pending block for the latest change, and changing it back withdraws the request.
+- **Improved:** Email notifications: the once-a-day digest of notifications you have not read is now off until you turn it on in your Profile.
+- **Improved:** Scheduler: on wide screens the subject and assignment panels take the height of the timetable and scroll inside it. Blocks after 6 PM open the evening rows by themselves instead of staying hidden. In the Code list, the blocks of the same subject are grouped together.
+- **Improved:** Notifications on screen stay for 5 seconds, and the Feedback menu is now called Feedback/Bug.
+- **Fixed:** Blocks saved with an end time before their start time (for example 2 PM to 3 AM) no longer count as negative hours, which had turned the subject yellow. They are marked in the Code list so they can be corrected or removed.
+- **Fixed:** Hours with part-hours no longer show long decimals (for example 3.97/1 hrs instead of 3.966666666666667).
+
 ## v0.9.0 - 2026-11-11
 
 College deadlines with reminders, schedule sharing, Google sign-in and safer sign-ins

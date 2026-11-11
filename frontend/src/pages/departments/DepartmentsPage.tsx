@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
 import type { Department, UserListItem } from "../../types/api";
@@ -39,6 +41,7 @@ export function DepartmentsPage() {
     apiClient.get<College[]>("/colleges").then(({ data }) => setColleges(data)).catch(() => setColleges([]));
   }, []);
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -185,7 +188,7 @@ export function DepartmentsPage() {
       <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Departments</h1>
-          <HistoryButton entityType="DEPARTMENT" title="Departments" />
+          <HistoryButton entityType="DEPARTMENT" title="Departments" /><PageReloadButton />
         </div>
         {canManage && <Button type="button" onClick={openCreate}>Add Department</Button>}
       </div>

@@ -184,6 +184,8 @@ export interface FacultyLoad {
   locked?: boolean;
   /** The class is split between different instructors for this subject. */
   isSplit?: boolean;
+  /** Which group of a split this block belongs to (1, 2, ...). */
+  splitGroup?: number | null;
 }
 
 /** Cross-department assignment request (chairman-to-chairman). */
@@ -200,6 +202,8 @@ export interface AssignmentRequest {
   semester: number;
   academicYearId: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  /** Set when this request is a change to an approved block: that block stays until the change is approved. */
+  replacesLoadId?: string | null;
   faculty?: { id: string; name: string; email?: string; department?: { name: string } };
   subject?: { id: string; code: string; name: string; units?: number; isLab?: boolean };
   studentClass?: { id: string; name: string };

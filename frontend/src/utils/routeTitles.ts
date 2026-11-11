@@ -23,6 +23,7 @@ export const routeTitles: Record<string, string> = {
   "/trash": "Trash",
   "/profile": "Profile",
   "/about": "About",
+  "/feedback": "Feedback/Bug",
   "/experimental/grades": "Grades",
   "/experimental/mmsu-grade-push": "Portal Insert Grade",
 };

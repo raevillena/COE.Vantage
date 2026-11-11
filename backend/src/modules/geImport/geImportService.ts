@@ -51,7 +51,7 @@ function scheduledMinutes(loads: { subjectId: string; dayOfWeek: number; startTi
     const k = `${l.subjectId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
     if (seen.has(k)) continue;
     seen.add(k);
-    out.set(l.subjectId, (out.get(l.subjectId) ?? 0) + timeToMinutes(l.endTime) - timeToMinutes(l.startTime));
+    out.set(l.subjectId, (out.get(l.subjectId) ?? 0) + Math.max(0, timeToMinutes(l.endTime) - timeToMinutes(l.startTime)));
   }
   return out;
 }

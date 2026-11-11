@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, College } from "../../types/api";
 import toast from "react-hot-toast";
@@ -52,6 +54,7 @@ export function AcademicYearsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -246,7 +249,7 @@ export function AcademicYearsPage() {
       <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Academic Years</h1>
-          <HistoryButton entityType="ACADEMIC_YEAR" title="Academic years" />
+          <HistoryButton entityType="ACADEMIC_YEAR" title="Academic years" /><PageReloadButton />
         </div>
         {canManage && <Button type="button" onClick={openCreate}>Add Academic Year</Button>}
       </div>

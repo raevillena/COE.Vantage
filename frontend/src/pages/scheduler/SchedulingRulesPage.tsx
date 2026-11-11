@@ -1,4 +1,6 @@
 import type { FC } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
@@ -126,6 +128,7 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
     }
   };
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -274,7 +277,7 @@ export const SchedulingRulesPage: FC<SchedulingRulesPageProps> = (props) => {
             {isAdminPage
               ? "Rule sets define how auto-schedule runs: working hours, lunch break, excluded days and similar. Assign a set per academic year and class here, or let chairmen do so from the Scheduler."
               : "Rule sets define how auto-schedule runs: working hours, lunch break, MWF preference and similar. Assign a set per academic year and/or class; when you run auto-schedule, the assigned set is used unless you choose another in the dropdown."}
-          </HelpTip>
+          </HelpTip><PageReloadButton />
           <HistoryButton entityType="SCHEDULING_RULE" title="Scheduling rules" />
 </div>
       </div>

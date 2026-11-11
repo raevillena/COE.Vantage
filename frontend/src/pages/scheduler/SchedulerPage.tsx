@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { RefreshCw } from "lucide-react";
 import { HelpTip } from "../../components/ui/helpTip";
@@ -37,6 +38,7 @@ import { AvailabilityOverlay } from "../../components/scheduler/AvailabilityOver
 import { AssignmentForm } from "../../components/scheduler/AssignmentForm";
 import { AddFacultyLoadModal } from "../../components/addFacultyLoadModal/AddFacultyLoadModal";
 import { GeImportModal } from "../../components/scheduler/geImport/GeImportModal";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Copy, FileUp, Lock, MoreHorizontal, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
@@ -188,17 +190,19 @@ function SchedulerLayout({
 }: SchedulerLayoutProps) {
   return (
     <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,6.25fr)_minmax(22rem,3.75fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface min-h-[48vh]">
-      <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
-        {renderCurriculum()}
+      {/* At 2xl the middle pane sets the row height; the side panes are laid over that height (absolute inside a relative aside) and scroll inside it */}
+      <aside data-testid="scheduler-pane-left" className="order-2 xl:order-none 2xl:order-none relative flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 min-h-[260px] max-h-[37rem] 2xl:min-h-0 2xl:max-h-none overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
+        <div className="flex min-h-0 flex-1 flex-col p-3 2xl:absolute 2xl:inset-0 2xl:overflow-y-auto">{renderCurriculum()}</div>
       </aside>
       <main
+        data-testid="scheduler-pane-middle"
         className="order-1 xl:order-none 2xl:order-none xl:col-span-1 2xl:col-span-1 min-h-0 overflow-hidden flex flex-col p-3 min-h-[40vh] xl:[grid-column:2] xl:[grid-row:1] 2xl:[grid-column:2] 2xl:[grid-row:1]"
         style={{ display: "grid", gridTemplateRows: "auto 1fr" }}
       >
         {renderMain()}
       </main>
-      <aside className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 p-3 min-h-[16rem] 2xl:min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
-        {renderAssignment()}
+      <aside data-testid="scheduler-pane-right" className="order-3 xl:order-none 2xl:order-none xl:col-span-2 2xl:col-span-1 relative flex flex-col border-l-0 2xl:border-l border-border border-t 2xl:border-t-0 min-h-[16rem] 2xl:min-h-0 overflow-hidden max-h-[35vh] 2xl:max-h-none xl:[grid-column:1/3] xl:[grid-row:2] 2xl:[grid-column:3] 2xl:[grid-row:1]">
+        <div className="flex min-h-0 flex-1 flex-col p-3 2xl:absolute 2xl:inset-0 2xl:overflow-y-auto">{renderAssignment()}</div>
       </aside>
       {renderFooter()}
     </div>
@@ -320,9 +324,14 @@ export function SchedulerPage() {
   }), []);
 
   /** In class view, merge confirmed loads with pending cross-dept requests so both show on the grid. */
+  // A waiting change to an approved block shows as ONE pending block (the latest change); the approved block it replaces
+  // stays in place on the server until the change is approved, but is not drawn a second time.
+  const replacedByPending = new Map(pendingRequests.filter((r) => r.replacesLoadId).map((r) => [r.replacesLoadId as string, r]));
   const displayLoads = viewMode === "class" && pendingRequests.length > 0
-    ? [...loads, ...pendingRequests.map(requestToDisplayLoad)]
+    ? [...loads.filter((l) => !replacedByPending.has(l.id)), ...pendingRequests.map(requestToDisplayLoad)]
     : loads;
+  const pendingRequestsRef = useRef(pendingRequests);
+  pendingRequestsRef.current = pendingRequests;
 
   // In faculty view, keep overlay faculty in sync with the selected faculty so pending blocks
   // and the faculty preview table work the same way as in class view.
@@ -524,27 +533,43 @@ export function SchedulerPage() {
   /** Bumped when a subject was edited from the subject list, so the assignment form fetches the subjects again. */
   const [subjectsVersion, setSubjectsVersion] = useState(0);
 
-  const refreshLoads = useCallback(() => {
-    if (!academicYearId) return;
+  const refreshLoads = useCallback((): Promise<unknown> => {
+    if (!academicYearId) return Promise.resolve();
     const params = new URLSearchParams({ academicYearId, semester: String(semester) });
     if (viewMode === "class" && studentClassId) params.set("studentClassId", studentClassId);
     if (viewMode === "faculty" && selectedFacultyId) params.set("facultyId", selectedFacultyId);
-    apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data));
+    const jobs: Promise<unknown>[] = [apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data))];
     if (viewMode === "class" && studentClassId) {
       const pendingParams = new URLSearchParams({ studentClassId, academicYearId, semester: String(semester), status: "PENDING" });
-      apiClient.get<AssignmentRequest[]>(`/assignment-requests?${pendingParams}`).then(({ data }) => setPendingRequests(data ?? [])).catch(() => setPendingRequests([]));
+      jobs.push(apiClient.get<AssignmentRequest[]>(`/assignment-requests?${pendingParams}`).then(({ data }) => setPendingRequests(data ?? [])).catch(() => setPendingRequests([])));
     }
+    return Promise.all(jobs);
   }, [academicYearId, semester, viewMode, studentClassId, selectedFacultyId]);
 
-  const refreshRoomLoads = useCallback(() => {
-    if (!academicYearId || !selectedRoomId) return;
+  const refreshRoomLoads = useCallback((): Promise<unknown> => {
+    if (!academicYearId || !selectedRoomId) return Promise.resolve();
     setRoomLoadsLoading(true);
     const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: selectedRoomId });
-    apiClient
+    return apiClient
       .get<FacultyLoad[]>(`/faculty-loads?${params}`)
       .then(({ data }) => setRoomLoads(data))
       .finally(() => setRoomLoadsLoading(false));
   }, [academicYearId, semester, selectedRoomId]);
+
+  const [reloading, setReloading] = useState(false);
+  useRegisterReload(() => reloadSchedule());
+  /** Fetch the schedule again (someone else may have changed it) without leaving the page. */
+  const reloadSchedule = useCallback(async () => {
+    setReloading(true);
+    try {
+      await Promise.all([refreshLoads(), refreshRoomLoads()]);
+      setSubjectsVersion((v) => v + 1);
+    } catch {
+      toast.error("Could not reload the schedule");
+    } finally {
+      setReloading(false);
+    }
+  }, [refreshLoads, refreshRoomLoads]);
 
   useEffect(() => {
     if (!academicYearId) {
@@ -591,7 +616,28 @@ export function SchedulerPage() {
       setEditingLoad(null);
       return;
     }
-    apiClient.get<FacultyLoad>(`/faculty-loads/${editingLoadId}`).then(({ data }) => setEditingLoad(data)).catch(() => setEditingLoad(null));
+    apiClient
+      .get<FacultyLoad>(`/faculty-loads/${editingLoadId}`)
+      .then(({ data }) => {
+        // a change to this block is waiting: the form starts from the latest requested values, not the approved ones
+        const waiting = pendingRequestsRef.current.find((r) => r.replacesLoadId === editingLoadId);
+        setEditingLoad(
+          waiting
+            ? {
+                ...data,
+                facultyId: waiting.facultyId,
+                faculty: waiting.faculty ? { id: waiting.faculty.id, name: waiting.faculty.name, email: waiting.faculty.email ?? "" } : data.faculty,
+                roomId: waiting.roomId,
+                roomDisplayName: waiting.roomDisplayName,
+                room: waiting.room ? { id: waiting.room.id, name: waiting.room.name, capacity: waiting.room.capacity ?? 0, isLab: waiting.room.isLab ?? false } : data.room,
+                dayOfWeek: waiting.dayOfWeek,
+                startTime: waiting.startTime,
+                endTime: waiting.endTime,
+              }
+            : data
+        );
+      })
+      .catch(() => setEditingLoad(null));
   }, [editingLoadId]);
 
 
@@ -859,11 +905,16 @@ export function SchedulerPage() {
           semester,
           academicYearId,
         })
-        .then(() => {
+        .then(({ data, status }) => {
           refreshLoads();
           refreshRoomLoads();
-          refreshOverlayForLoad({ ...load, ...payload });
           setEditingLoadId(null);
+          if (status === 202 || data?.requestCreated) {
+            // another department's faculty: the block stays where it was until that department approves the change
+            toast.success("Request sent to the faculty's department chairman. The block stays until it is approved.");
+            return;
+          }
+          refreshOverlayForLoad({ ...load, ...payload });
           toast.success("Assignment moved");
         })
         .catch((err) => toast.error(getApiErrorMessage(err, "Move failed")));
@@ -917,7 +968,14 @@ export function SchedulerPage() {
           semester,
           academicYearId,
         })
-        .then(() => {
+        .then(({ data, status }) => {
+          if (status === 202 || data?.requestCreated) {
+            // not changed yet: put the block back at its approved length and wait for the approval
+            toast.success("Request sent to the faculty's department chairman. The block stays until it is approved.");
+            refreshLoads();
+            refreshRoomLoads();
+            return;
+          }
           toast.success("Time updated");
           refreshOverlayForLoad(updated);
         })
@@ -1183,6 +1241,9 @@ export function SchedulerPage() {
   );
 
   const termLock = academicYearId ? findTermLock(academicYears, academicYearId, semester) : undefined;
+  /** A lock mark after a label: the semester shown in the dropdowns is locked. */
+  const lockMark = termLock ? " 🔒" : "";
+  const semesterLabel = (n: number, name: string) => `${name}${academicYearId && findTermLock(academicYears, academicYearId, n) ? " 🔒" : ""}`;
 
   const showGrid = academicYearId && (viewMode === "class" ? studentClassId : viewMode === "faculty" ? selectedFacultyId : false);
 
@@ -1190,6 +1251,11 @@ export function SchedulerPage() {
   const SCHEDULE_HOUR_END_DEFAULT = 18;
   const SCHEDULE_HOUR_END_FULL = 21;
   const scheduleHourEnd = showLateHours ? SCHEDULE_HOUR_END_FULL : SCHEDULE_HOUR_END_DEFAULT;
+  // a block after 6 PM would be hidden below the fold: open the evening rows by themselves when one appears
+  const hasLateBlock = displayLoads.some((l) => timeToMinutes(l.endTime) > SCHEDULE_HOUR_END_DEFAULT * 60);
+  useEffect(() => {
+    if (hasLateBlock) setShowLateHours(true);
+  }, [hasLateBlock]);
   // the grid starts at 7 AM, and reaches back to the earliest block (or the block being placed) when one is earlier
   const earliestMinutes = Math.min(
     ...[...displayLoads, ...roomLoads, ...overlayFacultyLoads].map((l) => timeToMinutes(l.startTime)),
@@ -1201,7 +1267,7 @@ export function SchedulerPage() {
     <div className="flex flex-col min-h-[55vh] h-auto overflow-y-auto">
       <div className="mb-4 flex shrink-0 items-center gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Scheduler</h1>
-        <HistoryButton entityType="SCHEDULE_BLOCK" title="Schedule" />
+        <HistoryButton entityType="SCHEDULE_BLOCK" title="Schedule" /><PageReloadButton />
       </div>
       <section aria-label="Scheduler toolbar" className="mb-4 flex shrink-0 flex-col gap-3.5 rounded-xl border border-border bg-surface p-4">
         {termLock && (
@@ -1234,13 +1300,13 @@ export function SchedulerPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-foreground">Scheduling Semester</label>
             <Select.Root value={String(semester)} onValueChange={(v) => setSemester(Number(v))}>
-              <Select.Trigger aria-label="Scheduling Semester" className="w-[100px]">
+              <Select.Trigger aria-label="Scheduling Semester" className="w-[125px]">
                 <Select.Value />
               </Select.Trigger>
               <Select.Content>
-                <Select.Item value="1">1st Sem</Select.Item>
-                <Select.Item value="2">2nd Sem</Select.Item>
-                <Select.Item value="3">Mid Year</Select.Item>
+                <Select.Item value="1">{semesterLabel(1, "1st Sem")}</Select.Item>
+                <Select.Item value="2">{semesterLabel(2, "2nd Sem")}</Select.Item>
+                <Select.Item value="3">{semesterLabel(3, "Mid Year")}</Select.Item>
               </Select.Content>
             </Select.Root>
           </div>
@@ -1285,7 +1351,7 @@ export function SchedulerPage() {
                   <Select.Item value="__none__">Select class</Select.Item>
                   {pickableClasses.map((c) => (
                     <Select.Item key={c.id} value={c.id}>
-                      {c.name}
+                      {c.name}{lockMark}
                     </Select.Item>
                   ))}
                 </Select.Content>
@@ -1296,7 +1362,7 @@ export function SchedulerPage() {
             <div className="min-w-[180px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Faculty</label>
               <SearchableSelect
-                options={departmentFaculties.map((f) => ({ value: f.id, label: `${f.name}${facultyRoleSuffix(f.role)}` }))}
+                options={departmentFaculties.map((f) => ({ value: f.id, label: `${f.name}${facultyRoleSuffix(f.role)}${lockMark}` }))}
                 value={selectedFacultyId || "__none__"}
                 onValueChange={(v) => setSelectedFacultyId(v === "__none__" ? "" : v)}
                 noneOption={{ value: "__none__", label: "Select faculty" }}
@@ -1358,7 +1424,13 @@ export function SchedulerPage() {
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3.5">
             <div className="min-w-0 flex-1 truncate text-sm text-foreground-muted">
               {viewMode === "class" && studentClassId && (
-                <>Scheduling <strong className="font-semibold text-foreground">{studentClasses.find((c) => c.id === studentClassId)?.name}</strong></>
+                <>Scheduling <strong className="font-semibold text-foreground">{studentClasses.find((c) => c.id === studentClassId)?.name}</strong>{" "}
+                  {termLock && (
+                    <span data-testid="scheduling-locked" className="ml-1 inline-flex items-center gap-1 rounded bg-warning-muted px-1.5 py-0.5 align-middle text-xs font-medium text-warning" title={`Locked by ${termLock.lockedByName}`}>
+                      <Lock size={12} aria-hidden /> Locked
+                    </span>
+                  )}
+                </>
               )}
             </div>
             <Button
@@ -1461,9 +1533,37 @@ export function SchedulerPage() {
           renderMain={() => (
             <>
             <div className="shrink-0 mb-2 flex items-center justify-between gap-2">
-              {viewMode === "class" && <h2 className="text-sm font-semibold text-foreground">Class schedule</h2>}
-              {viewMode === "faculty" && <h2 className="text-sm font-semibold text-foreground">Faculty schedule</h2>}
+              {viewMode === "class" && (
+                <h2 className="text-sm font-semibold text-foreground">
+                  Class schedule
+                  {termLock && (
+                  <span data-testid="schedule-locked" className="ml-2 inline-flex items-center gap-1 rounded bg-warning-muted px-1.5 py-0.5 align-middle text-xs font-medium text-warning" title={`Locked by ${termLock.lockedByName}`}>
+                    <Lock size={12} aria-hidden /> Locked
+                  </span>
+              )}
+                </h2>
+              )}
+              {viewMode === "faculty" && (
+                <h2 className="text-sm font-semibold text-foreground">
+                  Faculty schedule
+                  {termLock && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded bg-warning-muted px-1.5 py-0.5 align-middle text-xs font-medium text-warning" title={`Locked by ${termLock.lockedByName}`}>
+                    <Lock size={12} aria-hidden /> Locked
+                  </span>
+              )}
+                </h2>
+              )}
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void reloadSchedule()}
+                  disabled={reloading || !academicYearId}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-foreground-muted transition-colors hover:bg-surface-hover hover:text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-2 focus:ring-offset-surface disabled:opacity-50"
+                  title="Reload the schedule"
+                  aria-label="Reload schedule"
+                >
+                  <RefreshCw size={14} className={reloading ? "animate-spin" : ""} aria-hidden />
+                </button>
                 <BlockColorPicker />
                 <RawBlocksEditor
                   loads={loads}
@@ -1500,13 +1600,15 @@ export function SchedulerPage() {
                     <ScheduleGrid
                       loads={displayLoads}
                       wrapInScroll={false}
-                      selectedLoadId={editingLoadId}
+                      selectedLoadId={editingLoadId && replacedByPending.has(editingLoadId) ? `pending-${replacedByPending.get(editingLoadId)!.id}` : editingLoadId}
                       hourStart={scheduleHourStart}
                       hourEnd={scheduleHourEnd}
                       draggableIdPrefix="main"
                       minWidth={is2xl ? 520 : undefined}
                       onLoadClick={(load) => {
-                        setEditingLoadId(load.id);
+                        // the pending block of a changed approved block opens that block, with the latest values
+                        const replaced = load.id.startsWith("pending-") ? pendingRequests.find((r) => `pending-${r.id}` === load.id)?.replacesLoadId : null;
+                        setEditingLoadId(replaced ?? load.id);
                         setPendingAssignment(null);
                         // Sync side panels: faculty + room preview should follow the clicked block.
                         setOverlayFacultyId(load.facultyId ?? "");
@@ -1762,7 +1864,6 @@ export function SchedulerPage() {
                       title="Reload room availability"
                     >
                       <RefreshCw size={14} className={roomLoadsLoading ? "animate-spin" : ""} aria-hidden />
-                      Reload
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">
@@ -1857,7 +1958,6 @@ export function SchedulerPage() {
                       title="Reload faculty schedule"
                     >
                       <RefreshCw size={14} className={overlayFacultyLoading ? "animate-spin" : ""} aria-hidden />
-                      Reload
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 mb-2 shrink-0">

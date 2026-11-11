@@ -9,7 +9,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: raevillena21/coe-vantage-backend:v0.9.0
+          image: raevillena21/coe-vantage-backend:v0.9.1
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
@@ -19,4 +19,3 @@ spec:
           # In production, prefer prisma migrate deploy over migrate dev
           command: ["npx"]
           args: ["prisma", "migrate", "deploy"]
-

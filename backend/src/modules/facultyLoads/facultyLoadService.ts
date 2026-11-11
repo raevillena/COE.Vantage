@@ -77,7 +77,7 @@ export interface ListFacultyLoadsQuery {
   semester?: number;
 }
 
-export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
+export async function listFacultyLoads(query: ListFacultyLoadsQuery, callerRole?: string) {
   const where: {
     facultyId?: string;
     roomId?: string;
@@ -112,9 +112,12 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery) {
       })
     : [];
   const openKeys = new Set(open.map((o) => `${o.roomId}|${o.academicYearId}|${o.semester}`));
+  // the admin and the dean may change any block (see assertLoadNotLocked), so none is locked for them
+  const canOverrideLock = callerRole === "ADMIN" || callerRole === "DEAN";
   return loads.map(({ studentClass, ...l }) => {
     const { curriculum, ...sc } = studentClass;
     const locked =
+      !canOverrideLock &&
       !!l.room &&
       curriculum.departmentId !== l.room.departmentId &&
       !openKeys.has(`${l.roomId}|${l.academicYearId}|${l.semester}`);
@@ -274,8 +277,8 @@ export async function getFacultyLoadById(id: string) {
 
 /** Preview conflicts without persisting. */
 /**
- * A split needs a different instructor than the block it splits, for the same subject and class and term.
- * Returns that block, or throws.
+ * The block a split starts from: it must be for the same subject, class and term. The new group may have the same
+ * instructor as that block (at another time) or a different one. Returns the block, or throws.
  */
 async function assertValidSplitSource(
   body: { splitOfLoadId: string; facultyId?: string | null; facultyDisplayName?: string | null; subjectId: string; studentClassId: string; semester: number; academicYearId: string }
@@ -284,10 +287,6 @@ async function assertValidSplitSource(
   if (!source || source.subjectId !== body.subjectId || source.studentClassId !== body.studentClassId || source.semester !== body.semester || source.academicYearId !== body.academicYearId) {
     throw badRequest("The block to split was not found for this subject and class");
   }
-  const sameInstructor = body.facultyId
-    ? source.facultyId === body.facultyId
-    : !source.facultyId && (source.facultyDisplayName ?? "").trim().toLowerCase() === (body.facultyDisplayName ?? "").trim().toLowerCase();
-  if (sameInstructor) throw badRequest("A split needs a different instructor than the original block");
   return source;
 }
 
@@ -378,22 +377,21 @@ export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: Ca
   return prisma.$transaction(async (tx) => {
     const conflictsAgain = await checkConflicts({ ...payload, isSplit: Boolean(splitSource) }, tx);
     assertNoConflicts(conflictsAgain);
+    let newGroup: number | null = null;
     if (splitSource) {
-      // The original instructor's blocks of this subject (all its repeat days) carry the label too.
+      const key = { studentClassId: splitSource.studentClassId, subjectId: splitSource.subjectId, academicYearId: splitSource.academicYearId, semester: splitSource.semester };
+      // The block being split (and the other days it repeats on) is group 1 when the class was not split yet; blocks that were
+      // split before already carry their group.
       await tx.facultyLoad.updateMany({
-        where: {
-          studentClassId: splitSource.studentClassId,
-          subjectId: splitSource.subjectId,
-          academicYearId: splitSource.academicYearId,
-          semester: splitSource.semester,
-          facultyId: splitSource.facultyId,
-          facultyDisplayName: splitSource.facultyDisplayName,
-        },
-        data: { isSplit: true },
+        where: { ...key, facultyId: splitSource.facultyId, facultyDisplayName: splitSource.facultyDisplayName, splitGroup: null },
+        data: { isSplit: true, splitGroup: 1 },
       });
+      const groups = await tx.facultyLoad.findMany({ where: { ...key, isSplit: true }, select: { splitGroup: true } });
+      // the new block starts the next group, whoever teaches it
+      newGroup = Math.max(1, ...groups.map((g) => g.splitGroup ?? 0)) + 1;
     }
     return tx.facultyLoad.create({
-      data,
+      data: { ...data, ...(newGroup != null ? { isSplit: true, splitGroup: newGroup } : {}) },
       include: {
         faculty: { select: { id: true, name: true, email: true } },
         subject: { select: { id: true, code: true, name: true, units: true, isLab: true, lecUnits: true, labUnits: true } },
@@ -491,14 +489,14 @@ export async function deleteFacultyLoad(id: string, caller?: CallerContext) {
   if (caller) await assertLoadNotLocked(load, caller);
   await prisma.facultyLoad.delete({ where: { id } });
   if (load.isSplit) {
-    // A split needs at least two instructors; when only one is left the label goes away.
+    // A split needs at least two groups; when only one is left the label goes away.
     const rest = await prisma.facultyLoad.findMany({
       where: { studentClassId: load.studentClassId, subjectId: load.subjectId, academicYearId: load.academicYearId, semester: load.semester, isSplit: true },
-      select: { id: true, facultyId: true, facultyDisplayName: true },
+      select: { id: true, splitGroup: true, facultyId: true, facultyDisplayName: true },
     });
-    const instructors = new Set(rest.map((l) => l.facultyId ?? `name:${(l.facultyDisplayName ?? "").trim().toLowerCase()}`));
-    if (instructors.size < 2 && rest.length > 0) {
-      await prisma.facultyLoad.updateMany({ where: { id: { in: rest.map((l) => l.id) } }, data: { isSplit: false } });
+    const groups = new Set(rest.map((l) => (l.splitGroup != null ? `g${l.splitGroup}` : (l.facultyId ?? `name:${(l.facultyDisplayName ?? "").trim().toLowerCase()}`))));
+    if (groups.size < 2 && rest.length > 0) {
+      await prisma.facultyLoad.updateMany({ where: { id: { in: rest.map((l) => l.id) } }, data: { isSplit: false, splitGroup: null } });
     }
   }
 }
@@ -628,6 +626,7 @@ export async function copyClassSchedule(body: CopyFromPreviousFacultyLoadBody, c
           semester: targetSemester,
           academicYearId: targetAcademicYearId,
           isSplit: load.isSplit,
+          splitGroup: load.splitGroup,
         },
       });
 
@@ -762,7 +761,7 @@ export async function autoAssignForClass(
     },
   });
   for (const req of pendingRequests) {
-    const mins = timeToMinutes(req.endTime) - timeToMinutes(req.startTime);
+    const mins = Math.max(0, timeToMinutes(req.endTime) - timeToMinutes(req.startTime));
     scheduledBySubject.set(req.subjectId, (scheduledBySubject.get(req.subjectId) ?? 0) + mins);
   }
 

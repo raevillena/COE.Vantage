@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
@@ -102,6 +104,7 @@ export function GeSubjectsPage() {
       .catch(() => setColleges([]));
   }, []);
 
+  useRegisterReload(() => load());
   const load = useCallback(async () => {
     if (!yearId || (isAdmin && !collegeId)) return;
     setLoading(true);
@@ -209,7 +212,7 @@ export function GeSubjectsPage() {
         <HelpTip>
           The college-wide GE course offering sheet for a term. Add the whole sheet once, by pasting it or choosing a file, and chairmen import their classes&apos; GE subjects from it in the scheduler (the Import GE button) instead of pasting it themselves. Adding a sheet for a term replaces the one saved before.{viewerOnly ? " You can view the sheet here; the college secretary adds and replaces it." : ""}
         </HelpTip>
-        <HistoryButton entityType="GE_SHEET" title="GE subjects" />
+        <HistoryButton entityType="GE_SHEET" title="GE subjects" /><PageReloadButton />
       </div>
 
       <div className="flex flex-wrap items-end gap-3">

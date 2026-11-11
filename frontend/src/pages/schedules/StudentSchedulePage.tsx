@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { ShareScheduleDialog } from "../../components/schedules/ShareScheduleDialog";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, StudentClass, Department } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
@@ -25,6 +27,7 @@ export function StudentSchedulePage() {
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  useRegisterReload(() => setReloadKey((k) => k + 1));
   const role = user?.role;
   // A faculty member only sees the classes where they teach, and only through the report endpoints.
   const isFaculty = role === "FACULTY";
@@ -105,7 +108,7 @@ export function StudentSchedulePage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">Student Class Schedule</h1>
+        <div className="flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Student Class Schedule</h1><PageReloadButton /></div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedClassId && role !== "FACULTY" && (
             <ShareScheduleDialog kind="CLASS" targetId={selectedClassId} subject={`${classes.find((c) => c.id === selectedClassId)?.name ?? "this class"} schedule`} />

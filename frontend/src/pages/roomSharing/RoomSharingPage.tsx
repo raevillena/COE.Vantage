@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { classTakesSubject } from "../../utils/specializationSubjects";
 import { useSearchParams } from "react-router-dom";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
@@ -585,6 +587,12 @@ export function RoomSharingPage() {
     if (params.get("open") || params.get("tab")) setParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useRegisterReload(() => {
+    loadWaiting();
+    loadRooms();
+    loadDrafts();
+    loadRequests();
+  });
   useEffect(loadWaiting, [loadWaiting]);
   useEffect(loadRooms, [loadRooms]);
   useEffect(loadDrafts, [loadDrafts]);
@@ -651,7 +659,7 @@ export function RoomSharingPage() {
         <h1 className="text-xl font-semibold text-foreground">Room sharing</h1>
         <HelpTip>
           Once a college locks a semester, its rooms are open to other colleges for the time they are free. Chairmen draft blocks, the college secretary submits them as a request, the chairman of each room's department approves first, then the host college secretary gives the final approval. Deans view and are notified.
-        </HelpTip>
+        </HelpTip><PageReloadButton />
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-border" role="tablist">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReloadTick } from "../../context/PageReloadContext";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import { DaysLeftBadge, deadlineWhen, type CollegeDeadline } from "../../pages/deadlines/DeadlinesPage";
@@ -6,12 +7,13 @@ import { DaysLeftBadge, deadlineWhen, type CollegeDeadline } from "../../pages/d
 /** The next few college deadlines, on the dashboard. Shows nothing when there are none. */
 export function UpcomingDeadlines() {
   const [items, setItems] = useState<CollegeDeadline[]>([]);
+  const reloadTick = useReloadTick();
   useEffect(() => {
     apiClient
       .get<CollegeDeadline[]>("/college-deadlines")
       .then(({ data }) => setItems(data.filter((d) => new Date(d.dueAt).getTime() >= Date.now()).slice(0, 4)))
       .catch(() => setItems([]));
-  }, []);
+  }, [reloadTick]);
   if (items.length === 0) return null;
   return (
     <section className="mb-4 rounded-lg border border-border bg-surface p-4 shadow-sm" aria-label="Upcoming deadlines">

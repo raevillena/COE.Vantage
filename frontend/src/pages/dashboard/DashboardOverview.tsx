@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReloadTick } from "../../context/PageReloadContext";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear } from "../../types/api";
@@ -117,6 +118,7 @@ export function DashboardOverview() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const reloadTick = useReloadTick();
 
   useEffect(() => {
     apiClient
@@ -145,7 +147,7 @@ export function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  }, [academicYearId, semester]);
+  }, [academicYearId, semester, reloadTick]);
 
   /** Carry the selected term into detail links so they show the same numbers. */
   const withTerm = (to: string) => {

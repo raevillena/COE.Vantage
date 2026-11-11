@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
+import { useReloadTick } from "../../context/PageReloadContext";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, Room } from "../../types/api";
 import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
@@ -20,6 +22,7 @@ export function RoomAvailabilityPage() {
   const [selectedRoomId, setSelectedRoomId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
+  const reloadTick = useReloadTick();
   const released = useScheduleReleased(isFaculty, academicYearId, semester);
   const held = isFaculty && released !== true; // nothing until the college locks the term
 
@@ -70,13 +73,13 @@ export function RoomAvailabilityPage() {
     }
     const params = new URLSearchParams({ academicYearId, semester: String(semester), roomId: selectedRoomId });
     apiClient.get<FacultyLoad[]>(`/faculty-loads?${params}`).then(({ data }) => setLoads(data)).finally(() => setLoading(false));
-  }, [academicYearId, semester, selectedRoomId, isFaculty, held]);
+  }, [academicYearId, semester, selectedRoomId, isFaculty, held, reloadTick]);
 
   const room = rooms.find((r) => r.id === selectedRoomId);
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-foreground mb-4">Room Availability</h1>
+      <div className="mb-4 flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Room Availability</h1><PageReloadButton /></div>
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <div className="min-w-[180px]">
           <label className="mb-1 block text-sm font-medium text-foreground">Academic Year</label>

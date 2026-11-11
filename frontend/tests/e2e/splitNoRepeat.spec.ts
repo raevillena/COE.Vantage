@@ -23,6 +23,9 @@ test("a block already split between instructors cannot be repeated on other days
 
     const open = async () => {
       await page.goto("/scheduler");
+      // the blocks are in the 1st semester, whichever semester the page opens on
+      await page.getByRole("combobox", { name: "Scheduling Semester" }).click();
+      await page.getByRole("option", { name: /1st Sem/ }).click();
       await page.getByRole("combobox", { name: "Student class" }).click();
       await page.getByRole("option", { name: CE_CLASS }).first().click();
       await page.locator("[data-draggable-block]:visible").first().click();
@@ -34,6 +37,12 @@ test("a block already split between instructors cannot be repeated on other days
     await open();
     await expect(page.getByRole("group", { name: /Repeats on/ })).toBeVisible();
     await expect(page.getByTestId("split-no-repeat")).toHaveCount(0);
+
+    // pressing Split Class turns the repeat option off at once, before anything is saved
+    await page.getByRole("button", { name: "Split Class" }).click();
+    await expect(page.getByRole("note").filter({ hasText: "Split Class." })).toBeVisible();
+    await expect(page.getByRole("group", { name: /repeat/i })).toHaveCount(0);
+    await expect(page.getByTestId("split-no-repeat")).toBeVisible();
 
     // split it: both halves are now split blocks, so the picker goes and the note appears
     const b = await request.post(`${API}/faculty-loads`, { headers, data: { ...base, facultyId: fb!.id, splitOfLoadId: aId } });

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { apiClient } from "../../api/apiClient";
-import type { AssignmentRequest, FacultyLoad, Room } from "../../types/api";
+import type { AcademicYear, AssignmentRequest, FacultyLoad, Room } from "../../types/api";
 import { getApiErrorMessage } from "../../types/api";
 import toast from "react-hot-toast";
 import { Button } from "../../components/ui/button";
@@ -11,6 +13,8 @@ import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { useAppSelector } from "../../store/hooks";
 import { HelpTip } from "../../components/ui/helpTip";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
+import { HistoryButton } from "../../components/audit/HistoryButton";
+import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 
 /** Map a request to a FacultyLoad for the schedule grid (shows as "Awaiting approval" when pending). */
 function requestToDisplayLoad(r: AssignmentRequest): FacultyLoad {
@@ -155,16 +159,45 @@ export function RequestsPage() {
   const [scopeFilter, setScopeFilter] = useState<"all" | "mine" | "other">("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // who asked, and from which department (the options come from the requests on the page)
+  const [filterRequestor, setFilterRequestor] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
   const [editing, setEditing] = useState<AssignmentRequest | null>(null);
   const [previewRequest, setPreviewRequest] = useState<AssignmentRequest | null>(null);
   const [scheduleLoads, setScheduleLoads] = useState<FacultyLoad[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+  // the list is one scheduling semester at a time; it opens on the scheduling semester
+  const [years, setYears] = useState<AcademicYear[]>([]);
+  const [yearId, setYearId] = useState("");
+  const [semester, setSemester] = useState(1);
 
+  useEffect(() => {
+    apiClient
+      .get<AcademicYear[]>("/academic-years")
+      .then(({ data }) => {
+        const ys = Array.isArray(data) ? data : [];
+        setYears(ys);
+        const term = schedulingTerm(ys);
+        setYearId(term?.academicYearId ?? "none");
+        if (term) setSemester(term.semester === 2 ? 2 : 1);
+      })
+      .catch(() => {
+        toast.error("Could not load the academic years");
+        setYearId("none");
+      });
+  }, []);
+
+  useRegisterReload(() => load());
   const load = async () => {
+    if (!yearId) return;
     setLoading(true);
     try {
-      const params: Record<string, string> =
+      const params: Record<string, string | number> =
         statusFilter && statusFilter !== "__all__" ? { status: statusFilter } : {};
+      if (yearId !== "none") {
+        params.academicYearId = yearId;
+        params.semester = semester;
+      }
       if (scopeFilter !== "all") params.scope = scopeFilter;
       const { data } = await apiClient.get<AssignmentRequest[]>("/assignment-requests", { params });
       setList(Array.isArray(data) ? data : []);
@@ -177,7 +210,7 @@ export function RequestsPage() {
 
   useEffect(() => {
     load();
-  }, [statusFilter, scopeFilter]);
+  }, [statusFilter, scopeFilter, yearId, semester]);
 
   // Fetch faculty schedule when preview dialog opens so the approver sees the faculty's week with the request block.
   useEffect(() => {
@@ -239,7 +272,7 @@ export function RequestsPage() {
   const canCancel = (r: AssignmentRequest) => user?.role === "CHAIRMAN" && r.status === "PENDING" && r.requestedBy?.id === user.id;
 
   const searchLower = searchQuery.trim().toLowerCase();
-  const filteredList = searchLower
+  const searchedList = searchLower
     ? list.filter((r) => {
         const faculty = (r.faculty?.name ?? "").toLowerCase();
         const subjectCode = (r.subject?.code ?? "").toLowerCase();
@@ -262,12 +295,29 @@ export function RequestsPage() {
       })
     : list;
 
+  const NO_DEPARTMENT = "__none__";
+  const requestorOptions = [...new Map(list.filter((r) => r.requestedBy).map((r) => [r.requestedBy!.id, r.requestedBy!.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const departmentOptions = [...new Set(list.map((r) => r.requestedBy?.department?.name).filter((n): n is string => !!n))].sort((a, b) => a.localeCompare(b));
+  const filteredList = searchedList.filter(
+    (r) =>
+      (!filterRequestor || r.requestedBy?.id === filterRequestor) &&
+      (!filterDepartment || (filterDepartment === NO_DEPARTMENT ? !r.requestedBy?.department?.name : r.requestedBy?.department?.name === filterDepartment))
+  );
+  const filtersActive = Boolean(searchQuery.trim() || filterRequestor || filterDepartment);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterRequestor("");
+    setFilterDepartment("");
+  };
+  const filterSelectClass = "rounded border border-border-strong bg-surface px-2 py-2 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1";
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
 <h1 className="text-xl font-semibold text-foreground">
           Assignment requests</h1>
+<HistoryButton entityType="ASSIGNMENT_REQUEST" title="Assignment requests" /><PageReloadButton />
 <HelpTip>
             {scopeFilter === "mine"
               ? "Requests you created, with their current status."
@@ -277,6 +327,25 @@ export function RequestsPage() {
           </HelpTip>
 </div>
         <div className="flex flex-wrap items-center gap-3">
+          {years.length > 0 && (
+            <>
+              <div className="flex items-center gap-2">
+                <label htmlFor="req-year" className="text-sm text-foreground-muted">Academic year</label>
+                <select id="req-year" value={yearId} onChange={(e) => setYearId(e.target.value)} className={fieldClass + " !w-auto"}>
+                  {years.map((y) => (
+                    <option key={y.id} value={y.id}>{yearLabel(y, "scheduling")}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="req-sem" className="text-sm text-foreground-muted">Scheduling Semester</label>
+                <select id="req-sem" value={semester} onChange={(e) => setSemester(Number(e.target.value))} className={fieldClass + " !w-auto"}>
+                  <option value={1}>1st Semester</option>
+                  <option value={2}>2nd Semester</option>
+                </select>
+              </div>
+            </>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-sm text-foreground-muted">View</span>
             <Select.Root value={scopeFilter} onValueChange={(v) => setScopeFilter(v as "all" | "mine" | "other")}>
@@ -310,7 +379,8 @@ export function RequestsPage() {
 
 
       {list.length > 0 && (
-        <div className="relative max-w-md">
+        <div className="flex flex-wrap items-center gap-2" data-testid="request-filters">
+        <div className="relative w-full max-w-md">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" aria-hidden>
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </span>
@@ -322,6 +392,26 @@ export function RequestsPage() {
             className="w-full rounded border border-border-strong py-2 pl-9 pr-3 focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
             aria-label="Search requests"
           />
+        </div>
+          <select aria-label="Filter by requestor" value={filterRequestor} onChange={(e) => setFilterRequestor(e.target.value)} className={filterSelectClass}>
+            <option value="">All requestors</option>
+            {requestorOptions.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+          <select aria-label="Filter by requestor department" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className={filterSelectClass}>
+            <option value="">All departments</option>
+            {departmentOptions.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+            {list.some((r) => !r.requestedBy?.department?.name) && <option value={NO_DEPARTMENT}>No department</option>}
+          </select>
+          {filtersActive && (
+            <button type="button" onClick={clearFilters} className="rounded text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1">
+              Clear filters
+            </button>
+          )}
+          <span className="text-sm text-foreground-muted" aria-live="polite">Showing {filteredList.length} of {list.length}</span>
         </div>
       )}
 
@@ -335,9 +425,9 @@ export function RequestsPage() {
         </div>
       ) : filteredList.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface p-8 text-center">
-          <p className="text-foreground-muted mb-4">No requests match &quot;{searchQuery.trim()}&quot;.</p>
-          <button type="button" onClick={() => setSearchQuery("")} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
-            Clear search
+          <p className="text-foreground-muted mb-4">No requests match{searchQuery.trim() ? ` "${searchQuery.trim()}"` : " these filters"}.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1 rounded">
+            Clear search and filters
           </button>
         </div>
       ) : (

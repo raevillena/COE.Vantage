@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Link, useParams } from "react-router-dom";
 import {
   DndContext,
@@ -174,6 +176,7 @@ export function CurriculumBuildPage() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [specSubject, setSpecSubject] = useState<CurriculumSubject | null>(null);
 
+  useRegisterReload(() => loadData());
   const loadData = useCallback(async () => {
     if (!curriculumId) return;
     setLoading(true);
@@ -408,7 +411,7 @@ export function CurriculumBuildPage() {
           <div className="flex items-center gap-2">
 <h1 className="text-2xl font-semibold text-foreground">
             Build curriculum — {curriculum.name}</h1>
-<HelpTip>Drag subjects from the pool into a year and semester to add them. Drag a subject between semesters to move it, or back to the pool to remove it from the curriculum. With specializations, choose which one you are working on: subjects you add are made for it, and the tree shows what its classes take. Use Track on a subject to say which specializations take it.</HelpTip>
+<HelpTip>Drag subjects from the pool into a year and semester to add them. Drag a subject between semesters to move it, or back to the pool to remove it from the curriculum. With specializations, choose which one you are working on: subjects you add are made for it, and the tree shows what its classes take. Use Track on a subject to say which specializations take it.</HelpTip><PageReloadButton />
 </div>
         </div>
       </div>

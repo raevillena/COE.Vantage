@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
@@ -118,6 +120,7 @@ export function ExamRoomReservationPage() {
 
   const term = useMemo(() => ({ academicYearId, semester }), [academicYearId, semester]);
 
+  useRegisterReload(() => load());
   const load = useCallback(async () => {
     if (!academicYearId) return;
     const params = { academicYearId, semester };
@@ -242,7 +245,7 @@ export function ExamRoomReservationPage() {
           <h1 className="text-2xl font-semibold text-foreground">Exam Room Reservation</h1>
           <HelpTip>
             Plot your exams into rooms for the exam week. Drag one of your subjects onto a room's grid (or pick it, then click a time). First plotted, first served: a room cannot be double-booked, and a class cannot have two exams at once. The chairman of a room's department can remove a block or ask its owner to free it.
-          </HelpTip>
+          </HelpTip><PageReloadButton />
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-foreground-muted">

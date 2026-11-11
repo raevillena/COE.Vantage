@@ -453,7 +453,8 @@ model FacultyLoad {
   endTime            String // "HH:mm"
   semester           Int // 1 or 2
   academicYearId     String
-  isSplit            Boolean  @default(false) // the class is split between instructors for this subject (see facultyLoadService)
+  isSplit            Boolean  @default(false) // the class is split into groups for this subject (see facultyLoadService)
+  splitGroup         Int? // which group of a split this block is (1, 2, ...). One instructor may teach several groups
   hostCollegeId      String? // set when the room belongs to another college (an approved room request); the room's college can see the block
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

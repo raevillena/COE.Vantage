@@ -12,8 +12,11 @@ const DAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const inputClass =
   "h-8 rounded border border-border-strong bg-surface px-2 font-mono text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-focus-ring disabled:opacity-60";
 
-/** True when a block starts before or ends after the hours the scheduler normally works in, usually from a mistyped time. */
-const isOddHour = (l: FacultyLoad) => timeToMinutes(l.startTime) < HOUR_START * 60 || timeToMinutes(l.endTime) > HOUR_END * 60;
+/** True when a block ends before it starts (or at the same time): it has no length and counts for nothing. */
+const isBackwards = (l: FacultyLoad) => timeToMinutes(l.endTime) <= timeToMinutes(l.startTime);
+
+/** True when a block starts before or ends after the hours the scheduler normally works in, or runs backwards, usually from a mistyped time. */
+const isOddHour = (l: FacultyLoad) => timeToMinutes(l.startTime) < HOUR_START * 60 || timeToMinutes(l.endTime) > HOUR_END * 60 || isBackwards(l);
 
 /** HH:mm for a time input; the API keeps H:mm. */
 const pad = (t: string) => (/^\d:/.test(t) ? `0${t}` : t);
@@ -25,12 +28,15 @@ function Row({
   semester,
   academicYearId,
   onChanged,
+  newGroup,
 }: {
   load: FacultyLoad;
   canEdit: boolean;
   semester: number;
   academicYearId: string;
   onChanged: () => void;
+  /** First row of another subject: draws a stronger line above it so the groups read apart. */
+  newGroup?: boolean;
 }) {
   const [day, setDay] = useState(load.dayOfWeek);
   const [start, setStart] = useState(pad(load.startTime));
@@ -80,10 +86,10 @@ function Row({
   };
 
   return (
-    <tr className={`border-b border-border last:border-b-0 ${odd ? "bg-warning/10" : ""}`}>
+    <tr className={`border-b border-border last:border-b-0 ${odd ? "bg-warning/10" : ""} ${newGroup ? "border-t-2 border-t-border-strong" : ""}`}>
       <td className="px-2 py-1.5 font-mono text-xs text-foreground">
         {load.subject?.code ?? "?"}
-        {odd && <span className="ml-1.5 rounded bg-warning/25 px-1 py-px font-sans text-[10px] font-semibold text-foreground">odd hour</span>}
+        {odd && <span className="ml-1.5 rounded bg-warning/25 px-1 py-px font-sans text-[10px] font-semibold text-foreground">{isBackwards(load) ? "ends before it starts" : "odd hour"}</span>}
       </td>
       <td className="px-2 py-1.5 font-mono text-xs text-foreground-muted">{load.studentClass?.name ?? "—"}</td>
       <td className="px-2 py-1.5 font-mono text-xs text-foreground-muted">{load.faculty?.name ?? load.facultyDisplayName ?? "—"}</td>
@@ -147,7 +153,15 @@ export function RawBlocksEditor({
     () =>
       loads
         .filter((l) => !l.id.startsWith("pending-"))
-        .sort((a, b) => Number(isOddHour(b)) - Number(isOddHour(a)) || a.dayOfWeek - b.dayOfWeek || timeToMinutes(a.startTime) - timeToMinutes(b.startTime)),
+        // odd blocks first, then the same subject together (then class), each in week order
+        .sort(
+          (a, b) =>
+            Number(isOddHour(b)) - Number(isOddHour(a)) ||
+            (a.subject?.code ?? "").localeCompare(b.subject?.code ?? "") ||
+            (a.studentClass?.name ?? "").localeCompare(b.studentClass?.name ?? "") ||
+            a.dayOfWeek - b.dayOfWeek ||
+            timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+        ),
     [loads]
   );
   const odd = rows.filter(isOddHour);
@@ -220,8 +234,16 @@ export function RawBlocksEditor({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((l) => (
-                      <Row key={`${l.id}-${l.dayOfWeek}-${l.startTime}-${l.endTime}`} load={l} canEdit={canEdit} semester={semester} academicYearId={academicYearId} onChanged={onChanged} />
+                    {rows.map((l, i) => (
+                      <Row
+                        key={`${l.id}-${l.dayOfWeek}-${l.startTime}-${l.endTime}`}
+                        load={l}
+                        canEdit={canEdit}
+                        semester={semester}
+                        academicYearId={academicYearId}
+                        onChanged={onChanged}
+                        newGroup={i > 0 && (rows[i - 1].subjectId !== l.subjectId || isOddHour(rows[i - 1]) !== isOddHour(l))}
+                      />
                     ))}
                   </tbody>
                 </table>

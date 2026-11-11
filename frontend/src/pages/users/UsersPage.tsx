@@ -1,4 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Pager, usePaging } from "../../components/ui/pager";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { ClipboardList, Mail, MoreVertical, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
@@ -134,6 +136,7 @@ export function UsersPage() {
     }
   };
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -450,7 +453,7 @@ export function UsersPage() {
       <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Users</h1>
-          <HistoryButton entityType="USER,DELOADING" title="Users" />
+          <HistoryButton entityType="USER,DELOADING" title="Users" /><PageReloadButton />
         </div>
         <div className="flex gap-2">
           <Button

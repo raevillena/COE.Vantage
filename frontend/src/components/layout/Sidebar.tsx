@@ -324,7 +324,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           )}
           <NavItem to="/profile" icon={User} onClose={onClose}>Profile</NavItem>
           <NavItem to="/about" icon={Info} onClose={onClose}>About</NavItem>
-          <NavItem to="/feedback" icon={MessageSquarePlus} onClose={onClose}>Feedback</NavItem>
+          <NavItem to="/feedback" icon={MessageSquarePlus} onClose={onClose}>Feedback/Bug</NavItem>
         </div>
       </nav>
     </aside>

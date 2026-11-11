@@ -38,7 +38,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.9.0" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.9.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
@@ -657,7 +657,7 @@ test.describe("feedback", () => {
     const fpage = await fctx.newPage();
     await login(fpage, "faculty1@coe.vantage");
     await fpage.getByRole("link", { name: "Feedback" }).click();
-    await expect(fpage.getByRole("heading", { name: "Feedback", exact: true })).toBeVisible();
+    await expect(fpage.getByRole("heading", { name: "Feedback/Bug", exact: true })).toBeVisible();
     await expect(fpage.getByLabel("Picture storage")).toHaveCount(0);
     await fpage.getByRole("button", { name: "New feedback" }).click();
     const dlg = fpage.getByRole("dialog");
@@ -2193,6 +2193,9 @@ test.describe("splitting a repeated subject", () => {
 
       await login_(page, "chairman@coe.vantage");
       await page.goto("/scheduler");
+      // the blocks above are in the 1st semester, whichever semester the page opens on
+      await page.getByRole("combobox", { name: "Scheduling Semester" }).click();
+      await page.getByRole("option", { name: /1st Sem/ }).click();
       await page.getByText("Select class").first().click();
       await page.getByRole("option", { name: CE_CLASS }).click();
       await page.getByText(/D\. Santos/).first().click({ force: true });
@@ -2212,7 +2215,7 @@ test.describe("splitting a repeated subject", () => {
       const afterSplit = await loadsOf();
       expect(afterSplit.filter((l) => l.facultyId === coFaculty!.id && l.subject.code === "CE101").map((l) => l.dayOfWeek).sort()).toEqual([1, 3, 5]);
 
-      // Split Class: same day, time and room, a different instructor is required, and both blocks are labelled
+      // Split Class: same day, time and room; the same instructor is a clash at the same time, another one is fine, and all blocks are labelled
       await page.getByText(/D\. Santos/).first().click({ force: true });
       await page.getByRole("button", { name: "Split Class" }).click();
       await expect(page.getByRole("note").filter({ hasText: "Split Class." })).toBeVisible();
@@ -2223,13 +2226,13 @@ test.describe("splitting a repeated subject", () => {
       const facultyBox = page.getByLabel("Faculty", { exact: true }).first(); // a search field, not a text label
       await facultyBox.click();
       await page.getByRole("option", { name: /Santos/ }).first().click();
-      await expect(page.getByText(/same instructor as the original/)).toBeVisible();
+      // the same instructor at the very same time cannot teach two groups at once
+      await expect(page.getByText("Faculty has another class at this time.")).toBeVisible();
       await expect(save).toBeDisabled();
 
       await facultyBox.click();
       await facultyBox.fill("Calaro"); // the list is filtered by what is typed
       await page.getByRole("option", { name: /Calaro/ }).first().click();
-      await expect(page.getByText(/same instructor as the original/)).toHaveCount(0);
       await expect(page.getByText("No conflicts. You can save.")).toBeVisible();
       await save.click();
       await expect(page.getByText(/Load added|1 block added/).first()).toBeVisible();
@@ -2437,7 +2440,7 @@ test.describe("subject components", () => {
 });
 
 test.describe("split rules", () => {
-  test("a split needs a different instructor, may use another time, still cannot clash with other subjects, and loses its label when undone", async ({ request }) => {
+  test("a split may use the same or another instructor, may use another time, still cannot clash with other subjects, and loses its label when undone", async ({ request }) => {
     const token = ((await (await request.post(`${API}/auth/login`, { data: { email: "chairman@coe.vantage", password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
     const headers = { Authorization: `Bearer ${token}` };
     const get = async <T,>(path: string) => (await (await request.get(`${API}${path}`, { headers })).json()) as T;
@@ -2463,7 +2466,7 @@ test.describe("split rules", () => {
       const originalId = ((await original.json()) as { id: string }).id;
       const split = (over: Record<string, unknown>) => ({ subjectId: s1!.id, dayOfWeek: 2, startTime: "16:00", endTime: "17:00", splitOfLoadId: originalId, ...over });
 
-      // same instructor: refused. Team teaching and split with another instructor in the same room and time: fine
+      // the same instructor at the same time: a clash (one person cannot teach two groups at once). Another instructor in the same room and time: fine
       expect((await add(split({ facultyId: fa!.id, roomId: r2!.id }))).status()).toBe(400);
       expect((await add(split({ facultyId: fb!.id, roomId: r1!.id }))).status()).toBe(201);
       // another time, overlapping its sibling: fine in another room (the split shares the class), not in the same room
@@ -2472,8 +2475,15 @@ test.describe("split rules", () => {
       // a different subject at that time is still a clash for the class, split or not
       expect((await add(split({ subjectId: s2!.id, facultyId: fc!.id, roomId: r2!.id, startTime: "16:15", endTime: "16:45" }))).status()).toBe(400);
 
+      // the same instructor may teach another group at another time
+      const again = await add(split({ facultyId: fa!.id, roomId: r2!.id, startTime: "17:30", endTime: "18:30" }));
+      expect(again.status(), await again.text()).toBe(201);
+
       const flags = async () => (await get<{ id: string; isSplit: boolean }[]>(`/faculty-loads?studentClassId=${cls!.id}&academicYearId=${ay.id}&semester=1`)).filter((l) => created.includes(l.id));
       expect((await flags()).every((l) => l.isSplit)).toBe(true);
+      // every block belongs to a numbered group: the original is 1 and each new split starts the next one
+      const groups = (await get<{ id: string; splitGroup: number | null }[]>(`/faculty-loads?studentClassId=${cls!.id}&academicYearId=${ay.id}&semester=1`)).filter((l) => created.includes(l.id));
+      expect(groups.map((l) => l.splitGroup).sort()).toEqual([1, 2, 3, 4]);
       // undo the splits: with one instructor left the label goes
       for (const id of created.slice(1)) await request.delete(`${API}/faculty-loads/${id}`, { headers });
       created.splice(1);
@@ -2813,7 +2823,8 @@ test.describe("scheduler: the admin", () => {
 });
 
 test.describe("assignment requests", () => {
-  test("the chairman who asked can cancel a waiting request; nobody else can, and a cancelled request cannot be decided", async ({ request }) => {
+  test("the chairman who asked can cancel a waiting request; nobody else can, and a cancelled request cannot be decided", async ({ request, page }) => {
+    test.setTimeout(120_000);
     type Named = { id: string };
     const tok = async (email: string) => ((await (await request.post(`${API}/auth/login`, { data: { email, password: PASSWORD } })).json()) as { accessToken: string }).accessToken;
     const bearer = async (email: string) => ({ Authorization: `Bearer ${await tok(email)}` });
@@ -2868,7 +2879,64 @@ test.describe("assignment requests", () => {
       // a cancelled request leaves no block behind and frees the slot to ask again
       const again = await ask(1);
       expect((await cancel(again.id, asker.headers)).status()).toBe(200);
+
+      // the list is per semester: both requests are in the 1st semester of this year, none in the 2nd
+      const ids = async (semester: number) =>
+        ((await (await request.get(`${API}/assignment-requests?academicYearId=${ay.id}&semester=${semester}`, { headers: asker.headers })).json()) as { id: string }[]).map((r) => r.id);
+      expect(await ids(1)).toEqual(expect.arrayContaining([first.id, again.id]));
+      expect(await ids(2)).not.toContain(first.id);
+      // every change left a history entry: sent, changed, cancelled
+      const history = (await (await request.get(`${API}/audit?entityType=ASSIGNMENT_REQUEST&entityId=${first.id}`, { headers: admin })).json()) as { items: { summary: string; semester: number | null }[] };
+      expect(history.items.map((i) => i.summary.split(":")[0]).sort()).toEqual(["Cancelled an assignment request", "Changed the day, time or room of an assignment request", "Sent an assignment request"]);
+      expect(history.items.every((i) => i.semester === 1)).toBe(true);
+
+      // an APPROVED block of another department's faculty cannot be moved or resized without approval again
+      const third = await ask(3);
+      const approved = await request.post(`${API}/assignment-requests/${third.id}/approve`, { headers: owner.headers, data: {} });
+      expect(approved.status(), await approved.text()).toBe(200);
+      const block = ((await approved.json()) as { load: { id: string } }).load;
+      const body = { facultyId: faculty.id, subjectId: made.subj, studentClassId: made.cls, roomDisplayName: "Off-site", dayOfWeek: 3, startTime: "9:00", endTime: "11:00", semester: 1, academicYearId: ay.id };
+      const resize = await request.patch(`${API}/faculty-loads/${block.id}`, { headers: asker.headers, data: body });
+      expect(resize.status(), await resize.text()).toBe(202);
+      expect(await resize.json()).toMatchObject({ requestCreated: true });
+      const stored = async () => ((await (await request.get(`${API}/faculty-loads?studentClassId=${made.cls}&academicYearId=${ay.id}&semester=1`, { headers: admin })).json()) as { id: string; endTime: string }[]).find((l) => l.id === block.id);
+      expect((await stored())?.endTime).toBe("10:00"); // the approved block is untouched
+      // changing it again while the first change waits revises THAT request: still one pending change, with the latest values
+      const pendingFor = async () => ((await (await request.get(`${API}/assignment-requests?status=PENDING`, { headers: owner.headers })).json()) as { id: string; replacesLoadId?: string; endTime: string }[]).filter((r) => r.replacesLoadId === block.id);
+      const firstPending = await pendingFor();
+      expect(firstPending.length).toBe(1);
+      const again2 = await request.patch(`${API}/faculty-loads/${block.id}`, { headers: asker.headers, data: { ...body, endTime: "12:00" } });
+      expect(again2.status(), await again2.text()).toBe(202);
+      const latest = await pendingFor();
+      expect(latest.map((r) => r.id)).toEqual([firstPending[0].id]);
+      expect(latest[0].endTime).toBe("12:00");
+      expect((await stored())?.endTime).toBe("10:00"); // the approved block is still untouched
+
+      // on the grid the class shows ONE pending block for it, not the approved block plus a pending copy
+      await login_(page, `arasker${stamp}@coe.vantage`);
+      await page.goto("/scheduler");
+      await page.getByRole("combobox", { name: "Scheduling Semester" }).click();
+      await page.getByRole("option", { name: /1st Sem/ }).click();
+      await page.getByText("Select class").first().click();
+      await page.getByRole("option", { name: `AR Class ${stamp}` }).click();
+      await expect(page.getByText(`AR${stamp % 100000}`).first()).toBeVisible();
+      await expect(page.getByText(`AR${stamp % 100000} ·`)).toHaveCount(1);
+
+      // changing it back to what is approved withdraws the waiting change
+      const back = await request.patch(`${API}/faculty-loads/${block.id}`, { headers: asker.headers, data: { ...body, endTime: "10:00" } });
+      expect(back.status(), await back.text()).toBe(200);
+      expect((await pendingFor()).length).toBe(0);
+
+      // a new change, then the owner approves it: the block now has the new length
+      expect((await request.patch(`${API}/faculty-loads/${block.id}`, { headers: asker.headers, data: { ...body, endTime: "11:00" } })).status()).toBe(202);
+      const waiting = (await pendingFor())[0];
+      expect(waiting).toBeTruthy();
+      expect((await request.post(`${API}/assignment-requests/${waiting.id}/approve`, { headers: owner.headers, data: {} })).status()).toBe(200);
+      const after = ((await (await request.get(`${API}/faculty-loads?studentClassId=${made.cls}&academicYearId=${ay.id}&semester=1`, { headers: admin })).json()) as { id: string; endTime: string; dayOfWeek: number }[]).filter((l) => l.dayOfWeek === 3);
+      expect(after.map((l) => l.endTime)).toEqual(["11:00"]);
     } finally {
+      const left = (await (await request.get(`${API}/faculty-loads?studentClassId=${made.cls}`, { headers: admin })).json()) as { id: string }[] | unknown;
+      if (Array.isArray(left)) for (const l of left as { id: string }[]) await request.delete(`${API}/faculty-loads/${l.id}`, { headers: admin });
       for (const id of made.users) await request.delete(`${API}/users/${id}`, { headers: admin });
       for (const [path, id] of [["/student-classes", made.cls], ["/subjects", made.subj], ["/curriculum", made.curr]]) if (id) await request.delete(`${API}${path}/${id}`, { headers: admin });
       for (const id of made.depts) await request.delete(`${API}/departments/${id}`, { headers: admin });

@@ -4,6 +4,8 @@ export type ScheduledSlot = {
   startTime: string;
   endTime: string;
   isSplit?: boolean | null;
+  /** Which group of a split this block is; one instructor may teach several groups. Older rows without it count per instructor. */
+  splitGroup?: number | null;
   facultyId?: string | null;
   facultyDisplayName?: string | null;
 };
@@ -27,7 +29,7 @@ export function scheduledMinutes(loads: ScheduledSlot[], groupKey: (l: Scheduled
     const g = groupKey(l);
     const slot = `${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
     if (l.isSplit) {
-      const who = l.facultyId ?? `name:${(l.facultyDisplayName ?? "").trim().toLowerCase()}`;
+      const who = l.splitGroup != null ? `group:${l.splitGroup}` : (l.facultyId ?? `name:${(l.facultyDisplayName ?? "").trim().toLowerCase()}`);
       const byWho = halves.get(g) ?? new Map<string, Set<string>>();
       const slots = byWho.get(who) ?? new Set<string>();
       slots.add(slot);
@@ -38,7 +40,8 @@ export function scheduledMinutes(loads: ScheduledSlot[], groupKey: (l: Scheduled
     if (seen.has(`${g}|${slot}`)) continue;
     seen.add(`${g}|${slot}`);
     const mins = toMin(l.endTime) - toMin(l.startTime);
-    if (!Number.isNaN(mins)) out.set(g, (out.get(g) ?? 0) + mins);
+    // a block that ends before it starts (saved before that was refused) counts as nothing, never as negative hours
+    if (!Number.isNaN(mins) && mins > 0) out.set(g, (out.get(g) ?? 0) + mins);
   }
   for (const [g, byWho] of halves) {
     let best = 0;
@@ -47,7 +50,7 @@ export function scheduledMinutes(loads: ScheduledSlot[], groupKey: (l: Scheduled
       for (const slot of slots) {
         const [, start, end] = slot.split("|");
         const mins = toMin(end) - toMin(start);
-        if (!Number.isNaN(mins)) total += mins;
+        if (!Number.isNaN(mins) && mins > 0) total += mins;
       }
       best = Math.max(best, total);
     }

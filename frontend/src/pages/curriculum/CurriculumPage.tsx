@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { Link } from "react-router-dom";
 import { apiClient } from "../../api/apiClient";
@@ -56,6 +58,7 @@ export function CurriculumPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("");
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -295,7 +298,7 @@ export function CurriculumPage() {
       <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Curriculum</h1>
-          <HistoryButton entityType="CURRICULUM" title="Curriculum" />
+          <HistoryButton entityType="CURRICULUM" title="Curriculum" /><PageReloadButton />
         </div>
         {canEdit && (
           <div className="flex gap-2">

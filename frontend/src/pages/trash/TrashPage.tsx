@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { FilterSelect, ListFilterBar } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
 import type { Room, Department, Curriculum, Subject, StudentClass, AcademicYear, UserListItem } from "../../types/api";
@@ -80,6 +82,7 @@ export function TrashPage() {
     users: [],
   });
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -286,7 +289,7 @@ export function TrashPage() {
   return (
     <div>
       <div className="mb-4 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-foreground">Trash</h1>
+        <div className="flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Trash</h1><PageReloadButton /></div>
       </div>
       <p className="mb-6 text-sm text-foreground-muted">
         Items moved to trash can be restored or permanently deleted here. Only admins can access Trash.

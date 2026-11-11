@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Pager, usePaging } from "../../components/ui/pager";
 import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { apiClient } from "../../api/apiClient";
@@ -40,6 +42,7 @@ export function StudentClassesPage() {
   const [filterYear, setFilterYear] = useState("");
   const [filterSpecialization, setFilterSpecialization] = useState("");
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -228,7 +231,7 @@ export function StudentClassesPage() {
       <div className="mb-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Student Classes</h1>
-          <HistoryButton entityType="STUDENT_CLASS" title="Student classes" />
+          <HistoryButton entityType="STUDENT_CLASS" title="Student classes" /><PageReloadButton />
         </div>
         {!readOnly && <Button type="button" onClick={openCreate}>Add Student Class</Button>}
       </div>

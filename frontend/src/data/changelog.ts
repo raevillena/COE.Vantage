@@ -15,6 +15,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.9.1",
+    date: "2026-11-11",
+    title: "Reload on every page, requests by semester, Split Class with the same instructor, and Scheduler fixes",
+    changes: [
+      { kind: "new", text: "Reload: every page that lists data has a small reload icon beside its title (next to History where there is one). It fetches the page's data again and keeps your filters, search and selections." },
+      { kind: "new", text: "Requests: the list is per scheduling semester, opens on the current scheduling semester, and can be switched to another year or semester. New filters for who asked and the asker's department, and a History button for the admin, dean and college secretary." },
+      { kind: "new", text: "Scheduler: a Reload button beside Block colors, and \"Locked\" shown beside \"Scheduling <class>\", on the schedule label and in the semester, class and faculty dropdowns when the semester is locked." },
+      { kind: "improved", text: "Split Class can now give a group to the same instructor at a different time, not only to another instructor. A split is made of numbered groups, and the hours still count one group. The repeat-on-days option turns off as soon as you press Split Class." },
+      { kind: "improved", text: "Changing an approved block of another department's faculty (moving it, resizing it, or changing its room or person) now needs that department's approval again. The block stays as approved until then. Changing it again while it waits updates the same request, so there is one pending block for the latest change, and changing it back withdraws the request." },
+      { kind: "improved", text: "Email notifications: the once-a-day digest of notifications you have not read is now off until you turn it on in your Profile." },
+      { kind: "improved", text: "Scheduler: on wide screens the subject and assignment panels take the height of the timetable and scroll inside it. Blocks after 6 PM open the evening rows by themselves instead of staying hidden. In the Code list, the blocks of the same subject are grouped together." },
+      { kind: "improved", text: "Notifications on screen stay for 5 seconds, and the Feedback menu is now called Feedback/Bug." },
+      { kind: "fixed", text: "Blocks saved with an end time before their start time (for example 2 PM to 3 AM) no longer count as negative hours, which had turned the subject yellow. They are marked in the Code list so they can be corrected or removed." },
+      { kind: "fixed", text: "Hours with part-hours no longer show long decimals (for example 3.97/1 hrs instead of 3.966666666666667)." },
+    ],
+  },
+  {
     version: "v0.9.0",
     date: "2026-11-11",
     title: "College deadlines with reminders, schedule sharing, Google sign-in and safer sign-ins",

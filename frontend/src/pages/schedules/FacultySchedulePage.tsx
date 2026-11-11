@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { ShareScheduleDialog } from "../../components/schedules/ShareScheduleDialog";
 import { calendarTerm, schedulingTerm, yearLabel } from "../../utils/currentTerm";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, UserListItem, Department } from "../../types/api";
 import { departmentLabel } from "../../utils/departmentLabel";
@@ -23,6 +25,7 @@ export function FacultySchedulePage() {
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  useRegisterReload(() => setReloadKey((k) => k + 1));
   const role = user?.role;
   const needsDepartmentFilter = role === "ADMIN" || role === "DEAN" || role === "OFFICER" || role === "COLLEGE_SECRETARY" || role === "PRESIDENT" || role === "UNIT";
 
@@ -89,7 +92,7 @@ export function FacultySchedulePage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-foreground">Faculty Schedule</h1>
+        <div className="flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Faculty Schedule</h1><PageReloadButton /></div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedFacultyId && (
             <ShareScheduleDialog kind="FACULTY" targetId={selectedFacultyId} subject={`${faculties.find((f) => f.id === selectedFacultyId)?.name ?? "this faculty member"}'s schedule`} />

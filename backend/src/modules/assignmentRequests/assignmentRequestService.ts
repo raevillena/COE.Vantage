@@ -95,6 +95,9 @@ export async function listAssignmentRequests(query: ListAssignmentRequestsQuery,
 
   const where: Record<string, unknown> = {};
   if (query.status) where.status = query.status;
+  // the Requests page shows one scheduling semester at a time
+  if (query.academicYearId) where.academicYearId = query.academicYearId;
+  if (query.semester) where.semester = Number(query.semester);
 
   const scope = query.scope ?? "all";
 
@@ -239,6 +242,61 @@ export async function updateRequest(id: string, caller: CallerContext, body: Upd
     data: { roomId, roomDisplayName: roomId ? null : body.roomDisplayName?.trim() || null, dayOfWeek: body.dayOfWeek, startTime: body.startTime, endTime: body.endTime },
   });
   void notifyUsers(await chairmenOf(request.faculty.departmentId), { type: "REQUEST", title: "An assignment request was changed", body: `${request.subject.code} · ${request.studentClass.name} has a new day, time or room`, link: "/requests", groupKey: `request-edit-${id}` }, { exceptUserId: caller.id });
+  return updated;
+}
+
+/**
+ * The block of another department's faculty was changed again while its first change still waits: the waiting request is
+ * revised to the LATEST values (so there is one pending block, awaiting the latest approval) instead of a new request.
+ */
+export async function reviseReplacementRequest(
+  id: string,
+  caller: CallerContext,
+  body: { facultyId: string; roomId: string | null; roomDisplayName: string | null; dayOfWeek: number; startTime: string; endTime: string }
+) {
+  const request = await prisma.crossDepartmentLoadRequest.findUnique({
+    where: { id },
+    include: { subject: { select: { code: true } }, studentClass: { select: { name: true } } },
+  });
+  if (!request) throw notFound("Request not found");
+  if (request.requestedById !== caller.id) throw forbidden("Only the chairman who made this request can change it");
+  if (request.status !== "PENDING") throw badRequest("Request is no longer pending");
+  if (toMinutes(body.startTime) >= toMinutes(body.endTime)) throw badRequest("The end time must be after the start time.");
+  await assertTermUnlocked(request.academicYearId, request.semester, request.collegeId);
+  const roomDisplayName = body.roomId ? null : body.roomDisplayName?.trim() || null;
+  const same =
+    request.facultyId === body.facultyId &&
+    (request.roomId ?? null) === body.roomId &&
+    (request.roomDisplayName ?? null) === roomDisplayName &&
+    request.dayOfWeek === body.dayOfWeek &&
+    toMinutes(request.startTime) === toMinutes(body.startTime) &&
+    toMinutes(request.endTime) === toMinutes(body.endTime);
+  if (same) return request;
+  const c = await checkConflicts({
+    facultyId: body.facultyId,
+    subjectId: request.subjectId,
+    studentClassId: request.studentClassId,
+    roomId: body.roomId ?? undefined,
+    dayOfWeek: body.dayOfWeek,
+    startTime: body.startTime,
+    endTime: body.endTime,
+    semester: request.semester,
+    academicYearId: request.academicYearId,
+    excludeLoadId: request.replacesLoadId ?? undefined,
+  });
+  if (c.roomConflict) throw badRequest("The room is already booked at that time.");
+  if (c.facultyConflict) throw badRequest("The faculty member is already teaching at that time.");
+  if (c.studentConflict) throw badRequest("The class already has a subject at that time.");
+  const updated = await prisma.crossDepartmentLoadRequest.update({
+    where: { id },
+    data: { facultyId: body.facultyId, roomId: body.roomId, roomDisplayName, dayOfWeek: body.dayOfWeek, startTime: body.startTime, endTime: body.endTime },
+  });
+  const faculty = await prisma.user.findUnique({ where: { id: body.facultyId }, select: { departmentId: true } });
+  void notifyUsers(
+    await chairmenOf(faculty?.departmentId ?? null),
+    { type: "REQUEST", title: "An assignment request was changed", body: `${request.subject.code} · ${request.studentClass.name} has a new person, day, time or room`, link: "/requests", groupKey: `request-edit-${id}` },
+    { exceptUserId: caller.id }
+  );
   return updated;
 }
 

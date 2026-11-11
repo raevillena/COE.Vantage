@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { BellRing, Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
@@ -69,6 +71,7 @@ export function DeadlinesPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<CollegeDeadline | null>(null);
 
+  useRegisterReload(() => load());
   const load = useCallback(async () => {
     try {
       const { data } = await apiClient.get<CollegeDeadline[]>("/college-deadlines");
@@ -169,7 +172,7 @@ export function DeadlinesPage() {
     <div className="max-w-3xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Deadlines</h1>
+          <div className="flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Deadlines</h1><PageReloadButton /></div>
           <p className="text-sm text-foreground-muted">College deadlines. You get a reminder in the app and by email before each one.</p>
         </div>
         {canEdit && (

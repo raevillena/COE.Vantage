@@ -92,7 +92,7 @@ interface AssignmentFormProps {
   roomAvailabilityMap?: Record<string, boolean>;
   /** While editing a saved load: start a new pending assignment with the same subject & class (user picks another time). */
   onAddAnotherSession?: () => void;
-  /** Split Class: the saved block this assignment splits. It needs a different instructor; the time may differ. */
+  /** Split Class: the saved block this assignment splits. The new group may have the same or another instructor; the time may differ. */
   splitOfLoadId?: string;
   /** Editing a saved block that is already split between instructors: it cannot be repeated on other days. */
   isSplitBlock?: boolean;
@@ -422,7 +422,8 @@ export function AssignmentForm({
   });
 
   const repeat = useRepeatDays({
-    enabled: (!editingLoadId || isEditingSavedLoad) && !(isSplitBlock && isEditingSavedLoad),
+    // no repeats on a split: not for a block that is already split, and not for the new group being added by Split Class
+    enabled: (!editingLoadId || isEditingSavedLoad) && !(isSplitBlock && isEditingSavedLoad) && !(splitOfLoadId && !editingLoadId),
     editingLoadId: isEditingSavedLoad ? editingLoadId : null,
     primaryDay: dayOfWeek,
     ready:
@@ -433,15 +434,6 @@ export function AssignmentForm({
     bodyForDay,
     recheckKey: [facultyId, facultyDisplayName, isOthersFaculty, subjectId, studentClassId, roomId, roomDisplayName, isOffSystemRoom, startTime, endTime, academicYearId, semester].join("|"),
   });
-
-  /** A split needs a different instructor than the block it splits. */
-  const sameAsSplitSource = Boolean(
-    splitOfLoadId &&
-      splitFromFaculty &&
-      (isOthersFaculty
-        ? splitFromFaculty.id == null && (facultyDisplayName ?? "").trim().toLowerCase() === splitFromFaculty.name.trim().toLowerCase() && (facultyDisplayName ?? "").trim() !== ""
-        : facultyId && splitFromFaculty.id === facultyId)
-  );
 
   const hasConflict =
     preview &&
@@ -617,8 +609,7 @@ export function AssignmentForm({
     <div className="flex flex-col min-h-0 flex-1 gap-3">
       {splitOfLoadId && !editingLoadId && (
         <div className="rounded border border-primary/40 bg-primary-muted px-3 py-2 text-sm text-foreground" role="note">
-          <strong>Split Class.</strong> Choose a different instructor than {splitFromFaculty?.name ?? "the original"}. The time is usually the same but can differ; it still cannot clash with other subjects. Both blocks are labelled Split.
-          {sameAsSplitSource && <p className="mt-1 text-danger">This is the same instructor as the original block. Pick someone else.</p>}
+          <strong>Split Class.</strong> The class is divided into groups. Choose who teaches this group: another instructor, or {splitFromFaculty?.name ?? "the same instructor"} again at a different time. The time is usually the same when the instructors differ; it still cannot clash with other subjects, and one instructor cannot teach two groups at once. All the blocks are labelled Split.
         </div>
       )}
       <div>
@@ -774,9 +765,9 @@ export function AssignmentForm({
       </div>
       <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={(t) => changeTime({ endTime: t })} />
       {repeat.picker}
-      {isSplitBlock && isEditingSavedLoad && (
+      {((isSplitBlock && isEditingSavedLoad) || (splitOfLoadId && !editingLoadId)) && (
         <p className="rounded border border-border bg-surface-muted/40 px-3 py-2 text-xs text-foreground-muted" data-testid="split-no-repeat">
-          This block is split between instructors, so it cannot be repeated on other days.
+          A split cannot be repeated on other days.
         </p>
       )}
       {isEditingSavedLoad && (
@@ -858,7 +849,7 @@ export function AssignmentForm({
         <Button
           type="button"
           onClick={handleSave}
-          disabled={loading || timeRangeInvalid || (preview !== null && Boolean(hasConflict)) || repeat.blocked || sameAsSplitSource}
+          disabled={loading || timeRangeInvalid || (preview !== null && Boolean(hasConflict)) || repeat.blocked}
         >
           {loading ? "…" : editingLoadId ? (repeat.changeCount > 0 ? `Update (${repeat.changeCount} day change${repeat.changeCount === 1 ? "" : "s"})` : "Update") : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
         </Button>

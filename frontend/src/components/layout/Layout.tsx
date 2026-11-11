@@ -4,6 +4,7 @@ import { AppBar } from "./AppBar";
 import { Sidebar } from "./Sidebar";
 import { useViewCollege } from "../../utils/collegeView";
 import { getPageTitle } from "../../utils/routeTitles";
+import { PageReloadProvider } from "../../context/PageReloadContext";
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,6 +13,7 @@ export function Layout() {
   const pageTitle = getPageTitle(location.pathname);
 
   return (
+    <PageReloadProvider>
     <div className="flex min-h-screen flex-col bg-surface-muted">
       <AppBar
         pageTitle={pageTitle}
@@ -29,5 +31,6 @@ export function Layout() {
         </main>
       </div>
     </div>
+    </PageReloadProvider>
   );
 }

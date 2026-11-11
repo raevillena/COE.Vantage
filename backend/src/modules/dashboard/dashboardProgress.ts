@@ -51,7 +51,7 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
     classIds.length
       ? prisma.facultyLoad.findMany({
           where: { academicYearId, semester, studentClassId: { in: classIds } },
-          select: { studentClassId: true, subjectId: true, dayOfWeek: true, startTime: true, endTime: true, isSplit: true, facultyId: true, facultyDisplayName: true },
+          select: { studentClassId: true, subjectId: true, dayOfWeek: true, startTime: true, endTime: true, isSplit: true, splitGroup: true, facultyId: true, facultyDisplayName: true },
         })
       : [],
     prisma.subjectFacultyPriority.findMany({ where: { academicYearId, semester }, select: { subjectId: true } }),

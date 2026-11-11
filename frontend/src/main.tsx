@@ -23,7 +23,7 @@ createRoot(document.getElementById("app")!).render(
         <ThemeProvider>
           <SchedulePaletteProvider>
             <App />
-            <Toaster position="bottom-right" />
+            <Toaster position="bottom-right" toastOptions={{ duration: 5000, success: { duration: 5000 }, error: { duration: 5000 } }} />
           </SchedulePaletteProvider>
         </ThemeProvider>
       </BrowserRouter>

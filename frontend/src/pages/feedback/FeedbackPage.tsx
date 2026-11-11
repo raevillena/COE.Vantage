@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import toast from "react-hot-toast";
 import { Image as ImageIcon, RefreshCw } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
@@ -131,6 +133,7 @@ export function FeedbackPage() {
     return () => clearTimeout(t);
   }, [q]);
 
+  useRegisterReload(() => load());
   const load = useCallback(async () => {
     setLoading(true);
     setFailed(false);
@@ -163,10 +166,10 @@ export function FeedbackPage() {
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold text-foreground">Feedback</h1>
+          <h1 className="text-xl font-semibold text-foreground">Feedback/Bug</h1>
           <HelpTip>
             Tell us what should change: a problem, a change request or an idea, with screenshots. Everyone can read the list, so check whether someone already reported the same thing. Only administrators change the status.
-          </HelpTip>
+          </HelpTip><PageReloadButton />
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading} aria-label="Reload feedback">

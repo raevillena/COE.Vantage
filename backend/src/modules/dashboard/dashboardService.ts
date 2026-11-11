@@ -290,7 +290,7 @@ export async function getMyWorkload(caller: DashboardCaller, academicYearId: str
     const key = `${l.subjectId}|${l.studentClassId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    minutes += timeToMinutes(l.endTime) - timeToMinutes(l.startTime);
+    minutes += Math.max(0, timeToMinutes(l.endTime) - timeToMinutes(l.startTime));
   }
   const courses = new Set(loads.map((l) => `${l.subjectId}|${l.studentClassId}`)).size;
   return {

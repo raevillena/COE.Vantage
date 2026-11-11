@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { FilterSelect } from "../../components/ui/listFilters";
 import { Pager } from "../../components/ui/pager";
 import { apiClient } from "../../api/apiClient";
@@ -63,6 +65,7 @@ export function SubjectsPage() {
     ...(filterSemester ? { semester: filterSemester } : {}),
     ...(filterKind ? { kind: filterKind } : {}),
   });
+  useRegisterReload(() => load());
   const load = async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
@@ -200,7 +203,7 @@ export function SubjectsPage() {
       <div className="mb-4 flex justify-between items-center flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Subjects</h1>
-          <HistoryButton entityType="SUBJECT" title="Subjects" />
+          <HistoryButton entityType="SUBJECT" title="Subjects" /><PageReloadButton />
         </div>
         {!readOnly && <Button type="button" onClick={openCreate}>Add Subject</Button>}
       </div>

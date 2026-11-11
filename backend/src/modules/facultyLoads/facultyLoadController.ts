@@ -20,7 +20,7 @@ import type { CopyFromPreviousFacultyLoadBody } from "./facultyLoadSchemas.js";
 export async function list(req: Request, res: Response): Promise<void> {
   const query = req.query as unknown as facultyLoadService.ListFacultyLoadsQuery;
   if (query.semester !== undefined) query.semester = Number(query.semester);
-  const list = await facultyLoadService.listFacultyLoads(query);
+  const list = await facultyLoadService.listFacultyLoads(query, req.user?.role);
   res.json(list);
 }
 
@@ -90,39 +90,72 @@ export async function create(req: Request, res: Response): Promise<void> {
 export async function update(req: Request, res: Response): Promise<void> {
   const body = req.body as UpdateFacultyLoadBody;
   const caller = req.user ? { role: req.user.role, departmentId: req.user.departmentId ?? null } : undefined;
-  const newFacultyId = body.facultyId?.trim() || null;
-  if (req.user?.role === "CHAIRMAN" && newFacultyId) {
+  if (req.user?.role === "CHAIRMAN") {
     const existing = await prisma.facultyLoad.findUnique({
       where: { id: req.params.id },
       include: { subject: { select: { departmentId: true } }, studentClass: { include: { curriculum: { select: { departmentId: true } } } } },
     });
-    if (existing && existing.facultyId !== newFacultyId) {
-      const faculty = await prisma.user.findUnique({ where: { id: newFacultyId }, select: { departmentId: true, role: true } });
-      const subjectDeptId = existing.subject?.departmentId ?? existing.studentClass?.curriculum?.departmentId ?? null;
-      const facultyDeptId = faculty?.departmentId ?? null;
-      if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId) {
-        const roomId = body.roomId !== undefined ? body.roomId?.trim() || null : existing.roomId;
-        if (roomId && caller) {
-          await facultyLoadService.assertRoomAssignable(roomId, existing.academicYearId, existing.semester, caller);
+    if (existing) {
+      const newFacultyId = body.facultyId !== undefined ? body.facultyId?.trim() || null : existing.facultyId;
+      const newRoomId = body.roomId !== undefined ? body.roomId?.trim() || null : existing.roomId;
+      const newDay = body.dayOfWeek ?? existing.dayOfWeek;
+      const newStart = body.startTime ?? existing.startTime;
+      const newEnd = body.endTime ?? existing.endTime;
+      const facultyChanged = !!newFacultyId && existing.facultyId !== newFacultyId;
+      const scheduleChanged =
+        newDay !== existing.dayOfWeek ||
+        facultyLoadService.timeToMinutes(newStart) !== facultyLoadService.timeToMinutes(existing.startTime) ||
+        facultyLoadService.timeToMinutes(newEnd) !== facultyLoadService.timeToMinutes(existing.endTime) ||
+        newRoomId !== existing.roomId;
+      // an earlier change to this block that still waits for approval
+      const waiting = await prisma.crossDepartmentLoadRequest.findFirst({ where: { replacesLoadId: existing.id, status: "PENDING" }, select: { id: true } });
+      const callerCtx = { role: req.user.role, departmentId: req.user.departmentId ?? null, id: req.user.id };
+      if (waiting && !facultyChanged && !scheduleChanged) {
+        // back to what is approved: nothing is left to approve, so the waiting change is withdrawn
+        await assignmentRequestService.cancelRequest(waiting.id, callerCtx);
+      } else if (newFacultyId && (facultyChanged || scheduleChanged)) {
+        const faculty = await prisma.user.findUnique({ where: { id: newFacultyId }, select: { departmentId: true, role: true } });
+        const subjectDeptId = existing.subject?.departmentId ?? existing.studentClass?.curriculum?.departmentId ?? null;
+        const facultyDeptId = faculty?.departmentId ?? null;
+        // another department's faculty: the block was approved by that department, so a new day, time, room or person needs approval again
+        if (subjectDeptId != null && facultyDeptId != null && subjectDeptId !== facultyDeptId) {
+          if (newRoomId && caller) {
+            await facultyLoadService.assertRoomAssignable(newRoomId, existing.academicYearId, existing.semester, caller);
+          }
+          if (waiting) {
+            // one pending block awaiting the latest approval: the waiting request takes the latest values
+            const revised = await assignmentRequestService.reviseReplacementRequest(waiting.id, callerCtx, {
+              facultyId: newFacultyId,
+              roomId: newRoomId,
+              roomDisplayName: body.roomDisplayName !== undefined ? body.roomDisplayName ?? null : existing.roomDisplayName,
+              dayOfWeek: newDay,
+              startTime: newStart,
+              endTime: newEnd,
+            });
+            res.status(202).json({ requestCreated: true, request: revised, revised: true });
+            return;
+          }
+          const request = await assignmentRequestService.createAssignmentRequest(
+            {
+              facultyId: newFacultyId,
+              subjectId: existing.subjectId,
+              studentClassId: existing.studentClassId,
+              roomId: newRoomId,
+              roomDisplayName: body.roomDisplayName !== undefined ? body.roomDisplayName ?? null : existing.roomDisplayName,
+              dayOfWeek: newDay,
+              startTime: newStart,
+              endTime: newEnd,
+              semester: existing.semester,
+              academicYearId: existing.academicYearId,
+              replacesLoadId: existing.id,
+            },
+            req.user.id
+          );
+          res.status(202).json({ requestCreated: true, request });
+          return;
         }
-        const request = await assignmentRequestService.createAssignmentRequest(
-          {
-            facultyId: newFacultyId,
-            subjectId: existing.subjectId,
-            studentClassId: existing.studentClassId,
-            roomId,
-            roomDisplayName: body.roomDisplayName !== undefined ? body.roomDisplayName ?? null : existing.roomDisplayName,
-            dayOfWeek: body.dayOfWeek ?? existing.dayOfWeek,
-            startTime: body.startTime ?? existing.startTime,
-            endTime: body.endTime ?? existing.endTime,
-            semester: existing.semester,
-            academicYearId: existing.academicYearId,
-            replacesLoadId: existing.id,
-          },
-          req.user.id
-        );
-        res.status(202).json({ requestCreated: true, request });
-        return;
+        // the change no longer needs another department (for example the faculty is now from this department): the waiting one is dropped
+        if (waiting) await assignmentRequestService.cancelRequest(waiting.id, callerCtx);
       }
     }
   }

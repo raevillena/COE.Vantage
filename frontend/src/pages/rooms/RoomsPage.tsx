@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { Pager, usePaging } from "../../components/ui/pager";
 import { FilterSelect, ListFilterBar, optionsFrom } from "../../components/ui/listFilters";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
@@ -81,6 +83,7 @@ export function RoomsPage() {
   const [transferDeptId, setTransferDeptId] = useState("");
   const [transferLoading, setTransferLoading] = useState(false);
 
+  useRegisterReload(() => load());
   const load = async () => {
     setLoading(true);
     try {
@@ -452,7 +455,7 @@ export function RoomsPage() {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground">Rooms</h1>
-          <HistoryButton entityType="ROOM" title="Rooms" />
+          <HistoryButton entityType="ROOM" title="Rooms" /><PageReloadButton />
         </div>
         {canAddRoom && <Button type="button" onClick={openCreate}>Add Room</Button>}
       </div>

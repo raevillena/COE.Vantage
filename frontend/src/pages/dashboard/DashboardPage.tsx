@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { UpcomingDeadlines } from "../../components/dashboard/UpcomingDeadlines";
 import { useAppSelector } from "../../store/hooks";
 import { DashboardOverview } from "./DashboardOverview";
@@ -32,7 +33,7 @@ export function DashboardPage() {
 
   return (
     <div className="mb-6">
-      <h1 className="mb-1 text-2xl font-semibold text-foreground">Dashboard</h1>
+      <div className="mb-1 flex items-center gap-2"><h1 className="text-2xl font-semibold text-foreground">Dashboard</h1><PageReloadButton /></div>
       <p className="mb-6 text-foreground-muted">
         Welcome, {user?.name}. You are signed in as {user?.role}.
       </p>

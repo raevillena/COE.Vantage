@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { PageReloadButton } from "../../components/ui/pageReloadButton";
+import { useRegisterReload } from "../../context/PageReloadContext";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { AcademicYear, UserListItem } from "../../types/api";
@@ -64,6 +66,7 @@ export function ChairmanFacultyPage() {
   const [copying, setCopying] = useState(false);
   const [savingSubject, setSavingSubject] = useState(false);
 
+  useRegisterReload(() => load());
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -348,7 +351,7 @@ export function ChairmanFacultyPage() {
 <h1 className="text-2xl font-semibold text-foreground">
           Faculty</h1>
 <HelpTip>{viewerOnly ? "Faculty of the whole college, for viewing. Possible subjects define which subjects auto-assign may give each person in the selected term; the chairmen set them." : "Faculty of your department, including the chairman. Possible subjects define which subjects auto-assign may give each person in the selected term; a subject is only assigned to faculty listed for it."}</HelpTip>
-<HistoryButton entityType="USER,DELOADING" title="Faculty" />
+<HistoryButton entityType="USER,DELOADING" title="Faculty" /><PageReloadButton />
 </div>
         {!viewerOnly && (
         <div className="flex flex-wrap gap-2">
