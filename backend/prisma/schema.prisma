@@ -37,7 +37,7 @@ model User {
   maxUnits             Int? // max load units per term (null = no cap)
   isDeleted            Boolean   @default(false)
   /// Whether unread bell notifications may be emailed to this person as a digest.
-  emailDigest          Boolean   @default(true)
+  emailDigest          Boolean   @default(false)
   /// Whether college deadline reminders may be emailed to this person (the bell reminder always shows).
   emailDeadlines       Boolean   @default(true)
   deletedAt            DateTime?

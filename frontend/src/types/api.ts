@@ -148,6 +148,9 @@ export interface UserListItem {
   maxUnits?: number | null;
   department?: { name: string; code: string | null } | null;
   deletedAt?: string | null;
+  /** Email switches (only sent to the admin's Users page). */
+  emailDigest?: boolean;
+  emailDeadlines?: boolean;
 }
 
 export interface AssignableFaculty {

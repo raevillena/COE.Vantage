@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalendarPlus, Printer } from "lucide-react";
 import { apiClient } from "../../api/apiClient";
+import { apiUrl } from "../../utils/apiUrl";
 
 type Block = {
   id: string;
@@ -53,7 +54,7 @@ export function PublicSchedulePage() {
     return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
   }, [data]);
 
-  const calendarHref = `/api/public/schedule/${encodeURIComponent(token)}/calendar.ics`;
+  const calendarHref = apiUrl(`/public/schedule/${encodeURIComponent(token)}/calendar.ics`);
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-surface px-4 py-6 text-foreground">

@@ -110,7 +110,7 @@ export function AccountSecuritySection() {
             </span>
           </label>
           <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="checkbox" className="mt-0.5" checked={prefs?.digest ?? true} disabled={prefs === null} onChange={(e) => void changePrefs({ digest: e.target.checked })} />
+            <input type="checkbox" className="mt-0.5" checked={prefs?.digest ?? false} disabled={prefs === null} onChange={(e) => void changePrefs({ digest: e.target.checked })} />
             <span>
               Email me a digest of notifications I have not read.
               <span className="block text-xs text-foreground-muted">At most one email a day, and only for notifications still unread after an hour.</span>

@@ -9,6 +9,16 @@ data:
   REFRESH_TOKEN_EXPIRY: "7d"
   FRONTEND_ORIGIN: "https://vantage.test.nbericmmsu.com"
   # RESET_PASSWORD_BASE_URL: "https://vantage.test.nbericmmsu.com"
+  # The API sits behind the nginx VM (one proxy). Without this the backend sees only the proxy's address, so the sign-in
+  # lockout, the public grade lookup limit and the share-link limit would count EVERYONE as one person.
+  TRUST_PROXY: "true"
+  # Sign in with Google (existing @mmsu.edu.ph accounts only). The client id is not a secret. Add the site address
+  # (the FRONTEND_ORIGIN above) under "Authorized JavaScript origins" of the OAuth client in Google Cloud Console.
+  # GOOGLE_CLIENT_ID: ""
+  # GOOGLE_ALLOWED_DOMAIN: "mmsu.edu.ph"
+  # Daily email digest of unread notifications and the deadline reminder emails (needs the SMTP settings below).
+  # EMAIL_DIGEST: "true"
+  # SLOW_QUERY_MS: "500"
 ---
 apiVersion: v1
 kind: Secret
@@ -21,10 +31,6 @@ stringData:
   REDIS_URL: "redis://redis-host:6379"
   JWT_ACCESS_SECRET: "replace-with-real-access-secret"
   JWT_REFRESH_SECRET: "replace-with-real-refresh-secret"
-  # EMAIL_DIGEST: "true"          # daily email digest of unread notifications (needs SMTP)
-  # SLOW_QUERY_MS: "500"
-  # GOOGLE_CLIENT_ID: ""          # enables Sign in with Google (existing @mmsu.edu.ph accounts only)
-  # GOOGLE_ALLOWED_DOMAIN: "mmsu.edu.ph"
   # SMTP_HOST: ""
   # SMTP_PORT: "587"
   # SMTP_SECURE: "false"

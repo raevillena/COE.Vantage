@@ -25,7 +25,7 @@ test.describe("schedule share links and calendar export", () => {
 
       const created = await request.post(`${API}/schedule-share`, { headers, data: { kind: "CLASS", targetId: cls!.id } });
       expect(created.status(), await created.text()).toBe(201);
-      const link = (await created.json()) as { id: string; token: string; pageUrl: string; calendarUrl: string };
+      const link = (await created.json()) as { id: string; token: string; pageUrl: string };
       linkId = link.id;
       expect(link.token.length).toBeGreaterThan(30);
 

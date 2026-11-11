@@ -8,7 +8,7 @@ import { currentActor } from "../../utils/auditContext.js";
 import type { CreateUserBody, UpdateUserBody, ListUsersQuery } from "./userSchemas.js";
 
 /** `onlyId` narrows the list to one person (a faculty member may only list themselves). */
-export async function listUsers(query: ListUsersQuery, onlyId?: string) {
+export async function listUsers(query: ListUsersQuery, onlyId?: string, withEmailPrefs = false) {
   const where: { id?: string; role?: Role | { in: Role[] }; departmentId?: string; isDeleted: boolean } = { isDeleted: false };
   if (onlyId) where.id = onlyId;
   if (Array.isArray(query.role)) {
@@ -19,7 +19,7 @@ export async function listUsers(query: ListUsersQuery, onlyId?: string) {
   if (query.departmentId) where.departmentId = query.departmentId;
   const rows = await prisma.user.findMany({
     where,
-    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } }, avatar: { select: { updatedAt: true } }, unitColleges: true, unitAreas: true },
+    select: { id: true, email: true, name: true, role: true, departmentId: true, collegeId: true, college: { select: { name: true, code: true } }, status: true, maxUnits: true, createdAt: true, department: { select: { name: true, code: true } }, avatar: { select: { updatedAt: true } }, unitColleges: true, unitAreas: true, ...(withEmailPrefs ? { emailDigest: true, emailDeadlines: true } : {}) },
     orderBy: { name: "asc" },
   });
   return rows.map(({ avatar, ...u }) => ({ ...u, avatarVersion: avatar?.updatedAt.getTime() ?? null }));
@@ -217,4 +217,10 @@ export async function getPrioritizedSubjects(facultyId: string, term: { academic
     units: p.subject.units,
     isLab: p.subject.isLab,
   }));
+}
+/** Admin: switch the digest and/or deadline reminder emails on or off for several people at once. The bell is never affected. */
+export async function setEmailPreferencesFor(userIds: string[], prefs: { digest?: boolean; deadlines?: boolean }) {
+  const data = { ...(prefs.digest !== undefined ? { emailDigest: prefs.digest } : {}), ...(prefs.deadlines !== undefined ? { emailDeadlines: prefs.deadlines } : {}) };
+  const result = await prisma.user.updateMany({ where: { id: { in: userIds }, isDeleted: false }, data });
+  return { updated: result.count };
 }

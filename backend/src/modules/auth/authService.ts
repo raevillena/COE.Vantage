@@ -255,7 +255,7 @@ export type EmailPreferences = { digest: boolean; deadlines: boolean };
 
 export async function getMyEmailPreferences(userId: string): Promise<EmailPreferences> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { emailDigest: true, emailDeadlines: true } });
-  return { digest: user?.emailDigest ?? true, deadlines: user?.emailDeadlines ?? true };
+  return { digest: user?.emailDigest ?? false, deadlines: user?.emailDeadlines ?? true };
 }
 
 /** Changes only the switches that are given. The bell notifications are not affected: they always show. */
@@ -270,7 +270,7 @@ export async function setMyEmailPreferences(userId: string, prefs: Partial<Email
 
 export async function getMyEmailDigest(userId: string): Promise<{ enabled: boolean }> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { emailDigest: true } });
-  return { enabled: user?.emailDigest ?? true };
+  return { enabled: user?.emailDigest ?? false };
 }
 
 export async function setMyEmailDigest(userId: string, enabled: boolean): Promise<{ enabled: boolean }> {

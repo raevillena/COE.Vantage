@@ -5,9 +5,10 @@ import { apiClient } from "../../api/apiClient";
 import { getApiErrorMessage } from "../../types/api";
 import { Button } from "../ui/button";
 import { Dialog } from "../ui/dialog";
+import { apiUrl } from "../../utils/apiUrl";
 
 type LinkRow = { id: string; label: string; createdAt: string; expiresAt: string | null; lastUsedAt: string | null; status: "active" | "expired" | "revoked" };
-type Created = LinkRow & { token: string; pageUrl: string; calendarUrl: string };
+type Created = LinkRow & { token: string; pageUrl: string };
 
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
 
@@ -109,7 +110,7 @@ export function ShareScheduleDialog({ kind, targetId, subject }: { kind: "FACULT
               <p className="font-medium text-foreground">New link. Copy it now: it is not shown again.</p>
               {[
                 { label: "Schedule page", value: fresh.pageUrl },
-                { label: "Calendar file (subscribe or import)", value: fresh.calendarUrl },
+                { label: "Calendar file (subscribe or import)", value: apiUrl(`/public/schedule/${fresh.token}/calendar.ics`) },
               ].map((row) => (
                 <div key={row.label}>
                   <p className="text-xs text-foreground-muted">{row.label}</p>

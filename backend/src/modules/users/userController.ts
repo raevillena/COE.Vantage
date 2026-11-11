@@ -12,7 +12,7 @@ export async function list(req: Request, res: Response): Promise<void> {
     if (!query.role) query.role = ["FACULTY", "CHAIRMAN"];
   }
   // A faculty member sees only themselves in people lists (schedule and report dropdowns).
-  const list = await userService.listUsers(query, req.user?.role === "FACULTY" ? req.user.id : undefined);
+  const list = await userService.listUsers(query, req.user?.role === "FACULTY" ? req.user.id : undefined, req.user?.role === "ADMIN");
   res.json(list);
 }
 
@@ -71,4 +71,8 @@ export async function getPrioritizedSubjects(req: Request, res: Response): Promi
   if (!academicYearId || ![1, 2, 3].includes(semester)) throw badRequest("academicYearId and semester are required");
   const list = await userService.getPrioritizedSubjects(req.params.id, { academicYearId, semester });
   res.json(list);
+}
+export async function setEmailPreferences(req: Request, res: Response): Promise<void> {
+  const { userIds, digest, deadlines } = req.body as { userIds: string[]; digest?: boolean; deadlines?: boolean };
+  res.json(await userService.setEmailPreferencesFor(userIds, { digest, deadlines }));
 }

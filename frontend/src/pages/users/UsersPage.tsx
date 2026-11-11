@@ -101,6 +101,25 @@ export function UsersPage() {
   const [deloadYears, setDeloadYears] = useState<AcademicYear[]>([]);
   const [prioritizationYears, setPrioritizationYears] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
   const [prioritizationTerm, setPrioritizationTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [emailBusy, setEmailBusy] = useState(false);
+
+  /** Admin: switch the digest and/or deadline reminder emails for the given people (the bell is never affected). */
+  const setEmailPrefs = async (ids: string[], prefs: { digest?: boolean; deadlines?: boolean }) => {
+    if (ids.length === 0) return;
+    setEmailBusy(true);
+    try {
+      const { data } = await apiClient.patch<{ updated: number }>("/users/email-preferences", { userIds: ids, ...prefs });
+      const patch = { ...(prefs.digest !== undefined ? { emailDigest: prefs.digest } : {}), ...(prefs.deadlines !== undefined ? { emailDeadlines: prefs.deadlines } : {}) };
+      const idSet = new Set(ids);
+      setList((rows) => rows.map((r) => (idSet.has(r.id) ? { ...r, ...patch } : r)));
+      toast.success(`Email settings updated for ${data.updated} ${data.updated === 1 ? "person" : "people"}`);
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? "Could not update email settings");
+    } finally {
+      setEmailBusy(false);
+    }
+  };
 
   const handleSendResetEmail = async (email: string) => {
     setResetEmailLoading(email);
@@ -517,6 +536,29 @@ export function UsersPage() {
           </span>
         </div>
       )}
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-border bg-surface-muted px-3 py-2 text-sm" data-testid="user-bulk-bar">
+          <span className="font-medium text-foreground">{selected.size} selected</span>
+          {filteredList.length > selected.size && (
+            <button type="button" className="font-medium text-primary hover:underline" onClick={() => setSelected(new Set(filteredList.map((u) => u.id)))}>
+              Select all {filteredList.length} matching
+            </button>
+          )}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button type="button" variant="secondary" disabled={emailBusy}>Email notifications</Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start">
+              <DropdownMenu.Item onSelect={() => void setEmailPrefs([...selected], { digest: true })}>Turn on digest email</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => void setEmailPrefs([...selected], { digest: false })}>Turn off digest email</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => void setEmailPrefs([...selected], { deadlines: true })}>Turn on deadline emails</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => void setEmailPrefs([...selected], { deadlines: false })}>Turn off deadline emails</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => void setEmailPrefs([...selected], { digest: false, deadlines: false })}>Turn off all emails</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => setSelected(new Set())}>Clear selection</button>
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12 rounded border border-border bg-surface" aria-busy="true">
           <Spinner />
@@ -538,6 +580,14 @@ export function UsersPage() {
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
+                <th className="w-10 px-4 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all users on this page"
+                    checked={paging.pageRows.length > 0 && paging.pageRows.every((u) => selected.has(u.id))}
+                    onChange={(e) => setSelected((prev) => { const next = new Set(prev); for (const u of paging.pageRows) { if (e.target.checked) next.add(u.id); else next.delete(u.id); } return next; })}
+                  />
+                </th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Name</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Email</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Role</th>
@@ -545,12 +595,21 @@ export function UsersPage() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Max units</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground" title="Email notifications: digest and deadline reminders">Emails</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {paging.pageRows.map((u) => (
-                <tr key={u.id}>
+                <tr key={u.id} className={selected.has(u.id) ? "bg-surface-muted" : undefined}>
+                  <td className="w-10 px-4 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${u.name}`}
+                      checked={selected.has(u.id)}
+                      onChange={(e) => setSelected((prev) => { const next = new Set(prev); if (e.target.checked) next.add(u.id); else next.delete(u.id); return next; })}
+                    />
+                  </td>
                   <td className="px-4 py-2 text-foreground">
                     <div className="flex items-center gap-2.5">
                       <UserAvatar id={u.id} name={u.name} version={u.avatarVersion} className="!h-8 !w-8" />
@@ -563,6 +622,9 @@ export function UsersPage() {
                   <td className="px-4 py-2 text-foreground-muted">{u.role === "UNIT" ? `${u.unitColleges?.length ?? 0} ${(u.unitColleges?.length ?? 0) === 1 ? "college" : "colleges"}` : u.college?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
+                  <td className="px-4 py-2 text-xs text-foreground-muted whitespace-nowrap">
+                    Digest {u.emailDigest ? "on" : "off"}<br />Deadlines {u.emailDeadlines === false ? "off" : "on"}
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button
@@ -628,6 +690,8 @@ export function UsersPage() {
                           {isTeachingRole(u.role) && <DropdownMenu.Item onSelect={() => openDeloading(u)}>Deloading</DropdownMenu.Item>}
                           <DropdownMenu.Item onSelect={() => openViewPrioritization(u)}>View prioritization</DropdownMenu.Item>
                           <DropdownMenu.Item onSelect={() => setExperimentalTarget(u)}>Experimental access</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => void setEmailPrefs([u.id], { digest: !u.emailDigest })}>{u.emailDigest ? "Turn off digest email" : "Turn on digest email"}</DropdownMenu.Item>
+                          <DropdownMenu.Item onSelect={() => void setEmailPrefs([u.id], { deadlines: u.emailDeadlines === false })}>{u.emailDeadlines === false ? "Turn on deadline emails" : "Turn off deadline emails"}</DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => handleSendResetEmail(u.email)}
                             disabled={resetEmailLoading === u.email}

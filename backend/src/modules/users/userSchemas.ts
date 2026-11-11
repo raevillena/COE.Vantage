@@ -69,3 +69,12 @@ export const updateUserSchema = z.object({
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>["query"];
 export type CreateUserBody = z.infer<typeof createUserSchema>["body"];
 export type UpdateUserBody = z.infer<typeof updateUserSchema>["body"];
+export const bulkEmailPreferencesSchema = z.object({
+  body: z
+    .object({
+      userIds: z.array(z.string().uuid()).min(1).max(1000),
+      digest: z.boolean().optional(),
+      deadlines: z.boolean().optional(),
+    })
+    .refine((b) => b.digest !== undefined || b.deadlines !== undefined, { message: "Choose digest or deadlines" }),
+});

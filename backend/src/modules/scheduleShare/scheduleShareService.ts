@@ -55,7 +55,8 @@ export async function createLink(caller: Caller, body: { kind: ShareKind; target
       },
     })
   );
-  return { ...view(link), token, pageUrl: `${origin()}/s/${token}`, calendarUrl: `${origin()}/api/public/schedule/${token}/calendar.ics` };
+  // the page address is on the site; the calendar address is built by the page from the API address it talks to (the API can live on its own host)
+  return { ...view(link), token, pageUrl: `${origin()}/s/${token}` };
 }
 
 export async function listMyLinks(caller: Caller, filter: { kind?: string; targetId?: string }) {

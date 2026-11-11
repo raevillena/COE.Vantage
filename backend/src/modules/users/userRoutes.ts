@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getPrioritizedSubjects, listAssignableFaculty } from "./userController.js";
+import { list, getById, create, update, remove, listTrash, restore, permanentDelete, getPrioritizedSubjects, listAssignableFaculty, setEmailPreferences } from "./userController.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorize } from "../../middleware/authorize.js";
 import { validate } from "../../middleware/validate.js";
@@ -10,7 +10,7 @@ import { getAvatar, removeAvatar, setAvatar, updateMyName } from "./userProfileS
 import { getUserExperimentalGrants, setUserExperimentalGrants } from "../auth/authService.js";
 import { setExperimentalGrantsSchema } from "../auth/authSchemas.js";
 import type { ExperimentalFeatureKey } from "../auth/experimentalFeatures.js";
-import { createUserSchema, updateUserSchema } from "./userSchemas.js";
+import { createUserSchema, updateUserSchema, bulkEmailPreferencesSchema } from "./userSchemas.js";
 
 const updateMyNameSchema = z.object({ body: z.object({ name: z.string().trim().min(1, "Name is required").max(100) }) });
 
@@ -40,6 +40,8 @@ router.get("/trash", authorize("ADMIN"), listTrash);
 router.delete("/trash/:id", authorize("ADMIN"), permanentDelete);
 
 // A person's own details: their name and picture. Declared before "/:id" so "me" is not read as an id.
+/** Admin: turn the digest / deadline reminder emails on or off for several people. Defined before the "/:id" routes. */
+router.patch("/email-preferences", authorize("ADMIN"), validate(bulkEmailPreferencesSchema), setEmailPreferences);
 router.patch("/me", validate(updateMyNameSchema), async (req: Request, res: Response) => {
   const me = await updateMyName(req.user!.id, (req.body as { name: string }).name);
   res.json(me);
