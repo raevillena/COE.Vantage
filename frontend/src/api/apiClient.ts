@@ -31,7 +31,7 @@ function processQueue(error: unknown, token: string | null) {
 /** Auth endpoints must not trigger refresh on 401 — reject so login page can show error. */
 function isAuthEndpoint(config: { url?: string }): boolean {
   const url = config?.url ?? "";
-  return url.includes("/auth/login") || url.includes("/auth/refresh");
+  return url.includes("/auth/login") || url.includes("/auth/google") || url.includes("/auth/refresh");
 }
 
 apiClient.interceptors.response.use(

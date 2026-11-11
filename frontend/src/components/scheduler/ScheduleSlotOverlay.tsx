@@ -133,6 +133,9 @@ export function ScheduleSlotOverlay({
     !Number.isNaN(pendingEndMinutes) &&
     pendingEndMinutes > pendingStartMinutes;
 
+  /** Start is known but the end is not after it: drawn as a red 30-minute stub so the mistake can be seen on the timeline. */
+  const pendingInvalid = Boolean(pendingAssignment) && !Number.isNaN(pendingStartMinutes) && !Number.isNaN(pendingEndMinutes) && !pendingValid;
+
   const pendingDurationMinutes = pendingValid ? pendingEndMinutes - pendingStartMinutes : 0;
   const topOffset = GRID_HEADER_HEIGHT + GRID_BORDER_WIDTH;
   const enablePointerEvents = active || Boolean(pendingValid);
@@ -173,6 +176,16 @@ export function ScheduleSlotOverlay({
               }}
             >
               <span className="text-xs font-medium truncate text-foreground">{ghostCode}</span>
+            </div>
+          )}
+          {pendingInvalid && pendingAssignment && pendingAssignment.dayOfWeek === dayOfWeek && (
+            <div
+              role="alert"
+              aria-label="Invalid time range"
+              className="absolute left-0.5 right-0.5 flex items-center justify-center overflow-hidden rounded border-2 border-dashed border-danger bg-danger/15 px-1 py-0.5 pointer-events-none"
+              style={{ top: (pendingStartMinutes - hourStart * 60) * (SLOT_HEIGHT / 60) + 2, height: 30 * (SLOT_HEIGHT / 60) - 4 }}
+            >
+              <span className="truncate text-xs font-medium text-danger">End must be after start</span>
             </div>
           )}
           {/* Pending: temporary block after drop while assignment form is open */}

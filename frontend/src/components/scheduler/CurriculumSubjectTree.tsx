@@ -12,6 +12,7 @@ import { useAppSelector } from "../../store/hooks";
 import { SubjectFormDialog } from "../subjects/SubjectFormDialog";
 import { SubjectRoomsDialog } from "../subjects/SubjectRoomsDialog";
 import { SubjectFacultyDialog } from "../subjects/SubjectFacultyDialog";
+import { scheduledMinutes } from "../../utils/scheduledMinutes";
 
 /** What the "⋯" menu on a subject can open. */
 type ManageAction = "details" | "rooms" | "faculty";
@@ -57,8 +58,8 @@ function DraggableSubject({ subject, status = "none", label, onManage }: Subject
       <span className="font-medium truncate shrink-0">{subject.code}</span>
       <span className="truncate text-foreground-muted min-w-0" title={subject.name}>
         {subject.name}
-        {label ? <span className="text-[11px] text-foreground-muted/80"> · {label}</span> : null}
       </span>
+      {label ? <span className="shrink-0 whitespace-nowrap text-[11px] text-foreground-muted/80">· {label}</span> : null}
       {componentTag(subject) && <span className="text-xs text-foreground-muted shrink-0">({componentTag(subject)})</span>}
       {onManage && (
         // The menu must not start a drag of the row it sits in.
@@ -183,24 +184,9 @@ function SubjectTreeBody(props: SubjectTreeBodyProps) {
 
   const byCurriculum = useMemo(() => groupSubjectsByCurriculum(subjects), [subjects]);
   const minutesBySubject = useMemo(() => {
-    const map = new Map<string, number>();
-    if (!classLoads) return map;
-    // Co-instructor rows share one class slot, so each slot counts once.
-    const seenSlots = new Set<string>();
-    for (const l of classLoads) {
-      const start = l.startTime;
-      const end = l.endTime;
-      if (!start || !end) continue;
-      const slot = `${l.subjectId}|${l.dayOfWeek}|${start}|${end}`;
-      if (seenSlots.has(slot)) continue;
-      seenSlots.add(slot);
-      const [sh, sm] = start.split(":").map((v) => parseInt(v, 10));
-      const [eh, em] = end.split(":").map((v) => parseInt(v, 10));
-      if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) continue;
-      const mins = (eh * 60 + em) - (sh * 60 + sm);
-      map.set(l.subjectId, (map.get(l.subjectId) ?? 0) + mins);
-    }
-    return map;
+    if (!classLoads) return new Map<string, number>();
+    // Co-instructor rows share one class slot (counted once); a split subject counts one group's hours.
+    return scheduledMinutes(classLoads, (l) => l.subjectId);
   }, [classLoads]);
 
   const getStatusForSubject = (s: Subject): { status: "none" | "partial" | "full" | "over"; label: string } => {

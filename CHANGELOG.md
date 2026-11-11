@@ -2,6 +2,20 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.9.0 - 2026-11-11
+
+College deadlines with reminders, schedule sharing, Google sign-in and safer sign-ins
+
+- **New:** Deadlines: the college secretary adds college deadlines (grades due, load submission and so on) for everyone in the college or for chosen roles. Everyone in the college sees them on the new Deadlines page and on the dashboard, and gets a reminder in the app and by email: 7, 3 and 1 day before at 8:00 AM by default, and the secretary can change the days and the hour for each deadline.
+- **New:** Share and calendar: a "Share / calendar" button on the Class schedule, Faculty schedule and faculty dashboard makes a read-only link to a schedule, with a page that works on a phone and a calendar file for Google Calendar, Outlook or a phone. The link shows the current semester, can be set to expire, and can be turned off at any time.
+- **New:** Sign in with Google for existing accounts that use an @mmsu.edu.ph email. It never creates accounts, and the password still works.
+- **New:** Profile: see where you are signed in and sign out other devices, review your recent sign-ins, and choose which emails you get (all email notifications, deadline reminders, and a once-a-day digest of notifications you have not read). Notifications always still show in the app.
+- **Improved:** Sign-in is protected against guessing: after 5 wrong passwords for an email from the same address, sign-in pauses for 15 minutes.
+- **Improved:** Scheduler: the Assignment panel is narrower on wide screens, so the timetable has more room. A subject dropped on the grid now starts on the day and time where you dropped it (it used to move to Monday), and the hours label on long subject names (for example 6/6 hrs) is no longer cut off.
+- **Improved:** A block that is already split between instructors can no longer be repeated on other days from its panel, which avoided duplicate sessions.
+- **Fixed:** A block can no longer be saved with an end time that is not after its start time (zero or negative hours); the form shows a warning and keeps Save off, and the preview block on the timeline is visible.
+- **Fixed:** A split subject moved to another time is no longer counted as extra hours: the scheduled hours, the remaining hours for automatic assignment and the dashboard progress now count one group's hours.
+
 ## v0.8.2 - 2026-11-10
 
 Exam room reservation, a new faculty menu, and filters and pages on the long lists

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: raevillena21/coe-vantage-backend:v0.8.2
+          image: raevillena21/coe-vantage-backend:v0.9.0
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
@@ -32,7 +32,7 @@ spec:
                 name: coe-vantage-backend-secrets
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready # database and Redis reachable
               port: 4000
             initialDelaySeconds: 10
             periodSeconds: 10

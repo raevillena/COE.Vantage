@@ -11,6 +11,22 @@ export const loginSchema = z.object({
   }),
 });
 
+export const emailPreferencesSchema = z.object({
+  body: z
+    .object({ digest: z.boolean().optional(), deadlines: z.boolean().optional() })
+    .refine((b) => b.digest !== undefined || b.deadlines !== undefined, { message: "Nothing to change" }),
+});
+
+export const emailDigestSchema = z.object({
+  body: z.object({ enabled: z.boolean() }),
+});
+
+export const googleLoginSchema = z.object({
+  body: z.object({
+    credential: z.string().min(20).max(5000),
+  }),
+});
+
 export const registerSchema = z.object({
   body: z.object({
     email: z.string().email("Invalid email"),
@@ -21,6 +37,7 @@ export const registerSchema = z.object({
   }),
 });
 
+export type GoogleLoginBody = z.infer<typeof googleLoginSchema>["body"];
 export type LoginBody = z.infer<typeof loginSchema>["body"];
 export type RegisterBody = z.infer<typeof registerSchema>["body"];
 

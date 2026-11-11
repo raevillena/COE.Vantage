@@ -2,6 +2,7 @@ import { prisma } from "../../prisma/client.js";
 import { classTakesSubject } from "../../utils/specializationSubjects.js";
 import { creditedLoadUnits } from "../../utils/workload.js";
 import { requiredMinutesForSubject, timeToMinutes } from "../facultyLoads/facultyLoadService.js";
+import { scheduledMinutes } from "../../utils/scheduledMinutes.js";
 
 /** One required subject of one class, with how much of it is scheduled (minutes per week). */
 export interface ProgressEntry {
@@ -50,21 +51,13 @@ export async function loadCurriculumProgress(scopeDeptId: string | null, academi
     classIds.length
       ? prisma.facultyLoad.findMany({
           where: { academicYearId, semester, studentClassId: { in: classIds } },
-          select: { studentClassId: true, subjectId: true, dayOfWeek: true, startTime: true, endTime: true },
+          select: { studentClassId: true, subjectId: true, dayOfWeek: true, startTime: true, endTime: true, isSplit: true, facultyId: true, facultyDisplayName: true },
         })
       : [],
     prisma.subjectFacultyPriority.findMany({ where: { academicYearId, semester }, select: { subjectId: true } }),
   ]);
 
-  const seenSlots = new Set<string>();
-  const scheduled = new Map<string, number>();
-  for (const l of loads) {
-    const slot = `${l.studentClassId}|${l.subjectId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
-    if (seenSlots.has(slot)) continue;
-    seenSlots.add(slot);
-    const key = `${l.studentClassId}|${l.subjectId}`;
-    scheduled.set(key, (scheduled.get(key) ?? 0) + timeToMinutes(l.endTime) - timeToMinutes(l.startTime));
-  }
+  const scheduled = scheduledMinutes(loads, (l) => `${(l as (typeof loads)[number]).studentClassId}|${l.subjectId}`);
   const withFaculty = new Set(priorities.map((p) => p.subjectId));
   const classHasLoad = new Set(loads.map((l) => l.studentClassId));
 

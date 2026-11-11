@@ -9,6 +9,7 @@ import { ScheduleGrid } from "../../components/scheduleGrid/ScheduleGrid";
 import { SearchableSelect } from "../../components/ui/searchableSelect";
 import { Select } from "../../components/ui/select";
 import { Spinner } from "../../components/ui/spinner";
+import { ShareScheduleDialog } from "../../components/schedules/ShareScheduleDialog";
 
 /** The dashboard for a faculty member: their own workload and weekly schedule, nothing else. */
 export function FacultyDashboard() {
@@ -91,6 +92,7 @@ export function FacultyDashboard() {
           <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-medium text-foreground">My weekly schedule</h2>
+              {user && <ShareScheduleDialog kind="FACULTY" targetId={user.id} subject="your schedule" />}
               <Link
                 to="/reports"
                 className="rounded text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"

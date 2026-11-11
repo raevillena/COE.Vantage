@@ -1,4 +1,5 @@
 import { Link, Navigate } from "react-router-dom";
+import { UpcomingDeadlines } from "../../components/dashboard/UpcomingDeadlines";
 import { useAppSelector } from "../../store/hooks";
 import { DashboardOverview } from "./DashboardOverview";
 import { FacultyDashboard } from "./FacultyDashboard";
@@ -35,6 +36,8 @@ export function DashboardPage() {
       <p className="mb-6 text-foreground-muted">
         Welcome, {user?.name}. You are signed in as {user?.role}.
       </p>
+
+      <UpcomingDeadlines />
 
       {user?.role === "FACULTY" && <FacultyDashboard />}
 

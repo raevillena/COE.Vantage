@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma/client.js";
+import { scheduledMinutes } from "../../utils/scheduledMinutes.js";
 import { badRequest, notFound, forbidden } from "../../utils/errors.js";
 import { checkConflicts, assertNoConflicts } from "./conflictService.js";
 import { notifyScheduleChange } from "../notifications/notificationService.js";
@@ -290,7 +291,13 @@ async function assertValidSplitSource(
   return source;
 }
 
+/** A block must have a positive length: the end time has to be after the start time. */
+function assertPositiveLength(startTime: string, endTime: string): void {
+  if (timeToMinutes(endTime) <= timeToMinutes(startTime)) throw badRequest("The end time must be after the start time.");
+}
+
 export async function previewFacultyLoad(body: PreviewFacultyLoadBody) {
+  assertPositiveLength(body.startTime, body.endTime);
   let isSplit = false;
   if (body.splitOfLoadId) {
     try {
@@ -304,6 +311,7 @@ export async function previewFacultyLoad(body: PreviewFacultyLoadBody) {
 }
 
 export async function createFacultyLoad(body: CreateFacultyLoadBody, caller?: CallerContext) {
+  assertPositiveLength(body.startTime, body.endTime);
   await assertTermUnlocked(body.academicYearId, body.semester);
   const effectiveRoomId = body.roomId?.trim() || null;
   if (effectiveRoomId && caller) {
@@ -435,6 +443,7 @@ export async function updateFacultyLoad(id: string, body: UpdateFacultyLoadBody,
     academicYearId: body.academicYearId ?? existing.academicYearId,
     excludeLoadId: id,
   };
+  assertPositiveLength(payload.startTime, payload.endTime);
 
   const conflicts = await checkConflicts({ ...payload, isSplit: existing.isSplit });
   assertNoConflicts(conflicts);
@@ -740,16 +749,8 @@ export async function autoAssignForClass(
     requiredBySubject.set(s.id, requiredMinutesForSubject(s));
   }
 
-  const scheduledBySubject = new Map<string, number>();
-  // Co-instructor rows share one class slot, so each slot counts once.
-  const seenClassSlots = new Set<string>();
-  for (const l of classLoads) {
-    const slot = `${l.subjectId}|${l.dayOfWeek}|${l.startTime}|${l.endTime}`;
-    if (seenClassSlots.has(slot)) continue;
-    seenClassSlots.add(slot);
-    const mins = timeToMinutes(l.endTime) - timeToMinutes(l.startTime);
-    scheduledBySubject.set(l.subjectId, (scheduledBySubject.get(l.subjectId) ?? 0) + mins);
-  }
+  // Co-instructor rows share one class slot (counted once); a split subject counts one group's hours (see scheduledMinutes).
+  const scheduledBySubject = scheduledMinutes(classLoads, (l) => l.subjectId);
 
   // Treat pending cross-department requests as placed: count their minutes and block those slots.
   const pendingRequests = await prisma.crossDepartmentLoadRequest.findMany({

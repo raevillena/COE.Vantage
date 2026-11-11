@@ -54,6 +54,7 @@ test.describe("grade emails: import and send", () => {
       await expect(page.getByRole("img", { name: "Access email sent" })).toHaveCount(0);
       await page.getByRole("button", { name: "Send access emails", exact: true }).click();
       const sendDialog = page.getByRole("dialog");
+      await expect(sendDialog.getByText(/Of 3 records: 2 have an email, 0 already emailed, so 2 would be sent/)).toBeVisible();
       await sendDialog.getByRole("button", { name: "Send to all records" }).click();
       await expect(sendDialog.getByText(/Done\. 2 of 2 sent/)).toBeVisible({ timeout: 20_000 });
       await expect(sendDialog.getByText(/1 without a valid email/)).toBeVisible();
@@ -61,10 +62,15 @@ test.describe("grade emails: import and send", () => {
       await expect(page.getByRole("img", { name: "Access email sent" })).toHaveCount(2);
       expect((await records()).filter((r) => r.emailSentAt).length).toBe(2);
 
-      // ---- sending again leaves the already-emailed students out
+      // ---- Reload picks up a change made elsewhere
+      await request.post(`${API}/grade-subjects/${subjectId}/records/import-emails`, { headers, data: { rows: [{ studentNumber: "99-884003", email: "three@example.com" }] } });
+      await page.getByRole("button", { name: "Reload", exact: true }).click();
+      await expect(page.getByText("three@example.com")).toBeVisible();
+
+      // ---- sending again leaves the two already-emailed students out and sends only to the newly added address
       await page.getByRole("button", { name: "Send access emails", exact: true }).click();
       await page.getByRole("dialog").getByRole("button", { name: "Send to all records" }).click();
-      await expect(page.getByRole("dialog").getByText(/Done\. 0 of 0 sent/)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("dialog").getByText(/Done\. 1 of 1 sent/)).toBeVisible({ timeout: 20_000 });
       await expect(page.getByRole("dialog").getByText(/2 already emailed/)).toBeVisible();
       await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).first().click();
 

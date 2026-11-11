@@ -36,7 +36,9 @@ import { AuditLogPage } from "./pages/audit/AuditLogPage";
 import { UniversityPage } from "./pages/university/UniversityPage";
 import { CollegesPage } from "./pages/university/CollegesPage";
 import { PublicGradesPage } from "./pages/publicGrades/PublicGradesPage";
+import { PublicSchedulePage } from "./pages/publicSchedule/PublicSchedulePage";
 import { ExamRoomReservationPage } from "./pages/examRooms/ExamRoomReservationPage";
+import { DeadlinesPage } from "./pages/deadlines/DeadlinesPage";
 
 function App() {
   return (
@@ -45,6 +47,7 @@ function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/grades" element={<PublicGradesPage />} />
+      <Route path="/s/:token" element={<PublicSchedulePage />} />
       <Route
         path="/"
         element={
@@ -56,6 +59,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="dashboard/details/:metric" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "COLLEGE_SECRETARY"]}><DashboardDetailPage /></ProtectedRoute>} />
+        <Route path="deadlines" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "FACULTY", "OFFICER", "COLLEGE_SECRETARY"]}><DeadlinesPage /></ProtectedRoute>} />
         <Route path="exam-rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY"]}><ExamRoomReservationPage /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><UsersPage /></ProtectedRoute>} />
         <Route path="rooms" element={<ProtectedRoute allowedRoles={["ADMIN", "DEAN", "CHAIRMAN", "OFFICER", "COLLEGE_SECRETARY", "PRESIDENT", "UNIT"]}><RoomsPage /></ProtectedRoute>} />

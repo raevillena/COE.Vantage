@@ -1,6 +1,13 @@
 import type { Request, Response } from "express";
 import {
   login as loginService,
+  sessionIdOf,
+  getMyEmailDigest as getMyEmailDigestService,
+  getMyEmailPreferences as getMyEmailPreferencesService,
+  setMyEmailPreferences as setMyEmailPreferencesService,
+  setMyEmailDigest as setMyEmailDigestService,
+  googleSignInConfig,
+  loginWithGoogle,
   refresh as refreshService,
   logout as logoutService,
   register as registerService,
@@ -11,7 +18,16 @@ import {
   getMyExperimentalFeatures as getMyExperimentalFeaturesService,
   updateMyExperimentalFeatures as updateMyExperimentalFeaturesService,
 } from "./authService.js";
+import {
+  endOtherSessions,
+  endSession,
+  listSessions,
+  myLoginHistory,
+  recentLoginEvents,
+  type ClientMeta,
+} from "./loginSecurity.js";
 import type {
+  GoogleLoginBody,
   LoginBody,
   RegisterBody,
   RequestPasswordResetBody,
@@ -29,9 +45,59 @@ const COOKIE_OPTIONS = {
   path: "/",
 };
 
+const clientMeta = (req: Request): ClientMeta => ({ ip: req.ip ?? null, userAgent: req.get("user-agent") ?? null });
+
+export async function mySessions(req: Request, res: Response): Promise<void> {
+  res.json(await listSessions(req.user!.id, sessionIdOf(req.cookies?.[REFRESH_COOKIE_NAME])));
+}
+
+export async function endMySession(req: Request, res: Response): Promise<void> {
+  await endSession(req.params.id, req.user!.id);
+  res.json({ message: "Signed out" });
+}
+
+export async function endOtherSessionsOfMe(req: Request, res: Response): Promise<void> {
+  res.json({ ended: await endOtherSessions(req.user!.id, sessionIdOf(req.cookies?.[REFRESH_COOKIE_NAME])) });
+}
+
+export async function myLoginHistoryList(req: Request, res: Response): Promise<void> {
+  res.json(await myLoginHistory(req.user!.id));
+}
+
+export async function loginEventsForAdmin(req: Request, res: Response): Promise<void> {
+  res.json(await recentLoginEvents(Number(req.query.limit ?? 100), req.query.failures === "1"));
+}
+
 export async function login(req: Request, res: Response): Promise<void> {
   const body = req.body as LoginBody;
-  const result = await loginService(body);
+  const result = await loginService(body, clientMeta(req));
+  res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS);
+  res.json({ accessToken: result.accessToken, user: result.user });
+}
+
+export async function getEmailPreferences(req: Request, res: Response): Promise<void> {
+  res.json(await getMyEmailPreferencesService(req.user!.id));
+}
+
+export async function setEmailPreferences(req: Request, res: Response): Promise<void> {
+  res.json(await setMyEmailPreferencesService(req.user!.id, req.body as { digest?: boolean; deadlines?: boolean }));
+}
+
+export async function getEmailDigest(req: Request, res: Response): Promise<void> {
+  res.json(await getMyEmailDigestService(req.user!.id));
+}
+
+export async function setEmailDigest(req: Request, res: Response): Promise<void> {
+  res.json(await setMyEmailDigestService(req.user!.id, (req.body as { enabled: boolean }).enabled));
+}
+
+export async function googleConfig(_req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(googleSignInConfig());
+}
+
+export async function googleLogin(req: Request, res: Response): Promise<void> {
+  const result = await loginWithGoogle((req.body as GoogleLoginBody).credential, clientMeta(req));
   res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS);
   res.json({ accessToken: result.accessToken, user: result.user });
 }
@@ -42,7 +108,7 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     res.status(401).json({ message: "Refresh token required" });
     return;
   }
-  const result = await refreshService(token);
+  const result = await refreshService(token, clientMeta(req));
   res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, COOKIE_OPTIONS);
   res.json({ accessToken: result.accessToken });
 }

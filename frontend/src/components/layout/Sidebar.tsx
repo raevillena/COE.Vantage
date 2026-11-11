@@ -25,6 +25,7 @@ import {
   ScrollText,
   Landmark,
   Share2,
+  CalendarClock,
   ClipboardCheck,
 } from "lucide-react";
 import { useAppSelector } from "../../store/hooks";
@@ -188,6 +189,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       scoped: true,
       items: [
         { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, show: !viewer },
+        { to: "/deadlines", label: "Deadlines", icon: CalendarClock, show: is("ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "OFFICER", "COLLEGE_SECRETARY") },
         { to: "/exam-rooms", label: "Exam Room Reservation", icon: ClipboardCheck, show: is("ADMIN", "FACULTY", "CHAIRMAN", "DEAN", "COLLEGE_SECRETARY") },
         { to: "/scheduler", label: "Scheduler", icon: CalendarRange, show: is("CHAIRMAN", "ADMIN") },
         { to: "/requests", label: "Requests", icon: Inbox, show: is("CHAIRMAN", "ADMIN", "DEAN", "COLLEGE_SECRETARY"), requests: true },

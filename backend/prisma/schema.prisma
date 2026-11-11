@@ -36,6 +36,10 @@ model User {
   status               String? // e.g. Full-time, Part-time (from faculty list)
   maxUnits             Int? // max load units per term (null = no cap)
   isDeleted            Boolean   @default(false)
+  /// Whether unread bell notifications may be emailed to this person as a digest.
+  emailDigest          Boolean   @default(true)
+  /// Whether college deadline reminders may be emailed to this person (the bell reminder always shows).
+  emailDeadlines       Boolean   @default(true)
   deletedAt            DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -59,6 +63,7 @@ model User {
   @@index([role, departmentId])
   @@index([isDeleted])
   @@index([collegeId])
+  @@index([collegeId, isDeleted, name])
 }
 
 // The university holds colleges; every college holds its own departments, people, rooms and schedules.
@@ -196,6 +201,7 @@ model GradeRecord {
 
   @@index([subjectId])
   @@index([studentNumber, code])
+  @@index([subjectId, studentName])
 }
 
 model Room {
@@ -227,6 +233,7 @@ model Room {
   @@index([controlDepartmentId])
   @@index([isDeleted])
   @@index([collegeId])
+  @@index([collegeId, isDeleted, name])
 }
 
 model AcademicYear {
@@ -467,6 +474,7 @@ model FacultyLoad {
   @@index([studentClassId, dayOfWeek, academicYearId, semester])
   @@index([collegeId])
   @@index([hostCollegeId])
+  @@index([academicYearId, semester, collegeId])
 }
 
 /// Per-term reduction of a person's maximum units (designations, research, admin work). Effective max = maxUnits - sum(units).
@@ -716,6 +724,42 @@ model AuditLog {
   @@index([actorId])
 }
 
+// A deadline the college secretary sets for the people of one college (grades due, load submission, ...). Reminders are
+// emailed (and shown in the bell) a chosen number of days before, at a chosen hour of the day (Manila time).
+model CollegeDeadline {
+  id            String   @id @default(uuid())
+  collegeId     String?
+  title         String
+  description   String?
+  dueAt         DateTime
+  /// Roles it is for; empty = everyone in the college (admin, president and unit viewers excluded).
+  audienceRoles Role[]   @default([])
+  /// Days before the due day to remind (0 = on the due day).
+  reminderDays  Int[]    @default([7, 3, 1])
+  /// Hour of the day (0-23, Manila time) the reminders go out.
+  reminderHour  Int      @default(8)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reminders CollegeDeadlineReminder[]
+
+  @@index([collegeId, dueAt])
+}
+
+// One row per reminder already sent, so a reminder never goes out twice.
+model CollegeDeadlineReminder {
+  id         String   @id @default(uuid())
+  deadlineId String
+  daysBefore Int
+  firedAt    DateTime @default(now())
+  recipients Int      @default(0)
+
+  deadline CollegeDeadline @relation(fields: [deadlineId], references: [id], onDelete: Cascade)
+
+  @@unique([deadlineId, daysBefore])
+}
+
 // A locked semester takes no scheduling changes until it is unlocked (see utils/termLock.ts).
 model TermLock {
   id             String   @id @default(uuid())
@@ -743,12 +787,49 @@ model Notification {
   groupKey  String?
   count     Int       @default(1)
   readAt    DateTime?
+  /// Set when the notification was included in an email digest (see notificationDigest.ts).
+  emailedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, updatedAt])
+  @@index([readAt, emailedAt, createdAt])
+}
+
+// One row per sign-in attempt (password or Google), for the login history and for spotting guessing.
+model LoginEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  success   Boolean
+  method    String // password | google
+  reason    String? // why it failed: bad_password, locked, unknown_account, domain, ...
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
+
+// A read-only link to one faculty member's or one class's schedule (page and calendar file). Only a hash of the token is kept.
+model ScheduleShareLink {
+  id          String    @id @default(uuid())
+  tokenHash   String    @unique
+  kind        String // FACULTY | CLASS
+  targetId    String
+  label       String
+  createdById String
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+
+  @@index([createdById])
+  @@index([kind, targetId])
 }
 
 // Screenshot stored in the database. Kept in its own table so lists never load the bytes; can be purged to limit size.

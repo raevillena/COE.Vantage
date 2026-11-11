@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isAxiosError } from "axios";
-import { Check, Copy, Eye, KeyRound, Link2, Mail, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, KeyRound, Link2, Mail, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { apiClient } from "../../api/apiClient";
 import { Dialog } from "../../components/ui/dialog";
@@ -678,6 +678,8 @@ export function ExperimentalGradesPage() {
     noEmail: number;
     alreadySent: number;
     stoppedReason: string | null;
+    /** Running, but the server that was sending stopped: it carries on by itself shortly. */
+    paused?: boolean;
   };
   const [emailJob, setEmailJob] = useState<EmailJobView | null>(null);
   const [importEmailsOpen, setImportEmailsOpen] = useState(false);
@@ -1512,6 +1514,21 @@ export function ExperimentalGradesPage() {
     }
   };
 
+  const [reloading, setReloading] = useState(false);
+  /** Reloads the subject list and the records of the open subject from the server (new emails, sent marks, edits by others). */
+  const reloadTable = async () => {
+    if (!selectedSubjectId) return;
+    setReloading(true);
+    try {
+      await Promise.all([loadSubjects(), loadSubjectDetails(selectedSubjectId)]);
+      toast.success("Table reloaded.");
+    } catch {
+      toast.error("Could not reload the table.");
+    } finally {
+      setReloading(false);
+    }
+  };
+
   const sendAccessEmails = async (selectedOnly: boolean) => {
     setSaving(true);
     try {
@@ -2182,6 +2199,17 @@ export function ExperimentalGradesPage() {
                         Selected in table: <span className="font-medium text-foreground">{selectedRecordIds.size}</span> record
                         {selectedRecordIds.size === 1 ? "" : "s"}. Students who were already emailed are left out.
                       </p>
+                      {(() => {
+                        const hasMail = records.filter((r) => r.email);
+                        const sent = hasMail.filter((r) => r.emailSentAt).length;
+                        return (
+                          <p className="mt-2 rounded bg-surface-muted/60 px-2 py-1.5 text-xs text-foreground-muted">
+                            Of {records.length} records: {hasMail.length} have an email, {sent} already emailed, so{" "}
+                            <span className="font-medium text-foreground">{resendAll ? hasMail.length : hasMail.length - sent}</span> would be sent to
+                            {records.length - hasMail.length > 0 ? `; ${records.length - hasMail.length} have no email (use Import emails)` : ""}.
+                          </p>
+                        );
+                      })()}
                       <label className="mt-3 flex items-center gap-2 text-sm text-foreground">
                         <input type="checkbox" checked={resendAll} onChange={(e) => setResendAll(e.target.checked)} />
                         Email students who were already sent their code again
@@ -2224,6 +2252,7 @@ export function ExperimentalGradesPage() {
                         {emailJob.alreadySent > 0 ? `${emailJob.alreadySent} already emailed (left out). ` : ""}
                         {emailJob.noEmail > 0 ? `${emailJob.noEmail} without a valid email (skipped).` : ""}
                       </p>
+                      {emailJob.paused && <p className="rounded bg-warning-muted px-2 py-1.5 text-warning">Sending is paused because the server restarted. It carries on by itself within a minute.</p>}
                       {emailJob.stoppedReason && <p className="rounded bg-warning-muted px-2 py-1.5 text-warning">{emailJob.stoppedReason}</p>}
                       {emailJob.failed.length > 0 && (
                         <ul className="max-h-32 overflow-y-auto rounded border border-border p-2 text-xs">
@@ -2766,6 +2795,15 @@ export function ExperimentalGradesPage() {
                   <p className="text-xs text-foreground-muted">
                     Showing {filteredRecords.length} of {records.length}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => void reloadTable()}
+                    disabled={reloading}
+                    className="inline-flex items-center gap-1.5 rounded border border-border-strong bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-hover disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${reloading ? "animate-spin" : ""}`} aria-hidden />
+                    Reload
+                  </button>
                 </div>
               </div>
               <div>

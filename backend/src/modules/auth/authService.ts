@@ -9,9 +9,21 @@ import {
   getPasswordResetToken,
   deletePasswordResetToken,
 } from "../../config/redis.js";
+import { OAuth2Client } from "google-auth-library";
 import { env } from "../../config/env.js";
 import { sendPasswordResetEmail as sendEmail } from "../../utils/email.js";
 import { badRequest, unauthorized } from "../../utils/errors.js";
+import {
+  assertNotLocked,
+  clearFailures,
+  createSession,
+  endSession,
+  logLoginEvent,
+  recordFailure,
+  sessionExists,
+  touchSession,
+  type ClientMeta,
+} from "./loginSecurity.js";
 import type {
   LoginBody,
   RegisterBody,
@@ -44,22 +56,35 @@ export function createRefreshTokenId(): string {
 }
 
 /** Store refresh token in Redis and return the token string for the cookie. */
-export async function issueRefreshToken(userId: string): Promise<string> {
+export async function issueRefreshToken(userId: string, meta: ClientMeta = { ip: null, userAgent: null }, sessionId?: string): Promise<string> {
   const tokenId = createRefreshTokenId();
   await setRefreshToken(tokenId, userId);
-  return jwt.sign({ sub: userId, tokenId }, env.JWT_REFRESH_SECRET, {
+  const sid = sessionId ?? (await createSession(userId, tokenId, meta));
+  if (sessionId) await touchSession(sessionId, tokenId, meta);
+  return jwt.sign({ sub: userId, tokenId, sid }, env.JWT_REFRESH_SECRET, {
     expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
   });
 }
 
+/** The session id inside a refresh token (null for tokens issued before sessions existed). */
+export function sessionIdOf(token: string | undefined): string | null {
+  if (!token) return null;
+  try {
+    return (jwt.decode(token) as { sid?: string } | null)?.sid ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Verify refresh token from cookie and return userId if valid. */
 export async function verifyRefreshToken(token: string): Promise<string> {
-  const payload = jwt.verify(token, env.JWT_REFRESH_SECRET) as { sub: string; tokenId?: string };
+  const payload = jwt.verify(token, env.JWT_REFRESH_SECRET) as { sub: string; tokenId?: string; sid?: string };
   const tokenId = payload.tokenId ?? payload.sub;
   const storedUserId = await getRefreshToken(tokenId);
   if (!storedUserId || storedUserId !== payload.sub) {
     throw unauthorized("Invalid or expired refresh token");
   }
+  if (payload.sid && !(await sessionExists(payload.sid))) throw unauthorized("This session was signed out.");
   return payload.sub;
 }
 
@@ -85,14 +110,84 @@ type AuthUserPayload = {
   experimentalFeatures: ExperimentalFeaturesPreference;
 };
 
-export async function login(body: LoginBody): Promise<{ accessToken: string; refreshToken: string; user: AuthUserPayload }> {
-  const user = await prisma.user.findUnique({ where: { email: body.email }, include: { avatar: { select: { updatedAt: true } } } });
-  if (!user || user.isDeleted) throw unauthorized("Invalid email or password");
-  const valid = await bcrypt.compare(body.password, user.passwordHash);
-  if (!valid) throw unauthorized("Invalid email or password");
+type Session = { accessToken: string; refreshToken: string; user: AuthUserPayload };
+type UserWithAvatar = Prisma.UserGetPayload<{ include: { avatar: { select: { updatedAt: true } } } }>;
 
+const NO_CLIENT: ClientMeta = { ip: null, userAgent: null };
+
+export async function login(body: LoginBody, meta: ClientMeta = NO_CLIENT): Promise<Session> {
+  await assertNotLocked(body.email, meta);
+  const user = await prisma.user.findUnique({ where: { email: body.email }, include: { avatar: { select: { updatedAt: true } } } });
+  const valid = user && !user.isDeleted ? await bcrypt.compare(body.password, user.passwordHash) : false;
+  if (!user || user.isDeleted || !valid) {
+    await recordFailure(body.email, meta);
+    await logLoginEvent({ userId: user?.id, email: body.email, success: false, method: "password", reason: !user || user.isDeleted ? "unknown_account" : "bad_password", meta });
+    throw unauthorized("Invalid email or password");
+  }
+  await clearFailures(body.email, meta);
+  await logLoginEvent({ userId: user.id, email: user.email, success: true, method: "password", meta });
+  return startSession(user, meta);
+}
+
+// ---------------------------------------------------------------- Google sign-in
+// Only for accounts that already exist: the Google address must be verified, in the allowed domain (mmsu.edu.ph) and equal to
+// the email the account is registered with. Nothing is ever created here, and an account's password is not touched.
+
+export function googleSignInConfig(): { enabled: boolean; clientId: string | null; domain: string } {
+  return { enabled: Boolean(env.GOOGLE_CLIENT_ID), clientId: env.GOOGLE_CLIENT_ID ?? null, domain: env.GOOGLE_ALLOWED_DOMAIN };
+}
+
+let googleClient: OAuth2Client | null = null;
+
+/** The profile Google vouches for, or an unauthorized error. Split out so the rules below can be tested without Google. */
+export async function verifyGoogleCredential(credential: string): Promise<{ email: string; emailVerified: boolean; hostedDomain: string | null }> {
+  if (!env.GOOGLE_CLIENT_ID) throw badRequest("Google sign-in is not set up.");
+  googleClient ??= new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: env.GOOGLE_CLIENT_ID });
+    const p = ticket.getPayload();
+    if (!p?.email) throw new Error("no email");
+    return { email: p.email, emailVerified: p.email_verified === true, hostedDomain: typeof p.hd === "string" ? p.hd : null };
+  } catch {
+    throw unauthorized("Google sign-in could not be verified. Please try again.");
+  }
+}
+
+export async function loginWithGoogleProfile(profile: { email: string; emailVerified: boolean; hostedDomain: string | null }, meta: ClientMeta = NO_CLIENT): Promise<Session> {
+  await assertNotLocked(profile.email, meta);
+  try {
+    const session = await googleProfileSession(profile, meta);
+    await logLoginEvent({ userId: session.user.id, email: session.user.email, success: true, method: "google", meta });
+    return session;
+  } catch (err) {
+    await recordFailure(profile.email, meta);
+    await logLoginEvent({ email: profile.email, success: false, method: "google", reason: err instanceof Error ? err.message.slice(0, 80) : "refused", meta });
+    throw err;
+  }
+}
+
+async function googleProfileSession(profile: { email: string; emailVerified: boolean; hostedDomain: string | null }, meta: ClientMeta): Promise<Session> {
+  const domain = env.GOOGLE_ALLOWED_DOMAIN.toLowerCase();
+  const email = profile.email.trim().toLowerCase();
+  if (!profile.emailVerified) throw unauthorized("That Google email is not verified.");
+  if (!email.endsWith(`@${domain}`) || (profile.hostedDomain && profile.hostedDomain.toLowerCase() !== domain)) {
+    throw unauthorized(`Use your @${domain} Google account.`);
+  }
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" }, isDeleted: false },
+    include: { avatar: { select: { updatedAt: true } } },
+  });
+  if (!user) throw unauthorized(`No Vantage account uses ${email}. Ask an administrator to add it.`);
+  return startSession(user, meta);
+}
+
+export async function loginWithGoogle(credential: string, meta: ClientMeta = NO_CLIENT): Promise<Session> {
+  return loginWithGoogleProfile(await verifyGoogleCredential(credential), meta);
+}
+
+async function startSession(user: UserWithAvatar, meta: ClientMeta): Promise<Session> {
   const accessToken = signAccessToken(user.id);
-  const refreshToken = await issueRefreshToken(user.id);
+  const refreshToken = await issueRefreshToken(user.id, meta);
   return {
     accessToken,
     refreshToken,
@@ -111,16 +206,26 @@ export async function login(body: LoginBody): Promise<{ accessToken: string; ref
 }
 
 /** Refresh: validate cookie, optionally revoke old token, issue new access + refresh. */
-export async function refresh(refreshTokenFromCookie: string): Promise<{ accessToken: string; refreshToken: string }> {
+export async function refresh(refreshTokenFromCookie: string, meta: ClientMeta = NO_CLIENT): Promise<{ accessToken: string; refreshToken: string }> {
   const userId = await verifyRefreshToken(refreshTokenFromCookie);
+  const sid = sessionIdOf(refreshTokenFromCookie) ?? undefined;
   await revokeRefreshToken(refreshTokenFromCookie);
   const accessToken = signAccessToken(userId);
-  const refreshToken = await issueRefreshToken(userId);
+  const refreshToken = await issueRefreshToken(userId, meta, sid);
   return { accessToken, refreshToken };
 }
 
 export async function logout(refreshTokenFromCookie: string | undefined): Promise<void> {
+  const sid = sessionIdOf(refreshTokenFromCookie);
   if (refreshTokenFromCookie) await revokeRefreshToken(refreshTokenFromCookie);
+  if (sid) {
+    try {
+      const userId = (jwt.decode(refreshTokenFromCookie!) as { sub?: string } | null)?.sub;
+      if (userId) await endSession(sid, userId);
+    } catch {
+      // already gone
+    }
+  }
 }
 
 export async function register(body: RegisterBody): Promise<{ id: string; email: string; role: string; name: string; departmentId: string | null }> {
@@ -144,6 +249,33 @@ export async function register(body: RegisterBody): Promise<{ id: string; email:
     select: { id: true, email: true, role: true, name: true, departmentId: true },
   });
   return user;
+}
+
+export type EmailPreferences = { digest: boolean; deadlines: boolean };
+
+export async function getMyEmailPreferences(userId: string): Promise<EmailPreferences> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { emailDigest: true, emailDeadlines: true } });
+  return { digest: user?.emailDigest ?? true, deadlines: user?.emailDeadlines ?? true };
+}
+
+/** Changes only the switches that are given. The bell notifications are not affected: they always show. */
+export async function setMyEmailPreferences(userId: string, prefs: Partial<EmailPreferences>): Promise<EmailPreferences> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { ...(prefs.digest !== undefined ? { emailDigest: prefs.digest } : {}), ...(prefs.deadlines !== undefined ? { emailDeadlines: prefs.deadlines } : {}) },
+    select: { emailDigest: true, emailDeadlines: true },
+  });
+  return { digest: user.emailDigest, deadlines: user.emailDeadlines };
+}
+
+export async function getMyEmailDigest(userId: string): Promise<{ enabled: boolean }> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { emailDigest: true } });
+  return { enabled: user?.emailDigest ?? true };
+}
+
+export async function setMyEmailDigest(userId: string, enabled: boolean): Promise<{ enabled: boolean }> {
+  const user = await prisma.user.update({ where: { id: userId }, data: { emailDigest: enabled }, select: { emailDigest: true } });
+  return { enabled: user.emailDigest };
 }
 
 export async function getMyExperimentalFeatures(userId: string): Promise<ExperimentalFeaturesPreference> {

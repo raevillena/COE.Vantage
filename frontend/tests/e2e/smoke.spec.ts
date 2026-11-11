@@ -38,7 +38,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.8.2" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.9.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();
@@ -1421,7 +1421,7 @@ test.describe("college switcher and unit viewers", () => {
       await page.goto("/login");
       await page.getByLabel("Email").fill(unit);
       await page.locator("#password").fill(PASSWORD);
-      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await page.waitForURL("**/university");
       await expect(page.getByRole("button", { name: /^Switch college/ })).toBeVisible();
       const nav = page.getByRole("navigation").first();

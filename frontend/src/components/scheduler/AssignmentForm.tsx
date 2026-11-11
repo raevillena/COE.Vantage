@@ -94,6 +94,8 @@ interface AssignmentFormProps {
   onAddAnotherSession?: () => void;
   /** Split Class: the saved block this assignment splits. It needs a different instructor; the time may differ. */
   splitOfLoadId?: string;
+  /** Editing a saved block that is already split between instructors: it cannot be repeated on other days. */
+  isSplitBlock?: boolean;
   splitFromFaculty?: { id: string | null; name: string };
   /** New assignment only: the form changed the day or time, so the pending block on the grid follows. */
   onTimeChange?: (time: { dayOfWeek: number; startTime: string; endTime: string }) => void;
@@ -120,6 +122,7 @@ export function AssignmentForm({
   roomAvailabilityMap,
   onAddAnotherSession,
   splitOfLoadId,
+  isSplitBlock = false,
   splitFromFaculty,
   onTimeChange,
   onSaved,
@@ -419,7 +422,7 @@ export function AssignmentForm({
   });
 
   const repeat = useRepeatDays({
-    enabled: !editingLoadId || isEditingSavedLoad,
+    enabled: (!editingLoadId || isEditingSavedLoad) && !(isSplitBlock && isEditingSavedLoad),
     editingLoadId: isEditingSavedLoad ? editingLoadId : null,
     primaryDay: dayOfWeek,
     ready:
@@ -456,7 +459,14 @@ export function AssignmentForm({
       coPreview.capacityIssue ||
       coPreview.labRoomMismatch);
 
+  /** The end time must be after the start time: a block cannot have zero or negative hours. */
+  const timeRangeInvalid = timeToMinutes(endTime) <= timeToMinutes(startTime);
+
   const handleSave = async () => {
+    if (timeRangeInvalid) {
+      toast.error("The end time must be after the start time.");
+      return;
+    }
     const hasFaculty = (!isOthersFaculty && facultyId) || (isOthersFaculty && facultyDisplayName?.trim());
     const hasRoom = (!isOffSystemRoom && roomId) || isOffSystemRoom; // off-system room allows empty display name (we default to "Off-system")
     if (!hasFaculty || !subjectId || !studentClassId || !hasRoom) {
@@ -764,6 +774,11 @@ export function AssignmentForm({
       </div>
       <TimeRangeWarning startTime={startTime} endTime={endTime} onFixEnd={(t) => changeTime({ endTime: t })} />
       {repeat.picker}
+      {isSplitBlock && isEditingSavedLoad && (
+        <p className="rounded border border-border bg-surface-muted/40 px-3 py-2 text-xs text-foreground-muted" data-testid="split-no-repeat">
+          This block is split between instructors, so it cannot be repeated on other days.
+        </p>
+      )}
       {isEditingSavedLoad && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
           <span className="text-xs font-medium text-foreground-muted shrink-0">Team teaching / split</span>
@@ -843,7 +858,7 @@ export function AssignmentForm({
         <Button
           type="button"
           onClick={handleSave}
-          disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked || sameAsSplitSource}
+          disabled={loading || timeRangeInvalid || (preview !== null && Boolean(hasConflict)) || repeat.blocked || sameAsSplitSource}
         >
           {loading ? "…" : editingLoadId ? (repeat.changeCount > 0 ? `Update (${repeat.changeCount} day change${repeat.changeCount === 1 ? "" : "s"})` : "Update") : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
         </Button>

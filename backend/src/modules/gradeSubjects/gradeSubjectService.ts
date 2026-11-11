@@ -2,7 +2,9 @@ import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "../../prisma/client.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../../utils/errors.js";
 import { runUnscoped } from "../../utils/auditContext.js";
+import { randomUUID } from "node:crypto";
 import { env } from "../../config/env.js";
+import { redis } from "../../config/redis.js";
 import { isSmtpConfigured, sendGradeAccessEmail } from "../../utils/email.js";
 import type {
   CreateGradeRecordBody,
@@ -677,10 +679,18 @@ export async function publicLookup(studentNumber: string, code: string) {
 // ---------------------------------------------------------------- access emails
 // Sent as a background job, one email at a time with a pause between them, so a long list neither holds a request open nor
 // hits the mail server as a burst (which is how a mailbox gets flagged as spam or blocked). Failures are kept per student.
+// The job lives in Redis (not in this process): a restart or a second backend replica does not lose it, and a job that was
+// running when the backend stopped is resumed on start (`resumeAccessEmailJobs`).
 
 const EMAIL_PAUSE_MS = 1500; // between two emails (only when a real SMTP server is configured)
 const EMAIL_DAILY_LIMIT = 400; // emails started in 24 hours across the app; most mailboxes allow 500
 const EMAIL_STOP_AFTER_FAILURES = 3; // this many failures in a row means the server refuses us: stop instead of retrying
+const JOB_KEY = (subjectId: string) => `gradeEmailJob:${subjectId}`;
+const LOCK_KEY = (subjectId: string) => `gradeEmailLock:${subjectId}`;
+const JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
+const LOCK_SECONDS = 30; // renewed after every email; a dead runner's lock lapses and the job is resumed
+const heldLocks = new Set<string>(); // subjects this process is sending for (released on a normal shutdown)
+const RUNNER_ID = randomUUID();
 
 type EmailFailure = { studentNumber: string; studentName: string; reason: string };
 type EmailJob = {
@@ -696,8 +706,19 @@ type EmailJob = {
   stoppedReason: string | null;
   startedAt: string;
   finishedAt: string | null;
+  /** Records still to send, in order (this is what lets a restarted backend carry on). */
+  pendingIds: string[];
+  resend: boolean;
+  subjectName: string;
 };
-const emailJobs = new Map<string, EmailJob>();
+
+async function loadJob(subjectId: string): Promise<EmailJob | null> {
+  const raw = await redis.get(JOB_KEY(subjectId));
+  return raw ? (JSON.parse(raw) as EmailJob) : null;
+}
+const saveJob = (subjectId: string, job: EmailJob) => redis.setex(JOB_KEY(subjectId), JOB_TTL_SECONDS, JSON.stringify(job));
+const takeLock = async (subjectId: string) => (await redis.set(LOCK_KEY(subjectId), RUNNER_ID, "EX", LOCK_SECONDS, "NX")) === "OK";
+const renewLock = (subjectId: string) => redis.set(LOCK_KEY(subjectId), RUNNER_ID, "EX", LOCK_SECONDS);
 
 const EMAIL_PATTERN = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 export function isValidEmail(value: string): boolean {
@@ -706,87 +727,152 @@ export function isValidEmail(value: string): boolean {
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** The job as the page shows it (without the internal queue). */
+function publicJob(job: EmailJob, paused: boolean) {
+  const { pendingIds: _pending, resend: _resend, subjectName: _name, ...rest } = job;
+  return { ...rest, paused };
+}
+
 export async function accessEmailStatus(subjectId: string, caller: Caller) {
   await loadSubjectAccess(subjectId, caller);
-  return emailJobs.get(subjectId) ?? null;
+  const job = await loadJob(subjectId);
+  if (!job) return null;
+  // running but nobody holds the lock: the backend that was sending stopped; it is picked up again shortly
+  const paused = job.state === "running" && !(await redis.get(LOCK_KEY(subjectId)));
+  return publicJob(job, paused);
+}
+
+/** Sends the queue of a stored job. Whoever holds the lock runs it; the state is saved after every email. */
+async function runEmailJob(subjectId: string): Promise<void> {
+  const job = await loadJob(subjectId);
+  if (!job || job.state !== "running") return;
+  const real = isSmtpConfigured();
+  const base = env.FRONTEND_ORIGIN.replace(/\/$/, "");
+  let failuresInARow = 0;
+  heldLocks.add(subjectId);
+  try {
+    await runUnscoped(async () => {
+      while (job.pendingIds.length > 0) {
+        const id = job.pendingIds[0];
+        const record = await prisma.gradeRecord.findUnique({ where: { id } });
+        job.pendingIds.shift();
+        const stillToSend = record && record.email && isValidEmail(record.email) && (job.resend || !record.emailSentAt);
+        if (stillToSend) {
+          try {
+            await sendGradeAccessEmail({
+              toEmail: record.email!,
+              subjectName: job.subjectName,
+              studentName: record.studentName,
+              studentNumber: record.studentNumber,
+              accessCode: record.code,
+              lookupUrl: `${base}/grades?studentNumber=${encodeURIComponent(record.studentNumber)}&code=${encodeURIComponent(record.code)}`,
+            });
+            await prisma.gradeRecord.update({ where: { id: record.id }, data: { emailSentAt: new Date() } });
+            job.sent += 1;
+            failuresInARow = 0;
+          } catch (err) {
+            job.failed.push({
+              studentNumber: record.studentNumber,
+              studentName: record.studentName,
+              reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+            });
+            failuresInARow += 1;
+            if (failuresInARow >= EMAIL_STOP_AFTER_FAILURES) {
+              job.stoppedReason = `Stopped after ${EMAIL_STOP_AFTER_FAILURES} failures in a row (the mail server may be refusing messages). The remaining ${job.pendingIds.length} were not tried.`;
+              job.pendingIds = [];
+            }
+          }
+        }
+        await saveJob(subjectId, job);
+        await renewLock(subjectId);
+        if (real && stillToSend && job.pendingIds.length > 0) await pause(EMAIL_PAUSE_MS);
+      }
+    });
+  } catch (err) {
+    job.stoppedReason = `Sending stopped: ${err instanceof Error ? err.message : String(err)}`;
+    job.pendingIds = [];
+  }
+  job.state = "done";
+  job.finishedAt = new Date().toISOString();
+  await saveJob(subjectId, job);
+  await redis.del(LOCK_KEY(subjectId));
+  heldLocks.delete(subjectId);
+}
+
+/** On a normal shutdown give the locks back at once, so another backend (or this one after a restart) carries on without waiting. */
+export async function releaseAccessEmailLocks(): Promise<void> {
+  await Promise.all([...heldLocks].map((id) => redis.del(LOCK_KEY(id)).catch(() => undefined)));
+  heldLocks.clear();
+}
+
+/** Called once when the backend starts: carries on with any job that was running when a backend stopped. */
+export async function resumeAccessEmailJobs(): Promise<void> {
+  try {
+    let cursor = "0";
+    do {
+      const [next, keys] = await redis.scan(cursor, "MATCH", "gradeEmailJob:*", "COUNT", 100);
+      cursor = next;
+      for (const key of keys) {
+        const subjectId = key.slice("gradeEmailJob:".length);
+        const job = await loadJob(subjectId);
+        if (job?.state === "running" && (await takeLock(subjectId))) {
+          console.log(`[Grade access] resuming email job for subject ${subjectId} (${job.pendingIds.length} left)`);
+          void runEmailJob(subjectId);
+        }
+      }
+    } while (cursor !== "0");
+  } catch (err) {
+    console.error("[Grade access] could not resume email jobs", err);
+  }
 }
 
 export async function sendAccessCodes(subjectId: string, caller: Caller, body: SendAccessCodesBody) {
   const access = await loadSubjectAccess(subjectId, caller);
   assertWriteAccess(access);
-  if (emailJobs.get(subjectId)?.state === "running") throw conflict("Emails for this subject are already being sent. Wait for them to finish.");
+  if (!(await takeLock(subjectId))) throw conflict("Emails for this subject are already being sent. Wait for them to finish.");
 
-  const where = body.recordIds?.length ? { subjectId, id: { in: body.recordIds } } : { subjectId };
-  const records = await prisma.gradeRecord.findMany({ where, orderBy: { studentName: "asc" } });
-  const queue = records.filter((r) => r.email && isValidEmail(r.email) && (body.resend || !r.emailSentAt));
-  const noEmail = records.filter((r) => !r.email || !isValidEmail(r.email)).length;
-  const alreadySent = records.filter((r) => r.email && isValidEmail(r.email) && !body.resend && r.emailSentAt).length;
+  try {
+    const where = body.recordIds?.length ? { subjectId, id: { in: body.recordIds } } : { subjectId };
+    const records = await prisma.gradeRecord.findMany({ where, orderBy: { studentName: "asc" } });
+    const queue = records.filter((r) => r.email && isValidEmail(r.email) && (body.resend || !r.emailSentAt));
+    const noEmail = records.filter((r) => !r.email || !isValidEmail(r.email)).length;
+    const alreadySent = records.filter((r) => r.email && isValidEmail(r.email) && !body.resend && r.emailSentAt).length;
 
-  const real = isSmtpConfigured();
-  let allowance = queue.length;
-  if (real) {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const usedToday = await runUnscoped(() => prisma.gradeRecord.count({ where: { emailSentAt: { gte: since } } }));
-    allowance = Math.max(0, EMAIL_DAILY_LIMIT - usedToday);
-  }
-  const toSend = queue.slice(0, allowance);
-  const job: EmailJob = {
-    state: toSend.length > 0 ? "running" : "done",
-    total: toSend.length,
-    sent: 0,
-    failed: [],
-    noEmail,
-    alreadySent,
-    stoppedReason:
-      toSend.length < queue.length
-        ? `Daily limit reached: only ${toSend.length} of ${queue.length} emails were queued so the mail account is not flagged. Send the rest tomorrow.`
-        : null,
-    startedAt: new Date().toISOString(),
-    finishedAt: toSend.length > 0 ? null : new Date().toISOString(),
-  };
-  emailJobs.set(subjectId, job);
-  if (toSend.length === 0) return job;
-
-  const base = env.FRONTEND_ORIGIN.replace(/\/$/, "");
-  const subjectName = access.subject.name;
-  void runUnscoped(async () => {
-    let failuresInARow = 0;
-    for (let i = 0; i < toSend.length; i += 1) {
-      const record = toSend[i];
-      try {
-        await sendGradeAccessEmail({
-          toEmail: record.email!,
-          subjectName,
-          studentName: record.studentName,
-          studentNumber: record.studentNumber,
-          accessCode: record.code,
-          lookupUrl: `${base}/grades?studentNumber=${encodeURIComponent(record.studentNumber)}&code=${encodeURIComponent(record.code)}`,
-        });
-        await prisma.gradeRecord.update({ where: { id: record.id }, data: { emailSentAt: new Date() } });
-        job.sent += 1;
-        failuresInARow = 0;
-      } catch (err) {
-        job.failed.push({
-          studentNumber: record.studentNumber,
-          studentName: record.studentName,
-          reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
-        });
-        failuresInARow += 1;
-        if (failuresInARow >= EMAIL_STOP_AFTER_FAILURES) {
-          job.stoppedReason = `Stopped after ${EMAIL_STOP_AFTER_FAILURES} failures in a row (the mail server may be refusing messages). The remaining ${toSend.length - i - 1} were not tried.`;
-          break;
-        }
-      }
-      if (real && i < toSend.length - 1) await pause(EMAIL_PAUSE_MS);
+    let allowance = queue.length;
+    if (isSmtpConfigured()) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const usedToday = await runUnscoped(() => prisma.gradeRecord.count({ where: { emailSentAt: { gte: since } } }));
+      allowance = Math.max(0, EMAIL_DAILY_LIMIT - usedToday);
     }
-    job.state = "done";
-    job.finishedAt = new Date().toISOString();
-  }).catch((err) => {
-    job.state = "done";
-    job.stoppedReason = `Sending stopped: ${err instanceof Error ? err.message : String(err)}`;
-    job.finishedAt = new Date().toISOString();
-  });
-  return job;
+    const toSend = queue.slice(0, allowance);
+    const job: EmailJob = {
+      state: toSend.length > 0 ? "running" : "done",
+      total: toSend.length,
+      sent: 0,
+      failed: [],
+      noEmail,
+      alreadySent,
+      stoppedReason:
+        toSend.length < queue.length
+          ? `Daily limit reached: only ${toSend.length} of ${queue.length} emails were queued so the mail account is not flagged. Send the rest tomorrow.`
+          : null,
+      startedAt: new Date().toISOString(),
+      finishedAt: toSend.length > 0 ? null : new Date().toISOString(),
+      pendingIds: toSend.map((r) => r.id),
+      resend: Boolean(body.resend),
+      subjectName: access.subject.name,
+    };
+    await saveJob(subjectId, job);
+    if (toSend.length === 0) {
+      await redis.del(LOCK_KEY(subjectId));
+      return publicJob(job, false);
+    }
+    void runEmailJob(subjectId);
+    return publicJob(job, false);
+  } catch (err) {
+    await redis.del(LOCK_KEY(subjectId));
+    throw err;
+  }
 }
 
 /**

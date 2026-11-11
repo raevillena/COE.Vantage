@@ -15,6 +15,7 @@ export const routeTitles: Record<string, string> = {
   "/scheduler": "Scheduler",
   "/faculty": "Faculty",
   "/exam-rooms": "Exam Room Reservation",
+  "/deadlines": "Deadlines",
   "/schedules/faculty": "Faculty Schedule",
   "/schedules/student-class": "Class Schedule",
   "/schedules/rooms": "Room Availability",

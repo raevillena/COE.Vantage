@@ -31,10 +31,10 @@ function transport(): nodemailer.Transporter {
   return pooled;
 }
 
-/** Reserved example domains (RFC 2606) can never be delivered, so they are logged instead of sent (keeps test data off the mail server). */
+/** Reserved example domains (RFC 2606) and the seeded dev domain can never be delivered, so they are logged instead of sent (keeps test data off the mail server). */
 function isReservedExampleAddress(email: string): boolean {
   const domain = email.split("@").pop()?.toLowerCase() ?? "";
-  return /^example\.(com|net|org)$/.test(domain) || /\.(invalid|test|example|localhost)$/.test(domain);
+  return /^example\.(com|net|org)$/.test(domain) || /\.(invalid|test|example|localhost)$/.test(domain) || domain === "coe.vantage"; // coe.vantage = the seeded dev accounts
 }
 
 export async function sendGradeAccessEmail(params: {
@@ -69,6 +69,16 @@ export async function sendGradeAccessEmail(params: {
       params.lookupUrl
     );
   }
+}
+
+/** Sends one message through the shared transport. Reserved example addresses and a missing SMTP setup are only logged. */
+export async function sendMessage(params: { to: string; subject: string; text: string; html: string }): Promise<"sent" | "logged"> {
+  if (isSmtpConfigured() && !isReservedExampleAddress(params.to)) {
+    await transport().sendMail({ from: env.SMTP_FROM!, to: params.to, subject: params.subject, text: params.text, html: params.html });
+    return "sent";
+  }
+  console.log("[Email] not sent (no SMTP or example address):", params.to, "-", params.subject);
+  return isSmtpConfigured() ? "sent" : "logged"; // an example address counts as handled (test data); no SMTP means nothing went out
 }
 
 /** Send password reset email. If SMTP is not configured, logs the link to console (for dev). */

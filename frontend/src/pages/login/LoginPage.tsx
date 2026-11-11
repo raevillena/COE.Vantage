@@ -12,6 +12,7 @@ import {
   type LoginFieldErrors,
 } from "./loginValidation";
 import { toast } from "react-hot-toast";
+import { GoogleSignIn } from "./GoogleSignIn";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -96,6 +97,20 @@ export function LoginPage() {
       const { message, fieldErrors: apiFieldErrors } = getLoginError(err);
       setError(message);
       if (apiFieldErrors) setFieldErrors(apiFieldErrors);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleCredential = async (credential: string) => {
+    clearErrors();
+    setLoading(true);
+    try {
+      const { data } = await apiClient.post<LoginResponse>("/auth/google", { credential });
+      dispatch(setAuth({ user: data.user, accessToken: data.accessToken }));
+      navigate(from, { replace: true });
+    } catch (err: unknown) {
+      setError(getLoginError(err).message);
     } finally {
       setLoading(false);
     }
@@ -200,6 +215,8 @@ export function LoginPage() {
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>
+
+          <GoogleSignIn onCredential={(c) => void handleGoogleCredential(c)} disabled={loading} />
 
           {showQuickSignIn && (
             <div className="mt-6 pt-4 border-t border-border">

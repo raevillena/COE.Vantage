@@ -218,3 +218,9 @@
   - `VITE_APP_VERSION` — string shown in the auth footer (e.g. `v1.0.0`); when unset, the UI falls back to `v0.0.0`.
 
 ---
+
+## Google sign-in (uncommitted, 2026-11-11)
+- Only for EXISTING accounts. `POST /auth/google {credential}` (Google Identity Services ID token): the server verifies it with `google-auth-library` against `GOOGLE_CLIENT_ID`, then `loginWithGoogleProfile` requires email_verified, the email to end with `@GOOGLE_ALLOWED_DOMAIN` (default `mmsu.edu.ph`; a different `hd` claim is refused), and a non-deleted user whose registered email equals it (case-insensitive). Nothing is created, passwords are untouched; the session (access token + refresh cookie) is the same as password login (`startSession`).
+- `GET /auth/google/config` -> `{enabled, clientId, domain}` is public; the login page (`pages/login/GoogleSignIn.tsx`) loads Google's script and shows the button only when `enabled`. No frontend env var needed.
+- NOT enabled until `GOOGLE_CLIENT_ID` is set (backend `.env.local`, k8s `backend-config.yaml`); in Google Cloud Console add the site origins as Authorized JavaScript origins. Accounts registered with a non-mmsu email (e.g. `admin@coe.vantage`) cannot use it.
+- Tested: the rules (verified, domain, look-alike domain, hd claim, unknown and deleted account, letter case) with a throwaway script against the dev DB; endpoints/button visibility in `tests/e2e/googleLogin.spec.ts`. NOT tested: a real Google token (needs a client id and a real mmsu.edu.ph login).

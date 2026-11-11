@@ -6,7 +6,7 @@
 
 Build conflict-free teaching loads, see what's left to schedule, and print the registrar's forms, all in one place.
 
-![Version](https://img.shields.io/badge/version-v0.8.2-197fa1)
+![Version](https://img.shields.io/badge/version-v0.9.0-197fa1)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-61dafb?logo=react&logoColor=black)
@@ -132,6 +132,7 @@ The full history is in **[CHANGELOG.md](CHANGELOG.md)**. The latest releases:
 
 | Version | Highlights |
 |---|---|
+| **v0.9.0** | College deadlines with reminders, schedule sharing and calendar files, Google sign-in, safer sign-ins and Profile email settings, Scheduler fixes |
 | **v0.8.2** | Exam Room Reservation, a new faculty menu (Management / Schedules), filters and pages on the long lists |
 | **v0.8.1** | Current and Scheduling Semester, curriculum specializations, college name on dashboard exports and registrar forms |
 | **v0.8.0** | Overload allowed in the scheduler, a subject menu in the scheduler list, clearer sign-in errors |

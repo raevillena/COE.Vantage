@@ -53,3 +53,7 @@
 ### 64. Filters, pagination and grade-lookup fixes (v0.8.2)
 - Filters/pages: last sections of `docs/dev/terms-users-search-nav.md`. Grades import link, kept access codes, public lookup redesign: last sections of `docs/dev/grades-module.md` (migration `20260623000000_grade_subject_sheet_url`).
 - v0.8.2 also carries Exam Room Reservation and the faculty menu (`docs/dev/exam-rooms.md`; migration `20260624000000_exam_room_reservation`). Release notes list only the user-visible items (exam rooms, faculty menu, list filters/pages, the Scheduler spinner fix); the grade module changes and the admin-only Users/Trash lists are deliberately not listed.
+
+## v0.9.0 (2026-11-11)
+- Release notes list only the user-visible items: deadlines, share/calendar links, Google sign-in, Profile sign-in and email settings, sign-in protection, Scheduler fixes. NOT listed: the Grades module changes (Reload, Import emails, paced sending), the admin-only class department filter and login events endpoint, readiness probe, slow-query log, indexes.
+- Details: `docs/dev/college-deadlines.md`, `docs/dev/platform-hardening.md`, `docs/dev/forms-theme-auth.md` (Google sign-in). Migrations `20260625000000_security_digest_share`, `20260626000000_college_deadlines`, `20260627000000_email_deadlines_pref` (the k8s migrate job runs them). New backend dependency `google-auth-library`: rebuild the backend image. Google sign-in and the emails stay off until `GOOGLE_CLIENT_ID` / `EMAIL_DIGEST=true` are set in the deployment.

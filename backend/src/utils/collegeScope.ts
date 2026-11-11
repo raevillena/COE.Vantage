@@ -23,6 +23,7 @@ export const SCOPED_MODELS = new Set([
   "ExamPeriod",
   "ExamReservation",
   "ExamRemovalRequest",
+  "CollegeDeadline",
 ]);
 
 const FILTER_ACTIONS = new Set([

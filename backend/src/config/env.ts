@@ -33,6 +33,17 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
+  /** A database query slower than this many milliseconds is logged as "[slow-query]" (0 turns it off). */
+  SLOW_QUERY_MS: z.string().optional().transform((v) => (v === undefined || v === "" ? 500 : Number(v))),
+  /** When true, unread bell notifications are emailed to people as a digest (at most one email per person per day). */
+  EMAIL_DIGEST: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
+  /** Google OAuth client id (Web application). When set, the login page offers "Sign in with Google". */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  /** The only email domain Google sign-in accepts. The person must also already have a Vantage account with that exact email. */
+  GOOGLE_ALLOWED_DOMAIN: z.string().default("mmsu.edu.ph"),
 });
 
 export type Env = z.infer<typeof envSchema>;

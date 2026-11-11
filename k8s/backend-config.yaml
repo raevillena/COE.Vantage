@@ -21,6 +21,10 @@ stringData:
   REDIS_URL: "redis://redis-host:6379"
   JWT_ACCESS_SECRET: "replace-with-real-access-secret"
   JWT_REFRESH_SECRET: "replace-with-real-refresh-secret"
+  # EMAIL_DIGEST: "true"          # daily email digest of unread notifications (needs SMTP)
+  # SLOW_QUERY_MS: "500"
+  # GOOGLE_CLIENT_ID: ""          # enables Sign in with Google (existing @mmsu.edu.ph accounts only)
+  # GOOGLE_ALLOWED_DOMAIN: "mmsu.edu.ph"
   # SMTP_HOST: ""
   # SMTP_PORT: "587"
   # SMTP_SECURE: "false"

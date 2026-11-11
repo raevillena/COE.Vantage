@@ -108,7 +108,14 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
 
   const hasConflict = preview && (preview.facultyConflict || preview.roomConflict || preview.studentConflict || preview.capacityIssue || preview.labRoomMismatch);
 
+  /** The end time must be after the start time: a block cannot have zero or negative hours (HH:mm compares correctly as text). */
+  const timeRangeInvalid = endTime <= startTime;
+
   const handleSave = async () => {
+    if (timeRangeInvalid) {
+      toast.error("The end time must be after the start time.");
+      return;
+    }
     if (!preview) {
       await runPreview();
       return;
@@ -265,8 +272,8 @@ export function AddFacultyLoadModal({ academicYearId, semester, onClose, onSaved
           <Dialog.Close asChild>
             <Button type="button" variant="secondary">Cancel</Button>
           </Dialog.Close>
-          <Button type="button" variant="secondary" onClick={runPreview} disabled={loading}>Check conflicts</Button>
-          <Button type="button" onClick={handleSave} disabled={loading || (preview !== null && Boolean(hasConflict)) || repeat.blocked}>
+          <Button type="button" variant="secondary" onClick={runPreview} disabled={loading || timeRangeInvalid}>Check conflicts</Button>
+          <Button type="button" onClick={handleSave} disabled={loading || timeRangeInvalid || (preview !== null && Boolean(hasConflict)) || repeat.blocked}>
             {loading ? "…" : repeat.days.length > 0 ? `Save ${repeat.days.length + 1} blocks` : "Save"}
           </Button>
         </div>

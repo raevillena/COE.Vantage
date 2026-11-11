@@ -16,6 +16,7 @@ import { resizeImage } from "../../utils/compressImage";
 import toast from "react-hot-toast";
 import { getApiErrorMessage } from "../../types/api";
 import { HelpTip } from "../../components/ui/helpTip";
+import { AccountSecuritySection } from "./AccountSecuritySection";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrator",
@@ -348,6 +349,8 @@ export function UserProfilePage() {
           </p>
         </div>
       </section>
+
+      <AccountSecuritySection />
 
       <section className="mt-8 max-w-xl">
         <div className="mb-3 flex items-center gap-2">

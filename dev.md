@@ -17,6 +17,9 @@ the file below). Start every session with `docs/HANDOFF.md` (current state, open
 | [docs/dev/features-v03-v05.md](docs/dev/features-v03-v05.md) | 163 | Smoke tests, repeat a block, subject rooms, help tips, deloading, feedback, v0.3.x-v0.5.0 features (sections 35-55) |
 | [docs/dev/features-v06-v075.md](docs/dev/features-v06-v075.md) | 41 | University and colleges, profile pictures, college switcher and UNIT role, room sharing, requests, schedule hold and PDFs (sections 56-61) |
 | [docs/dev/parked.md](docs/dev/parked.md) | 37 | Parked / incomplete features (resizable scheduler panels and others) |
+| [docs/dev/assessments-seb-plan.md](docs/dev/assessments-seb-plan.md) | 40 | PLAN (not built): exams / quizzes / assignments with Safe Exam Browser, experimental |
+| [docs/dev/platform-hardening.md](docs/dev/platform-hardening.md) | 40 | Email jobs in Redis, notification digest, login lockout and sessions, schedule share links and ICS, readiness and slow-query log |
+| [docs/dev/college-deadlines.md](docs/dev/college-deadlines.md) | 35 | College deadlines set by the college secretary, read by the whole college, with configurable bell and email reminders |
 
 ## Section finder
 

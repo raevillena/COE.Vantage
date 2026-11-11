@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { RefreshCw } from "lucide-react";
 import { HelpTip } from "../../components/ui/helpTip";
@@ -187,7 +187,7 @@ function SchedulerLayout({
   renderFooter,
 }: SchedulerLayoutProps) {
   return (
-    <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,5fr)_minmax(0,5fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface min-h-[48vh]">
+    <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 xl:[grid-template-columns:3fr_9fr] 2xl:[grid-template-columns:minmax(22rem,2.5fr)_minmax(0,6.25fr)_minmax(22rem,3.75fr)] xl:[grid-auto-rows:auto] border border-border rounded bg-surface min-h-[48vh]">
       <aside className="order-2 xl:order-none 2xl:order-none flex flex-col border-r-0 2xl:border-r border-border border-b 2xl:border-b-0 p-3 min-h-[260px] max-h-[37rem] overflow-hidden xl:[grid-column:1] xl:[grid-row:1] 2xl:[grid-column:1] 2xl:[grid-row:1]">
         {renderCurriculum()}
       </aside>
@@ -214,6 +214,8 @@ export function SchedulerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("class");
   const [studentClasses, setStudentClasses] = useState<StudentClass[]>([]);
   const [studentClassId, setStudentClassId] = useState("");
+  /** Admin view: narrow the class picker to one department ("" = all). */
+  const [classDepartmentId, setClassDepartmentId] = useState("");
   const [faculties, setFaculties] = useState<AssignableFaculty[]>([]);
   const [selectedFacultyId, setSelectedFacultyId] = useState("");
   const [loads, setLoads] = useState<FacultyLoad[]>([]);
@@ -281,6 +283,19 @@ export function SchedulerPage() {
   /** Faculty-view picker: own department only (includes the chairman). */
   // The admin is not tied to a department and can work with every faculty member of the college.
   const isAdmin = user?.role === "ADMIN";
+  const classDepartments = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const c of studentClasses) {
+      const d = c.curriculum?.department;
+      if (d) byId.set(d.id, d.code ? `${d.code} - ${d.name}` : d.name);
+    }
+    return Array.from(byId, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [studentClasses]);
+  const pickableClasses = useMemo(
+    () => (classDepartmentId ? studentClasses.filter((c) => c.curriculum?.department?.id === classDepartmentId || c.id === studentClassId) : studentClasses),
+    [studentClasses, classDepartmentId, studentClassId]
+  );
+
   const departmentFaculties = isAdmin ? faculties : faculties.filter((f) => f.departmentId === user?.departmentId);
 
 
@@ -689,15 +704,20 @@ export function SchedulerPage() {
     }
 
     if (data?.type !== "subject") return;
-    // New assignment: start with no fixed day/time so we don't place a default block on the grid.
-    // User will pick faculty/room and choose a time (with overlays showing busy slots) before saving.
+    // New assignment: it starts where it was dropped (that day, from that slot, one hour long), as the ghost showed while
+    // dragging, instead of a default day. The form can still change the day and time, and picking a room that is busy then
+    // moves the block to a free time (see the effects below).
+    const droppedStart = slotStartTime(slot);
     setPendingAssignment({
       subjectId: data.subjectId,
       subjectCode: data.code,
       subjectName: data.name,
       studentClassId: viewMode === "class" ? studentClassId : overlayClassId || undefined,
+      dayOfWeek: slot.dayOfWeek,
+      startTime: droppedStart,
+      endTime: minutesToTimeString(timeToMinutes(droppedStart) + 60),
     });
-    setPendingAssignmentDragged(false);
+    setPendingAssignmentDragged(true);
     setEditingLoadId(null);
     // In faculty view, keep the overlay faculty tied to the selected faculty so
     // suggestions and pending block behave like in class view.
@@ -1236,6 +1256,24 @@ export function SchedulerPage() {
               </Select.Content>
             </Select.Root>
           </div>
+          {viewMode === "class" && isAdmin && classDepartments.length > 1 && (
+            <div className="min-w-[180px]">
+              <label className="mb-1 block text-sm font-medium text-foreground">Department</label>
+              <Select.Root value={classDepartmentId || "__all__"} onValueChange={(v) => setClassDepartmentId(v === "__all__" ? "" : v)}>
+                <Select.Trigger aria-label="Class department" className="w-full">
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="__all__">All departments</Select.Item>
+                  {classDepartments.map((d) => (
+                    <Select.Item key={d.id} value={d.id}>
+                      {d.label}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+            </div>
+          )}
           {viewMode === "class" && (
             <div className="min-w-[180px]">
               <label className="mb-1 block text-sm font-medium text-foreground">Student Class</label>
@@ -1245,7 +1283,7 @@ export function SchedulerPage() {
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Item value="__none__">Select class</Select.Item>
-                  {studentClasses.map((c) => (
+                  {pickableClasses.map((c) => (
                     <Select.Item key={c.id} value={c.id}>
                       {c.name}
                     </Select.Item>
@@ -1652,6 +1690,7 @@ export function SchedulerPage() {
                   formKey={editingLoadId ?? pendingAssignment?.subjectId ?? ""}
                   initialValuesReady={editingLoadId ? editingLoad?.id === editingLoadId : true}
                   editingLoadId={editingLoadId ?? undefined}
+                  isSplitBlock={Boolean(editingLoad?.isSplit)}
                   liveTime={
                     !editingLoadId && pendingAssignment && pendingAssignment.dayOfWeek != null &&
                     pendingAssignment.startTime && pendingAssignment.endTime

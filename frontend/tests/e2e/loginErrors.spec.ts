@@ -5,7 +5,7 @@ test.describe("login form errors", () => {
   test("empty fields, missing password, bad email, and autofill without change events", async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto("/login");
-    const signIn = page.getByRole("button", { name: "Sign in" });
+    const signIn = page.getByRole("button", { name: "Sign in", exact: true });
 
     await signIn.click();
     await expect(page.getByText("Enter your email and password to sign in.")).toBeVisible();

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ShareScheduleDialog } from "../../components/schedules/ShareScheduleDialog";
 import { schedulingTerm, yearLabel } from "../../utils/currentTerm";
 import { apiClient } from "../../api/apiClient";
 import type { FacultyLoad, AcademicYear, StudentClass, Department } from "../../types/api";
@@ -105,9 +106,14 @@ export function StudentSchedulePage() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-foreground">Student Class Schedule</h1>
-        {role === "ADMIN" && selectedClassId && academicYearId && (
-          <RawBlocksEditor loads={loads} canEdit semester={semester} academicYearId={academicYearId} onChanged={() => setReloadKey((k) => k + 1)} />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedClassId && role !== "FACULTY" && (
+            <ShareScheduleDialog kind="CLASS" targetId={selectedClassId} subject={`${classes.find((c) => c.id === selectedClassId)?.name ?? "this class"} schedule`} />
+          )}
+          {role === "ADMIN" && selectedClassId && academicYearId && (
+            <RawBlocksEditor loads={loads} canEdit semester={semester} academicYearId={academicYearId} onChanged={() => setReloadKey((k) => k + 1)} />
+          )}
+        </div>
       </div>
       <div className="mb-6 flex flex-wrap items-center gap-4">
         {needsDepartmentFilter && (
