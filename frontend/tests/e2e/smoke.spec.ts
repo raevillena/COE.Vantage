@@ -38,7 +38,7 @@ test.describe("login page", () => {
     await page.getByRole("button", { name: "What's new" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "What's new" })).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "v0.9.1" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "v0.9.2" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.1" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.7.0" })).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "v0.6.2" })).toBeVisible();

@@ -82,10 +82,13 @@ export async function softDeleteCurriculum(id: string, caller?: CurriculumCaller
   if (caller?.role === "CHAIRMAN" && c.departmentId !== caller.departmentId) {
     throw forbidden("You can only delete curricula for your own department.");
   }
-  await prisma.curriculum.update({
-    where: { id },
-    data: { isDeleted: true, deletedAt: new Date() },
-  });
+  // The subjects of the curriculum go to Trash with it, stamped with the same time so that restoring the curriculum brings back
+  // exactly those (and not subjects that were deleted earlier on their own).
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.curriculum.update({ where: { id }, data: { isDeleted: true, deletedAt: now } }),
+    prisma.subject.updateMany({ where: { curriculumId: id, isDeleted: false }, data: { isDeleted: true, deletedAt: now } }),
+  ]);
 }
 
 export async function listTrashCurricula() {
@@ -100,10 +103,11 @@ export async function restoreCurriculum(id: string) {
   const c = await prisma.curriculum.findUnique({ where: { id } });
   if (!c) throw notFound("Curriculum not found");
   if (!c.isDeleted) throw badRequest("Curriculum is not in trash");
-  await prisma.curriculum.update({
-    where: { id },
-    data: { isDeleted: false, deletedAt: null },
-  });
+  await prisma.$transaction([
+    prisma.curriculum.update({ where: { id }, data: { isDeleted: false, deletedAt: null } }),
+    // only the subjects that went to Trash together with it
+    ...(c.deletedAt ? [prisma.subject.updateMany({ where: { curriculumId: id, isDeleted: true, deletedAt: c.deletedAt }, data: { isDeleted: false, deletedAt: null } })] : []),
+  ]);
 }
 
 export async function permanentDeleteCurriculum(id: string) {

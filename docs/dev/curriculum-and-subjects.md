@@ -221,3 +221,10 @@
 - **Build page** (`CurriculumBuildPage`): a toolbar with "Add/Manage specializations" and a "Working on" view (all / common only / one specialization = common + its own). Cards show specialization chips and a **Track** button (same tag editor as the viewer). While working on a specialization, a subject dragged in from the pool is created tagged with it; otherwise it is common. Dragging between semesters or back to the pool keeps/drops tags as before.
 - Not done: the IUSIS / clipboard curriculum import cannot tag specializations (the source has no such column); tag them in the viewer afterwards.
 - Test: `tests/e2e/specializations.spec.ts`.
+
+## Trash cascade (2026-11-12)
+Moving a curriculum to Trash soft-deletes its subjects with the same `deletedAt` (one transaction); restoring the curriculum restores the subjects with that exact timestamp, so subjects deleted earlier on their own stay in Trash. `restoreSubject` refuses while the subject's curriculum is in Trash. Permanently deleting the curriculum sets its subjects' `curriculumId` to null (FK `SetNull`); they stay in Trash. Test: `curriculumTrash.spec.ts`.
+
+## Build page: subject pool filters (2026-11-12)
+`CurriculumBuildPage.tsx` `PoolDropZone`: the pool (every subject not in this curriculum) is grouped by the curriculum it belongs to ("No curriculum (added by hand)" first), with a search box, a curriculum filter, and "Hide codes already in this curriculum" (on by default: a duplicate code cannot be added, unique `[curriculumId, code]`). Groups are `<details>`; collapsed by default when there are more than 3 and nothing is searched/filtered. Curriculum names come from `GET /curriculum`. Test `curriculumPool.spec.ts`.
+Each pool row also has icons: a green check when the subject belongs to a curriculum (none when added by hand), a stack icon when the same code is in several curricula (tooltip: how many, and which), and a dashed circle when it is ungrouped in its curriculum (no year or semester there). Computed from `GET /subjects` in the page; the count includes this curriculum's own copy.

@@ -2,6 +2,13 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.9.2 - 2026-11-12
+
+Curriculum Trash takes its subjects along, and a clearer subject pool in the curriculum builder
+
+- **Improved:** Curriculum builder: the subject pool is grouped by the curriculum each subject belongs to, with a search box, a curriculum filter and a switch that hides codes already in the curriculum you are building. Icons show whether a subject belongs to a curriculum, whether the same code exists in several curricula (hover for the number), and whether it is still ungrouped in its curriculum.
+- **Fixed:** Moving a curriculum to Trash now moves its subjects too, and restoring the curriculum brings back those subjects (subjects deleted earlier on their own stay in Trash). A subject cannot be restored by itself while its curriculum is in Trash.
+
 ## v0.9.1 - 2026-11-11
 
 Reload on every page, requests by semester, Split Class with the same instructor, and Scheduler fixes

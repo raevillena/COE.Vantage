@@ -64,7 +64,7 @@ test.describe("grades module layout", () => {
     let subjectId = "";
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
-      const created = await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Layout Check", code: "QA-101" } });
+      const created = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Layout Check", code: "QA-101" } });
       subjectId = ((await created.json()) as { id: string }).id;
       await request.patch(`${API}/grade-subjects/${subjectId}`, {
         headers,
@@ -314,7 +314,7 @@ test.describe("grade terms", () => {
     const setCurrent = (academicYearId: string | null, semester?: number) =>
       request.put(`${API}/academic-years/current-term`, { headers, data: { kind: "current", academicYearId, semester, collegeId: COE_ID } });
     const subject = async (name: string, term: { academicYearId: string; semester: number } | null) => {
-      const created = await request.post(`${API}/grade-subjects`, { headers, data: { name, ...(term ?? {}) } });
+      const created = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name, ...(term ?? {}) } });
       expect(created.status(), await created.text()).toBe(201);
       const id = ((await created.json()) as { id: string }).id;
       made.push(id);
@@ -448,7 +448,7 @@ test.describe("grading settings grade keys", () => {
     let subjectId = "";
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
-      const created = await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Keys Picker" } });
+      const created = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Keys Picker" } });
       subjectId = ((await created.json()) as { id: string }).id;
       // The formula names "ghost", a column no record has, next to a real one.
       const patched = await request.patch(`${API}/grade-subjects/${subjectId}`, {
@@ -540,7 +540,7 @@ test.describe("grade import layouts", () => {
     test.setTimeout(60_000);
     const auth = await request.post(`${API}/auth/login`, { data: { email: "admin@coe.vantage", password: PASSWORD } });
     const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
-    const created = await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Import Layouts" } });
+    const created = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Import Layouts" } });
     const subjectId = ((await created.json()) as { id: string }).id;
     const upload = async (csv: string) => {
       const response = await request.post(`${API}/grade-subjects/${subjectId}/records/import-csv`, {
@@ -614,7 +614,7 @@ test.describe("public lookup missing items", () => {
     const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
     const made: string[] = [];
     const subject = async (name: string, keys: string[], compute = false) => {
-      const created = await request.post(`${API}/grade-subjects`, { headers, data: { name } });
+      const created = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name } });
       const id = ((await created.json()) as { id: string }).id;
       made.push(id);
       const patched = await request.patch(`${API}/grade-subjects/${id}`, {
@@ -702,7 +702,7 @@ test.describe("columns follow the max scores", () => {
     let subjectId = "";
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
-      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Columns Follow Max" } })).json()) as { id: string }).id;
+      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Columns Follow Max" } })).json()) as { id: string }).id;
       // The sheet's max-score row names four columns; nobody has a score in Lab 10, Lab 2 is scored, and "Typo Key" is
       // only in the formula (no maximum, no score).
       const max = { "Lab 2": 20, "Lab 10": 20, Midterms: 100, Finals: 100 };
@@ -766,7 +766,7 @@ test.describe("MMSU grade table defaults", () => {
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
       // A subject nobody has configured yet.
-      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA MMSU Defaults" } })).json()) as { id: string }).id;
+      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA MMSU Defaults" } })).json()) as { id: string }).id;
 
       await login(page, "admin@coe.vantage");
       await page.goto("/experimental/grades");
@@ -808,7 +808,7 @@ test.describe("INC for blank items", () => {
     const prefs = (await (await request.get(`${API}/auth/me/experimental-features`, { headers })).json()) as { enabled: boolean; features: string[] };
     const made: string[] = [];
     const subject = async (name: string, keys: string[]) => {
-      const id = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name } })).json()) as { id: string }).id;
+      const id = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name } })).json()) as { id: string }).id;
       made.push(id);
       const patched = await request.patch(`${API}/grade-subjects/${id}`, {
         headers,
@@ -943,7 +943,7 @@ test.describe("grades subject list search and confirmations", () => {
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
       for (const name of ["QA Search Alpha", "QA Search Beta"]) {
-        const r = await request.post(`${API}/grade-subjects`, { headers, data: { name } });
+        const r = await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name } });
         expect(r.status(), await r.text()).toBe(201);
         made.push(((await r.json()) as { id: string }).id);
       }
@@ -1003,8 +1003,8 @@ test.describe("grades import link", () => {
     };
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
-      const a = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Link Typed" } })).json()) as { id: string }).id;
-      const b = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Link Old Browser" } })).json()) as { id: string }).id;
+      const a = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Link Typed" } })).json()) as { id: string }).id;
+      const b = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Link Old Browser" } })).json()) as { id: string }).id;
       made.push(a, b);
 
       // typing a link and leaving the box saves it with the subject (no import needed)
@@ -1044,7 +1044,7 @@ test.describe("re-importing a subject", () => {
     const headers = { Authorization: `Bearer ${((await auth.json()) as { accessToken: string }).accessToken}` };
     let id = "";
     try {
-      id = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Keep Codes" } })).json()) as { id: string }).id;
+      id = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Keep Codes" } })).json()) as { id: string }).id;
       const row = (n: number, extra: object = {}) => ({ studentName: `KEEP, STUDENT ${n}`, studentNumber: `99-77000${n}`, grades: { "Quiz 1": 10 + n }, maxScores: { "Quiz 1": 20 }, ...extra });
       const importRows = async (rows: object[]) => {
         const r = await request.post(`${API}/grade-subjects/${id}/records/import`, { headers, data: { records: rows } });
@@ -1087,7 +1087,7 @@ test.describe("grading weights", () => {
     let subjectId = "";
     try {
       await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
-      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { name: "QA Weights" } })).json()) as { id: string }).id;
+      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers, data: { publicViewEnabled: true, name: "QA Weights" } })).json()) as { id: string }).id;
       // Saved the old way: category weights 40 / 60, components as shares inside a category (Quizzes 1 : Project 3, Final 7 alone).
       const old = await request.patch(`${API}/grade-subjects/${subjectId}`, {
         headers,

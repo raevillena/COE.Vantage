@@ -64,7 +64,7 @@ test.describe("Current Semester vs Scheduling Semester", () => {
       // The student grade lookup opens on the Current Semester: the flag is set for a subject in it only.
       const prefsOn = await request.patch(`${API}/auth/me/experimental-features`, { headers, data: { enabled: true, features: Array.from(new Set([...prefs.features, "gradeModule"])) } });
       expect(prefsOn.status()).toBe(200);
-      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers: asCollege, data: { name: "QA Current Term", academicYearId: year.id, semester: 1 } })).json()) as { id: string }).id;
+      subjectId = ((await (await request.post(`${API}/grade-subjects`, { headers: asCollege, data: { publicViewEnabled: true, name: "QA Current Term", academicYearId: year.id, semester: 1 } })).json()) as { id: string }).id;
       await request.post(`${API}/grade-subjects/${subjectId}/records`, { headers: asCollege, data: { studentName: "QA, TERM", studentNumber: "99-440001", code: "CTA1", grades: { Q1: 5 }, maxScores: { Q1: 10 } } });
       const lookup = async () => (await (await request.get(`${API}/grade-subjects/public/records`, { params: { studentNumber: "99-440001", code: "CTA1" } })).json()) as { isCurrentTerm: boolean }[];
       expect((await lookup())[0].isCurrentTerm).toBe(true);

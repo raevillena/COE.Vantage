@@ -235,6 +235,10 @@ export async function restoreSubject(id: string) {
   const s = await prisma.subject.findUnique({ where: { id } });
   if (!s) throw notFound("Subject not found");
   if (!s.isDeleted) throw badRequest("Subject is not in trash");
+  if (s.curriculumId) {
+    const c = await prisma.curriculum.findUnique({ where: { id: s.curriculumId }, select: { isDeleted: true, name: true } });
+    if (c?.isDeleted) throw badRequest(`Its curriculum "${c.name}" is in Trash. Restore the curriculum first (its subjects come back with it).`);
+  }
   await prisma.subject.update({
     where: { id },
     data: { isDeleted: false, deletedAt: null },

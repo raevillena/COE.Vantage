@@ -150,3 +150,9 @@ Built the first complete vertical slice of the migrated grade module under the e
 - `utils/email.ts` uses ONE pooled transport (1 connection, 1 message/second) for all mail. Addresses at reserved example domains (example.com, *.test, *.invalid ...) are logged, never sent: tests rely on this. NOTE: `backend/.env.local` holds real Gmail SMTP settings, so a dev backend really sends to real addresses.
 - Table: a green check beside the email once the access email was sent (`emailSentAt`).
 - Test: `tests/e2e/gradesEmails.spec.ts`.
+
+## One code per student, public view switch (2026-11-12, uncommitted)
+- A student has ONE access code across subjects: new records and imports reuse the code the student number already has in another subject (`existingStudentCodes`); "regenerate code" changes it in all of the student's records. `publicLookup` takes student number + code as proof from any one record, then returns every subject of that student with `publicViewEnabled`. Older, different per-subject codes still work (any one unlocks all). Public compute proves the same way.
+- Access emails: a student already emailed from another subject (same code, `emailSentAt`) is counted as "already sent" and skipped unless "resend"; sending marks all the student's records with that code as sent. The email text no longer names one subject.
+- New `GradeSubject.publicViewEnabled` (default false for new subjects; existing ones stay visible; migrations `20260630000000_grade_public_view`, `20260630000001_grade_public_view_off_for_new`), checkbox "Let students view this subject on the public grade page" in Grade settings > Passing grade & student access. Test `gradesOneCode.spec.ts`.
+

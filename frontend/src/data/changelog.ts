@@ -15,6 +15,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "v0.9.2",
+    date: "2026-11-12",
+    title: "Curriculum Trash takes its subjects along, and a clearer subject pool in the curriculum builder",
+    changes: [
+      { kind: "improved", text: "Curriculum builder: the subject pool is grouped by the curriculum each subject belongs to, with a search box, a curriculum filter and a switch that hides codes already in the curriculum you are building. Icons show whether a subject belongs to a curriculum, whether the same code exists in several curricula (hover for the number), and whether it is still ungrouped in its curriculum." },
+      { kind: "fixed", text: "Moving a curriculum to Trash now moves its subjects too, and restoring the curriculum brings back those subjects (subjects deleted earlier on their own stay in Trash). A subject cannot be restored by itself while its curriculum is in Trash." },
+    ],
+  },
+  {
     version: "v0.9.1",
     date: "2026-11-11",
     title: "Reload on every page, requests by semester, Split Class with the same instructor, and Scheduler fixes",

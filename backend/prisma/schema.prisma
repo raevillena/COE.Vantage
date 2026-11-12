@@ -153,6 +153,8 @@ model GradeSubject {
   /// The Google Sheet link this subject's records are imported from. Kept on the server so it survives another browser, cleared site data and so on.
   sheetImportUrl        String?
   studentComputeEnabled Boolean   @default(false)
+  /// Whether the public grade page shows this subject to the students in it. Off for new subjects.
+  publicViewEnabled     Boolean   @default(false)
   isDeleted             Boolean   @default(false)
   deletedAt             DateTime?
   createdAt             DateTime  @default(now())

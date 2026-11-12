@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageReloadButton } from "../../components/ui/pageReloadButton";
 import { useRegisterReload } from "../../context/PageReloadContext";
 import { Link, useParams } from "react-router-dom";
+import { CheckCircle2, CircleDashed, Layers } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -58,7 +59,7 @@ function toDragItem(s: { id: string; code: string; name: string; isLab: boolean 
   return { type: "subject", subjectId: s.id, code: s.code, name: s.name, isLab: s.isLab };
 }
 
-function DraggablePoolSubject({ subject }: { subject: SubjectForPool }) {
+function DraggablePoolSubject({ subject, ownCurriculum, otherCurricula }: { subject: SubjectForPool; ownCurriculum?: string; otherCurricula: string[] }) {
   const item = toDragItem(subject);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `subject-${subject.id}`,
@@ -73,8 +74,36 @@ function DraggablePoolSubject({ subject }: { subject: SubjectForPool }) {
       title={subject.name}
     >
       <span className="font-medium truncate shrink-0">{subject.code}</span>
-      <span className="truncate text-foreground-muted min-w-0">{subject.name}</span>
+      <span className="truncate text-foreground-muted min-w-0 flex-1">{subject.name}</span>
       {subject.isLab && <span className="text-xs text-foreground-muted shrink-0">(Lab)</span>}
+      {/* a check when the subject belongs to a curriculum (none when it was added by hand) */}
+      {subject.curriculumId && (
+        <span className="shrink-0 text-success" title={`Belongs to a curriculum: ${ownCurriculum ?? "another curriculum"}`} aria-label={`Belongs to a curriculum: ${ownCurriculum ?? "another curriculum"}`} data-testid="pool-has-curriculum">
+          <CheckCircle2 size={14} aria-hidden />
+        </span>
+      )}
+      {/* ungrouped: it belongs to a curriculum but has no year and semester there yet */}
+      {subject.curriculumId && (subject.yearLevel == null || subject.semester == null) && (
+        <span
+          className="shrink-0 text-foreground-muted"
+          title={`Ungrouped in ${ownCurriculum ?? "its curriculum"}: it has no year and semester there yet`}
+          aria-label="Ungrouped in its curriculum"
+          data-testid="pool-ungrouped"
+        >
+          <CircleDashed size={14} aria-hidden />
+        </span>
+      )}
+      {/* another icon when the same code is in several curricula; the tooltip has the number */}
+      {otherCurricula.length > 0 && (
+        <span
+          className="shrink-0 text-warning"
+          title={`The same code is in ${otherCurricula.length + 1} curricula: ${[ownCurriculum, ...otherCurricula].filter(Boolean).join(", ")}`}
+          aria-label={`The same code is in ${otherCurricula.length + 1} curricula`}
+          data-testid="pool-in-many"
+        >
+          <Layers size={14} aria-hidden />
+        </span>
+      )}
     </div>
   );
 }
@@ -168,6 +197,8 @@ export function CurriculumBuildPage() {
   const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
   const [curriculumSubjects, setCurriculumSubjects] = useState<CurriculumSubject[]>([]);
   const [allSubjects, setAllSubjects] = useState<SubjectForPool[]>([]);
+  /** Names of every curriculum, so the pool can say where a subject comes from. */
+  const [curriculumNames, setCurriculumNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [overId, setOverId] = useState<string | null>(null);
   const [specs, setSpecs] = useState<CurriculumSpecialization[]>([]);
@@ -181,15 +212,17 @@ export function CurriculumBuildPage() {
     if (!curriculumId) return;
     setLoading(true);
     try {
-      const [curRes, subRes, allRes, specRes] = await Promise.all([
+      const [curRes, subRes, allRes, specRes, allCurrRes] = await Promise.all([
         apiClient.get<Curriculum>(`/curriculum/${curriculumId}`),
         apiClient.get<CurriculumSubject[]>(`/curriculum/${curriculumId}/subjects`),
         apiClient.get<SubjectForPool[]>("/subjects"),
         apiClient.get<CurriculumSpecialization[]>(`/curriculum/${curriculumId}/specializations`).catch(() => ({ data: [] as CurriculumSpecialization[] })),
+        apiClient.get<{ id: string; name: string }[]>("/curriculum").catch(() => ({ data: [] as { id: string; name: string }[] })),
       ]);
       setCurriculum(curRes.data);
       setCurriculumSubjects(subRes.data ?? []);
       setAllSubjects(allRes.data ?? []);
+      setCurriculumNames(Object.fromEntries((allCurrRes.data ?? []).map((c) => [c.id, c.name])));
       setSpecs(specRes.data ?? []);
       // a specialization that no longer exists cannot stay selected
       setView((v) => (v && v !== "common" && !(specRes.data ?? []).some((sp) => sp.id === v) ? "" : v));
@@ -446,7 +479,13 @@ export function CurriculumBuildPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Subject pool (droppable for "remove") */}
           <div className="lg:col-span-1">
-            <PoolDropZone subjects={poolSubjects} isOver={overId === DROP_ID_POOL} />
+            <PoolDropZone
+              subjects={poolSubjects}
+              allSubjects={allSubjects}
+              curriculumNames={curriculumNames}
+              codesInCurriculum={new Set(curriculumSubjects.map((c) => c.code.trim().toLowerCase()))}
+              isOver={overId === DROP_ID_POOL}
+            />
           </div>
 
           {/* Curriculum tree by year and semester */}
@@ -504,11 +543,48 @@ export function CurriculumBuildPage() {
 
 interface PoolDropZoneProps {
   subjects: SubjectForPool[];
+  /** Every subject, including this curriculum's own, to count in how many curricula a code appears. */
+  allSubjects: SubjectForPool[];
+  curriculumNames: Record<string, string>;
+  /** Codes (lower case) already in this curriculum: another subject with the same code cannot be added to it. */
+  codesInCurriculum: Set<string>;
   isOver: boolean;
 }
 
-function PoolDropZone({ subjects, isOver }: PoolDropZoneProps) {
+const NO_CURRICULUM = "__none__";
+
+function PoolDropZone({ subjects, allSubjects, curriculumNames, codesInCurriculum, isOver }: PoolDropZoneProps) {
   const { setNodeRef } = useDroppable({ id: DROP_ID_POOL });
+  const [query, setQuery] = useState("");
+  const [source, setSource] = useState("");
+  // subjects whose code is already in this curriculum are copies of what is already here, and would be refused as duplicates
+  const [hideDuplicates, setHideDuplicates] = useState(true);
+
+  // every curriculum that has a subject with this code (another curriculum of a subject means a copy of it)
+  const curriculaOfCode = new Map<string, Set<string>>();
+  for (const s of allSubjects) {
+    if (!s.curriculumId) continue;
+    const key = s.code.trim().toLowerCase();
+    curriculaOfCode.set(key, (curriculaOfCode.get(key) ?? new Set()).add(s.curriculumId));
+  }
+  const sourceOf = (s: SubjectForPool) => s.curriculumId ?? NO_CURRICULUM;
+  const sources = [...new Set(subjects.map(sourceOf))]
+    .map((id) => ({ id, label: id === NO_CURRICULUM ? "No curriculum (added by hand)" : curriculumNames[id] ?? "Another curriculum" }))
+    .sort((a, b) => (a.id === NO_CURRICULUM ? -1 : b.id === NO_CURRICULUM ? 1 : a.label.localeCompare(b.label)));
+
+  const q = query.trim().toLowerCase();
+  const visible = subjects.filter(
+    (s) =>
+      (!source || sourceOf(s) === source) &&
+      (!hideDuplicates || !codesInCurriculum.has(s.code.trim().toLowerCase())) &&
+      (!q || s.code.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
+  );
+  const hiddenAsDuplicates = hideDuplicates ? subjects.filter((s) => codesInCurriculum.has(s.code.trim().toLowerCase())).length : 0;
+  const groups = sources
+    .map((g) => ({ ...g, items: visible.filter((s) => sourceOf(s) === g.id).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })) }))
+    .filter((g) => g.items.length > 0);
+  const filtersOn = Boolean(q || source || !hideDuplicates);
+
   return (
     <div
       ref={setNodeRef}
@@ -517,14 +593,62 @@ function PoolDropZone({ subjects, isOver }: PoolDropZoneProps) {
       <div className="mb-3 flex items-center gap-1.5">
 <h2 className="text-sm font-semibold text-foreground">
         Subject pool</h2>
-<HelpTip>Subjects that are not part of this curriculum. Dropping a subject here removes it from the curriculum.</HelpTip>
+<HelpTip>Subjects that are not part of this curriculum, grouped by the curriculum they belong to (subjects made by hand have none). Dropping a subject here removes it from the curriculum. Subjects whose code is already in this curriculum are hidden, because the same code cannot be added twice.</HelpTip>
 </div>
-      <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
-        {subjects.length === 0 ? (
-          <p className="text-xs text-foreground-muted">No subjects in pool.</p>
+      <div className="mb-3 space-y-2" data-testid="pool-filters">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search code or name…"
+          aria-label="Search the subject pool"
+          className="w-full rounded border border-border-strong bg-surface px-2 py-1.5 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+        />
+        <select
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+          aria-label="Filter the subject pool by curriculum"
+          className="w-full rounded border border-border-strong bg-surface px-2 py-1.5 text-sm text-foreground focus:ring-2 focus:ring-focus-ring focus:ring-offset-1"
+        >
+          <option value="">All curricula</option>
+          {sources.map((g) => (
+            <option key={g.id} value={g.id}>{g.label}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-foreground-muted">
+          <input type="checkbox" checked={hideDuplicates} onChange={(e) => setHideDuplicates(e.target.checked)} />
+          Hide codes already in this curriculum{hiddenAsDuplicates > 0 ? ` (${hiddenAsDuplicates})` : ""}
+        </label>
+        <p className="text-xs text-foreground-muted" aria-live="polite">
+          Showing {visible.length} of {subjects.length}
+          {filtersOn && (
+            <button type="button" className="ml-2 font-medium text-primary hover:underline" onClick={() => { setQuery(""); setSource(""); setHideDuplicates(true); }}>
+              Reset
+            </button>
+          )}
+        </p>
+      </div>
+      <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+        {groups.length === 0 ? (
+          <p className="text-xs text-foreground-muted">{subjects.length === 0 ? "No subjects in pool." : "No subjects match."}</p>
         ) : (
-          subjects.map((s) => (
-            <DraggablePoolSubject key={s.id} subject={s} />
+          groups.map((g) => (
+            // open when searching, or when there are only a few groups; otherwise collapsed so the list stays short
+            <details key={`${g.id}-${q ? "q" : "n"}-${source ? "s" : "a"}`} open={Boolean(q) || Boolean(source) || groups.length <= 3} className="group rounded border border-border bg-surface/60" data-testid="pool-group">
+              <summary className="cursor-pointer select-none px-2 py-1.5 text-xs font-semibold text-foreground">
+                {g.label} <span className="font-normal text-foreground-muted">({g.items.length})</span>
+              </summary>
+              <div className="space-y-1.5 p-1.5">
+                {g.items.map((s) => (
+                  <DraggablePoolSubject
+                    key={s.id}
+                    subject={s}
+                    ownCurriculum={s.curriculumId ? curriculumNames[s.curriculumId] : undefined}
+                    otherCurricula={[...(curriculaOfCode.get(s.code.trim().toLowerCase()) ?? [])].filter((id) => id !== s.curriculumId).map((id) => curriculumNames[id] ?? "another curriculum")}
+                  />
+                ))}
+              </div>
+            </details>
           ))
         )}
       </div>

@@ -5,13 +5,13 @@ export function buildGradeAccessEmail(params: {
   accessCode: string;
   lookupUrl: string;
 }): { subject: string; text: string; html: string } {
-  const { subjectName, studentName, studentNumber, accessCode, lookupUrl } = params;
+  const { studentName, studentNumber, accessCode, lookupUrl } = params;
   const e = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const subject = `Grade access code - ${subjectName}`;
+  const subject = "Your grade access code";
   const text = [
     `Hello ${studentName},`,
     "",
-    `Your grade access details for ${subjectName}:`,
+    "Your grade access details (one code shows all your subjects that were made visible):",
     `Student Number: ${studentNumber}`,
     `Access Code: ${accessCode}`,
     "",
@@ -22,7 +22,7 @@ export function buildGradeAccessEmail(params: {
 
   const html = `
     <p>Hello ${e(studentName)},</p>
-    <p>Your grade access details for <strong>${e(subjectName)}</strong>:</p>
+    <p>Your grade access details (one code shows all your subjects that were made visible):</p>
     <ul>
       <li><strong>Student Number:</strong> ${e(studentNumber)}</li>
       <li><strong>Access Code:</strong> ${e(accessCode)}</li>

@@ -32,6 +32,7 @@ export const createGradeSubjectSchema = z.object({
     semester: z.number().int().min(1).max(3).optional().nullable(),
     gradingSystem: z.union([gradingSystemV1Schema, z.null()]).optional(),
     studentComputeEnabled: z.boolean().optional(),
+    publicViewEnabled: z.boolean().optional(),
   }),
 });
 
@@ -46,6 +47,7 @@ export const updateGradeSubjectSchema = z.object({
     /** Merges shallowly into existing `gradingSystem` on the server; omit keys you are not updating. */
     gradingSystem: z.union([gradingSystemV1PatchSchema, z.null()]).optional(),
     studentComputeEnabled: z.boolean().optional(),
+    publicViewEnabled: z.boolean().optional(),
     /** The Google Sheet link records are imported from; null clears it. */
     sheetImportUrl: z.string().trim().url("Enter a valid link").max(1000).nullable().optional(),
   }),

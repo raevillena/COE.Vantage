@@ -24,6 +24,7 @@ Faculty-load scheduling for the MMSU College of Engineering (several colleges ca
 - **Colors:** tokens live in `frontend/src/style.css`: use `bg-surface`, `bg-surface-muted`, `text-foreground(-muted)`, `border-border`. There is **no** `bg-background` (it generates no CSS). Tailwind only sees class names written out in full: never build `from-${x}` at runtime.
 - **Sticky table cells:** every `position: sticky` cell costs a compositor layer per row. Keep few frozen columns (open item in HANDOFF).
 - **Dialogs:** `components/ui/dialog` `description` is plain text, not markdown. Menus: `components/ui/dropdownMenu`.
+- **Reload icon:** every page that loads data registers its loader with `useRegisterReload` (or `useReloadTick` for effect-based fetches) from `context/PageReloadContext` and renders `<PageReloadButton />` in its header beside the title/History. Icon only.
 - **Experimental features** are per user and off by default (skill `add-experimental-feature`).
 - **Windows + Git Bash:** heredocs containing quotes break. Write files with the Write tool or a script file, not inline heredocs. Use forward slashes in paths.
 

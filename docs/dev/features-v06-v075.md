@@ -61,3 +61,6 @@
 ## v0.9.1 (2026-11-11)
 - Release notes list only user-visible items: page Reload icon, Requests per semester with requestor/department filters and History, Scheduler Reload and Locked labels, Split Class with the same instructor (repeat off), re-approval of changed requested blocks (one pending block, revised in place), digest email off by default, toast 5 s, Feedback/Bug, wide-screen pane heights, evening rows, Code list grouping, negative-length blocks and hour decimals. NOT listed: the admin's email settings for other people (Users page ticks + bulk menu), admin/dean dragging blocks of rooms closed by another department.
 - Migration `20260629000000_split_group` (`FacultyLoad.splitGroup`; the k8s migrate job runs it). No new dependency since v0.9.0. Details: `docs/dev/features-v03-v05.md` (Split Class update), `docs/dev/platform-hardening.md` (admin email settings).
+
+## v0.9.2 (2026-11-12)
+- Release notes list: curriculum Trash cascade and the curriculum builder subject pool. NOT listed (experimental): one grade access code per student, public view tick. Migrations `20260630000000_grade_public_view`, `20260630000001_grade_public_view_off_for_new` (the k8s migrate job runs them). No new dependency. Details: `curriculum-and-subjects.md`, `grades-module.md`.

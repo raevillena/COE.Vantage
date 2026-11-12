@@ -48,6 +48,7 @@ type Props = {
   /** Stable fingerprint from `JSON.stringify(initialGradingSystem)` so effects detect server updates without stale object refs. */
   gradingSystemSnapshot: string;
   initialStudentComputeEnabled: boolean;
+  initialPublicViewEnabled?: boolean;
   records: GradeRecord[];
   /** Other subjects whose formula can be copied here. */
   copySources?: { id: string; name: string; code?: string | null; gradingSystem?: Record<string, unknown> | null }[];
@@ -262,6 +263,7 @@ export function GradingSystemSettingsPanel({
   initialGradingSystem,
   gradingSystemSnapshot,
   initialStudentComputeEnabled,
+  initialPublicViewEnabled = false,
   records,
   copySources = [],
   saving,
@@ -296,6 +298,7 @@ export function GradingSystemSettingsPanel({
     return n.gradeEquivalence ?? [];
   });
   const [studentComputeEnabled, setStudentComputeEnabled] = useState(initialStudentComputeEnabled);
+  const [publicViewEnabled, setPublicViewEnabled] = useState(initialPublicViewEnabled);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedJson, setAdvancedJson] = useState("");
   const [localSettingsError, setLocalSettingsError] = useState<string | null>(null);
@@ -323,8 +326,9 @@ export function GradingSystemSettingsPanel({
     setPassingGradeInput(n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(n.gradeEquivalence ?? []);
     setStudentComputeEnabled(initialStudentComputeEnabled);
+    setPublicViewEnabled(initialPublicViewEnabled);
     setLocalSettingsError(null);
-  }, [embedInDialog, settingsOpen, subjectId, gradingSystemSnapshot, initialStudentComputeEnabled]);
+  }, [embedInDialog, settingsOpen, subjectId, gradingSystemSnapshot, initialStudentComputeEnabled, initialPublicViewEnabled]);
 
   const systemPayload: GradingSystemV1 = useMemo(() => {
     const out: GradingSystemV1 = { categories };
@@ -478,6 +482,7 @@ export function GradingSystemSettingsPanel({
     await patchSubject({
       ...(Object.keys(gradingPatch).length > 0 ? { gradingSystem: gradingPatch } : {}),
       studentComputeEnabled,
+      publicViewEnabled,
     });
   };
 
@@ -641,6 +646,10 @@ export function GradingSystemSettingsPanel({
           </p>
         }
       >
+        <label className="mb-2 flex items-center gap-2 text-sm text-foreground">
+          <input type="checkbox" checked={publicViewEnabled} onChange={(e) => setPublicViewEnabled(e.target.checked)} />
+          Let students view this subject on the public grade page
+        </label>
         <label className="inline-flex items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"

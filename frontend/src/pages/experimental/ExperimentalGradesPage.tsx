@@ -25,6 +25,7 @@ type GradeSubject = {
   sheetImportUrl?: string | null;
   gradingSystem?: Record<string, unknown> | null;
   studentComputeEnabled: boolean;
+  publicViewEnabled?: boolean;
   owner: { id: string; name: string; role: string; departmentId: string | null };
   _count: { records: number; viewers: number };
 };
@@ -2144,6 +2145,7 @@ export function ExperimentalGradesPage() {
                           initialGradingSystem={selectedSubject.gradingSystem ?? null}
                           gradingSystemSnapshot={gradingSystemSnapshot}
                           initialStudentComputeEnabled={selectedSubject.studentComputeEnabled}
+                          initialPublicViewEnabled={selectedSubject.publicViewEnabled ?? false}
                           records={records}
                           copySources={subjects
                             .filter((other) => other.id !== selectedSubjectId)

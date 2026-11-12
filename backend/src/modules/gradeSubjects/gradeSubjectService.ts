@@ -110,6 +110,7 @@ export async function createGradeSubject(caller: Caller, body: CreateGradeSubjec
       gradingSystem:
         body.gradingSystem == null ? undefined : (body.gradingSystem as unknown as Prisma.InputJsonValue),
       studentComputeEnabled: body.studentComputeEnabled ?? false,
+      publicViewEnabled: body.publicViewEnabled ?? false,
     },
     include: {
       owner: { select: { id: true, name: true, role: true, departmentId: true } },
@@ -167,6 +168,7 @@ export async function updateGradeSubject(subjectId: string, caller: Caller, body
       semester: semesterUpdate,
       gradingSystem: gradingSystemUpdate,
       studentComputeEnabled: body.studentComputeEnabled,
+      publicViewEnabled: body.publicViewEnabled,
       sheetImportUrl: body.sheetImportUrl,
     },
     include: {
@@ -248,10 +250,26 @@ export async function listRecords(subjectId: string, caller: Caller) {
   });
 }
 
+const studentKey = (studentNumber: string) => studentNumber.trim().toLowerCase();
+
+/** The access code a student already has in other subjects (student number -> code), so a new record can reuse it. */
+async function existingStudentCodes(studentNumbers: string[], exceptSubjectId?: string): Promise<Map<string, string>> {
+  const numbers = [...new Set(studentNumbers.map((n) => n.trim()).filter(Boolean))];
+  const found = new Map<string, string>();
+  if (numbers.length === 0) return found;
+  const rows = await prisma.gradeRecord.findMany({
+    where: { studentNumber: { in: numbers, mode: "insensitive" }, ...(exceptSubjectId ? { subjectId: { not: exceptSubjectId } } : {}), subject: { isDeleted: false } },
+    select: { studentNumber: true, code: true },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const row of rows) if (!found.has(studentKey(row.studentNumber))) found.set(studentKey(row.studentNumber), row.code);
+  return found;
+}
+
 export async function createRecord(subjectId: string, caller: Caller, body: CreateGradeRecordBody) {
   const access = await loadSubjectAccess(subjectId, caller);
   assertWriteAccess(access);
-  const code = body.code?.trim() ? body.code.trim() : newGradeRecordAccessCode();
+  const code = body.code?.trim() ? body.code.trim() : (await existingStudentCodes([body.studentNumber])).get(studentKey(body.studentNumber)) ?? newGradeRecordAccessCode();
   return prisma.gradeRecord.create({
     data: {
       subjectId,
@@ -278,17 +296,19 @@ export async function importRecords(subjectId: string, caller: Caller, body: Imp
 
   return prisma.$transaction(async (tx) => {
     const before = await tx.gradeRecord.findMany({ where: { subjectId }, select: { studentNumber: true, code: true, email: true, emailSentAt: true } });
-    const previous = new Map(before.map((row) => [row.studentNumber.trim().toLowerCase(), row]));
+    const previous = new Map(before.map((row) => [studentKey(row.studentNumber), row]));
+    // a student already in another subject keeps that one code here too, so one email opens everything
+    const elsewhere = await existingStudentCodes(body.records.map((r) => r.studentNumber), subjectId);
     const removed = await tx.gradeRecord.deleteMany({ where: { subjectId } });
     if (body.records.length > 0) {
       const used = new Set<string>();
       const data = body.records.map((record) => {
-        const earlier = previous.get(record.studentNumber.trim().toLowerCase());
+        const earlier = previous.get(studentKey(record.studentNumber));
         const given = record.code?.trim() || "";
-        let code = given || earlier?.code || newGradeRecordAccessCode();
-        // two rows with the same student number must not share a code
-        while (used.has(code)) code = newGradeRecordAccessCode();
-        used.add(code);
+        let code = given || earlier?.code || elsewhere.get(studentKey(record.studentNumber)) || newGradeRecordAccessCode();
+        // two rows with the same student number in this subject must not share a code
+        if (used.has(`${studentKey(record.studentNumber)}|${code}`)) code = newGradeRecordAccessCode();
+        used.add(`${studentKey(record.studentNumber)}|${code}`);
         const kept = !given && earlier?.code === code;
         return {
           subjectId,
@@ -415,12 +435,15 @@ export async function regenerateRecordAccessCode(subjectId: string, recordId: st
   assertWriteAccess(access);
   const existing = await prisma.gradeRecord.findUnique({ where: { id: recordId } });
   if (!existing || existing.subjectId !== subjectId) throw notFound("Grade record not found");
+  // the student's code is the same in every subject, so it changes in all of them
+  const code = newGradeRecordAccessCode();
+  await prisma.gradeRecord.updateMany({
+    where: { studentNumber: { equals: existing.studentNumber, mode: "insensitive" }, id: { not: recordId } },
+    data: { code, emailSentAt: null },
+  });
   return prisma.gradeRecord.update({
     where: { id: recordId },
-    data: {
-      code: newGradeRecordAccessCode(),
-      emailSentAt: null,
-    },
+    data: { code, emailSentAt: null },
   });
 }
 
@@ -633,10 +656,10 @@ export async function publicComputeRecord(recordId: string, body: PublicComputeR
     include: { subject: true },
   });
   if (!record) throw notFound(PUBLIC_COMPUTE_NOT_AVAILABLE);
-  if (record.studentNumber !== body.studentNumber || record.code !== body.code) {
-    throw notFound(PUBLIC_COMPUTE_NOT_AVAILABLE);
-  }
-  if (!record.subject.studentComputeEnabled) {
+  if (record.studentNumber !== body.studentNumber) throw notFound(PUBLIC_COMPUTE_NOT_AVAILABLE);
+  const proof = await prisma.gradeRecord.findFirst({ where: { studentNumber: body.studentNumber, code: body.code, subject: { isDeleted: false } }, select: { id: true } });
+  if (!proof) throw notFound(PUBLIC_COMPUTE_NOT_AVAILABLE);
+  if (!record.subject.studentComputeEnabled || !record.subject.publicViewEnabled) {
     throw notFound(PUBLIC_COMPUTE_NOT_AVAILABLE);
   }
 
@@ -663,8 +686,12 @@ export async function publicComputeRecord(recordId: string, body: PublicComputeR
 }
 
 export async function publicLookup(studentNumber: string, code: string) {
+  // one matching record (student number + code) proves who is asking; then every subject of that student that is
+  // visible on the public page is returned, so a single email is enough.
+  const proof = await prisma.gradeRecord.findFirst({ where: { studentNumber, code, subject: { isDeleted: false } }, select: { id: true } });
+  if (!proof) return [];
   const records = await prisma.gradeRecord.findMany({
-    where: { studentNumber, code, subject: { isDeleted: false } },
+    where: { studentNumber, subject: { isDeleted: false, publicViewEnabled: true } },
     include: {
       subject: {
         // Do not expose full grading formula JSON on the public lookup surface.
@@ -767,7 +794,8 @@ async function runEmailJob(subjectId: string): Promise<void> {
               accessCode: record.code,
               lookupUrl: `${base}/grades?studentNumber=${encodeURIComponent(record.studentNumber)}&code=${encodeURIComponent(record.code)}`,
             });
-            await prisma.gradeRecord.update({ where: { id: record.id }, data: { emailSentAt: new Date() } });
+            // the same code is in every subject of this student: all of them count as sent
+            await prisma.gradeRecord.updateMany({ where: { studentNumber: record.studentNumber, code: record.code }, data: { emailSentAt: new Date() } });
             job.sent += 1;
             failuresInARow = 0;
           } catch (err) {
@@ -834,9 +862,19 @@ export async function sendAccessCodes(subjectId: string, caller: Caller, body: S
   try {
     const where = body.recordIds?.length ? { subjectId, id: { in: body.recordIds } } : { subjectId };
     const records = await prisma.gradeRecord.findMany({ where, orderBy: { studentName: "asc" } });
-    const queue = records.filter((r) => r.email && isValidEmail(r.email) && (body.resend || !r.emailSentAt));
+    // one email per student is enough: someone already emailed from another subject is not emailed again (unless "resend")
+    const emailedElsewhere = new Set(
+      (
+        await prisma.gradeRecord.findMany({
+          where: { subjectId: { not: subjectId }, emailSentAt: { not: null }, studentNumber: { in: records.map((r) => r.studentNumber) } },
+          select: { studentNumber: true, code: true },
+        })
+      ).map((r) => `${studentKey(r.studentNumber)}|${r.code}`)
+    );
+    const wasSent = (r: (typeof records)[number]) => Boolean(r.emailSentAt) || emailedElsewhere.has(`${studentKey(r.studentNumber)}|${r.code}`);
+    const queue = records.filter((r) => r.email && isValidEmail(r.email) && (body.resend || !wasSent(r)));
     const noEmail = records.filter((r) => !r.email || !isValidEmail(r.email)).length;
-    const alreadySent = records.filter((r) => r.email && isValidEmail(r.email) && !body.resend && r.emailSentAt).length;
+    const alreadySent = records.filter((r) => r.email && isValidEmail(r.email) && !body.resend && wasSent(r)).length;
 
     let allowance = queue.length;
     if (isSmtpConfigured()) {
