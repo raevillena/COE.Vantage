@@ -289,6 +289,7 @@ export function GradingSystemSettingsPanel({
     setCategories(adopted.categories);
     setWeightsConverted(adopted.converted);
   };
+  const [componentMethod, setComponentMethod] = useState<"points" | "average">(() => normalizeGradingSystemFromUnknown(initialGradingSystem).componentMethod ?? "points");
   const [passingGradeInput, setPassingGradeInput] = useState(() => {
     const n = normalizeGradingSystemFromUnknown(initialGradingSystem);
     return n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT);
@@ -323,6 +324,7 @@ export function GradingSystemSettingsPanel({
 
     const n = normalizeGradingSystemFromUnknown(raw);
     adoptCategories(n.categories);
+    setComponentMethod(n.componentMethod ?? "points");
     setPassingGradeInput(n.passingGrade !== undefined ? String(n.passingGrade) : String(DEFAULT_PASSING_PERCENT));
     setGradeEquivalence(n.gradeEquivalence ?? []);
     setStudentComputeEnabled(initialStudentComputeEnabled);
@@ -501,7 +503,7 @@ export function GradingSystemSettingsPanel({
       setLocalSettingsError(v.message);
       return;
     }
-    await patchSubject({ gradingSystem: { categories } });
+    await patchSubject({ gradingSystem: { categories, componentMethod } });
   };
 
   const loadTemplate = () => {
@@ -988,6 +990,17 @@ export function GradingSystemSettingsPanel({
           <p className="-mt-1 mb-3 text-xs text-foreground-muted">
             Type each component&apos;s share of the final grade. A category total is the sum of its components, so all components together should add up to 100.
           </p>
+          <div className="mb-3 rounded border border-border-strong bg-surface-muted/40 p-3 text-sm" role="radiogroup" aria-label="How the columns of a component combine">
+            <p className="mb-1.5 text-xs font-medium text-foreground">How the columns of a component combine</p>
+            <label className="flex items-start gap-2 text-foreground">
+              <input type="radio" name="component-method" checked={componentMethod === "points"} onChange={() => setComponentMethod("points")} className="mt-1" />
+              <span>Add the points <span className="text-xs text-foreground-muted">(total score ÷ total max; a column with a bigger max counts more)</span></span>
+            </label>
+            <label className="mt-1 flex items-start gap-2 text-foreground">
+              <input type="radio" name="component-method" checked={componentMethod === "average"} onChange={() => setComponentMethod("average")} className="mt-1" />
+              <span>Average of percentages <span className="text-xs text-foreground-muted">(each column ÷ its own max first, then averaged, like =AVERAGE(L6/$L$5, M6/$M$5, …); every column counts the same)</span></span>
+            </label>
+          </div>
           {startedFromDefault && (
             <p className="mb-3 rounded bg-primary-muted px-2 py-1.5 text-xs text-foreground" role="status">
               This subject has no formula yet, so it starts from the default weights: Major Exams (Midterms 15 + Finals 15) and Major Outputs (70). Columns were matched by name; pick a column for any component that has none, adjust the weights if you need to, then press Save formula.

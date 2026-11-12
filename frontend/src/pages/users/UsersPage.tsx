@@ -16,7 +16,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { UserFormDialog, EMPTY_USER_FORM, type UserFormValues, type UserFormPayload } from "../../components/users/UserFormDialog";
 import { ExperimentalAccessDialog } from "../../components/users/ExperimentalAccessDialog";
 import { DeloadingDialog } from "../../components/faculty/DeloadingDialog";
-import { isTeachingRole } from "../../utils/loadState";
+import { isTeachingRole, LOAD_STATE_BADGE, LOAD_STATE_LABEL, effectiveMax, loadStateOf } from "../../utils/loadState";
 import type { AcademicYear } from "../../types/api";
 import { HistoryButton } from "../../components/audit/HistoryButton";
 import type { College } from "../../types/api";
@@ -100,6 +100,9 @@ export function UsersPage() {
   const [prioritizationLoading, setPrioritizationLoading] = useState(false);
   const [experimentalTarget, setExperimentalTarget] = useState<UserListItem | null>(null);
   const [deloadTarget, setDeloadTarget] = useState<UserListItem | null>(null);
+  /** Assigned units and deloading per person for the scheduling term, shown like the Faculty page. */
+  const [unitsByUser, setUnitsByUser] = useState<Record<string, number>>({});
+  const [deloadByUser, setDeloadByUser] = useState<Record<string, number>>({});
   const [deloadYears, setDeloadYears] = useState<AcademicYear[]>([]);
   const [prioritizationYears, setPrioritizationYears] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
   const [prioritizationTerm, setPrioritizationTerm] = useState<{ academicYearId: string; semester: number } | null>(null);
@@ -136,7 +139,47 @@ export function UsersPage() {
     }
   };
 
-  useRegisterReload(() => load());
+  const loadUnits = async () => {
+    try {
+      const { data: years } = await apiClient.get<AcademicYear[]>("/academic-years");
+      const term = schedulingTerm(years);
+      if (!term) {
+        setUnitsByUser({});
+        setDeloadByUser({});
+        return;
+      }
+      const params = new URLSearchParams({ academicYearId: term.academicYearId, semester: String(term.semester) });
+      const [units, deload] = await Promise.all([
+        apiClient.get<Record<string, number>>(`/faculty-loads/units?${params}`),
+        apiClient.get<{ userId: string; total: number }[]>(`/deloadings?${params}`),
+      ]);
+      setUnitsByUser(units.data ?? {});
+      setDeloadByUser(Object.fromEntries((deload.data ?? []).map((d) => [d.userId, d.total])));
+    } catch {
+      setUnitsByUser({});
+      setDeloadByUser({});
+    }
+  };
+  useRegisterReload(() => Promise.all([load(), loadUnits()]));
+
+  const renderUnits = (u: UserListItem) => {
+    if (!isTeachingRole(u.role)) return "—";
+    const loaded = Math.round((unitsByUser[u.id] ?? 0) * 100) / 100;
+    const deload = deloadByUser[u.id] ?? 0;
+    const effective = effectiveMax(u.maxUnits, deload);
+    const state = loadStateOf(loaded, effective);
+    const detail =
+      effective === null
+        ? `${loaded} units assigned this scheduling term. No maximum set, so overload and underload cannot be judged.`
+        : `${loaded} units assigned of ${effective} allowed this scheduling term (maximum ${u.maxUnits}${deload > 0 ? ` less ${deload} deloading` : ""}). ${LOAD_STATE_LABEL[state]}.`;
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-sm tabular-nums ${LOAD_STATE_BADGE[state]}`} title={detail}>
+        {loaded}/{effective ?? "—"}
+        {state !== "unset" && <span className="text-xs font-medium">{LOAD_STATE_LABEL[state]}</span>}
+        {deload > 0 && <span className="text-xs opacity-80">(−{deload})</span>}
+      </span>
+    );
+  };
   const load = async () => {
     setLoading(true);
     try {
@@ -153,6 +196,7 @@ export function UsersPage() {
     load();
     apiClient.get("/departments").then(({ data }) => setDepartments(data));
     apiClient.get<College[]>("/colleges").then(({ data }) => setColleges(data)).catch(() => setColleges([]));
+    void loadUnits();
   }, []);
 
   const openCreate = () => setUserForm({ id: null, initial: { ...EMPTY_USER_FORM } });
@@ -597,7 +641,7 @@ export function UsersPage() {
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Status</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">College</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Department</th>
-                <th className="px-4 py-2 text-left text-sm font-medium text-foreground">Max units</th>
+                <th className="px-4 py-2 text-left text-sm font-medium text-foreground" title="Units assigned this scheduling term against the maximum. Laboratory units count three times.">Units</th>
                 <th className="px-4 py-2 text-left text-sm font-medium text-foreground" title="Email notifications: digest and deadline reminders">Emails</th>
                 <th className="px-4 py-2 text-right text-sm font-medium text-foreground">Actions</th>
               </tr>
@@ -624,7 +668,7 @@ export function UsersPage() {
                   <td className="px-4 py-2 text-foreground-muted">{u.status ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.role === "UNIT" ? `${u.unitColleges?.length ?? 0} ${(u.unitColleges?.length ?? 0) === 1 ? "college" : "colleges"}` : u.college?.name ?? "—"}</td>
                   <td className="px-4 py-2 text-foreground-muted">{u.department?.name ?? "—"}</td>
-                  <td className="px-4 py-2 text-foreground-muted">{isTeachingRole(u.role) && u.maxUnits != null ? u.maxUnits : "—"}</td>
+                  <td className="px-4 py-2">{renderUnits(u)}</td>
                   <td className="px-4 py-2 text-xs text-foreground-muted whitespace-nowrap">
                     Digest {u.emailDigest ? "on" : "off"}<br />Deadlines {u.emailDeadlines === false ? "off" : "on"}
                   </td>
@@ -729,6 +773,7 @@ export function UsersPage() {
           academicYearId={(deloadYears.find((y) => y.isActive) ?? deloadYears[0]).id}
           semester={schedulingTerm(deloadYears)?.semester ?? 1}
           canEdit
+          onSaved={() => void loadUnits()}
           onClose={() => setDeloadTarget(null)}
         />
       )}

@@ -28,13 +28,18 @@ export function computeFinalGradeClient(
       const keys = component.gradeKeys ?? [];
       let earned = 0;
       let possible = 0;
+      const each: number[] = [];
       for (const key of keys) {
         const score = Number(grades[key] ?? 0);
         const max = Number(maxScores?.[key] ?? 100);
         earned += score;
         possible += max;
+        each.push(max > 0 ? score / max : 0);
       }
-      const ratio = possible > 0 ? earned / possible : 0;
+      const ratio =
+        gradingSystem?.componentMethod === "average"
+          ? each.length > 0 ? each.reduce((a, b) => a + b, 0) / each.length : 0
+          : possible > 0 ? earned / possible : 0;
       return { id: component.id, name: component.name, weight, scorePercent: ratio * 100 };
     });
     const compSum = componentScores.reduce((s, c) => s + c.weight, 0);

@@ -2,6 +2,12 @@
 
 User-facing release notes. Source of the in-app "What's new" list on the login page: `frontend/src/data/changelog.ts` (keep both in sync, and `VITE_APP_VERSION` in `frontend/.env.production`). Entries before v0.3.0 are reconstructed from git history; versions between tagged commits are best-effort.
 
+## v0.9.3 - 2026-11-12
+
+Faculty units count only the hours a person teaches
+
+- **Fixed:** Faculty page: a person's units now count the hours they actually teach in a subject. Someone who has only the lecture or only the laboratory of a subject is no longer credited the whole subject (for example a single 3-hour laboratory block on a 3 lecture + 1 laboratory subject counts 3, not 6). Having both parts still counts the full subject, and never more.
+
 ## v0.9.2 - 2026-11-12
 
 Curriculum Trash takes its subjects along, and a clearer subject pool in the curriculum builder

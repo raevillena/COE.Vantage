@@ -64,3 +64,6 @@
 
 ## v0.9.2 (2026-11-12)
 - Release notes list: curriculum Trash cascade and the curriculum builder subject pool. NOT listed (experimental): one grade access code per student, public view tick. Migrations `20260630000000_grade_public_view`, `20260630000001_grade_public_view_off_for_new` (the k8s migrate job runs them). No new dependency. Details: `curriculum-and-subjects.md`, `grades-module.md`.
+
+## v0.9.3 (2026-11-12)
+- Release notes list: faculty units follow the hours taught (`getLoadedUnitsByFaculty`). NOT listed: grade component method `componentMethod` (experimental), Users page Units column (admin). No migration, no new dependency.

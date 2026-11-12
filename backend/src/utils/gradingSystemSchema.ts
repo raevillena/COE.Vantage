@@ -37,6 +37,8 @@ const gradingSystemV1ObjectSchema = z
         })
       )
       .default([]),
+    /** How the columns of one component combine: "points" adds the scores and the maximums (default), "average" averages each column's score/max. */
+    componentMethod: z.enum(["points", "average"]).optional(),
     /** Minimum final grade (0–100 inclusive) to mark `passed: true` in computed output. */
     passingGrade: z.number().min(0).max(100).optional(),
     /** Inclusive percent ranges → letter; first matching row wins (define non-overlapping ranges). */

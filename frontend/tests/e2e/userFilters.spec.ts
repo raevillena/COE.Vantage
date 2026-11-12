@@ -18,7 +18,7 @@ test.describe("admin users page filters", () => {
     const rows = page.locator("tbody tr");
     await expect(rows).toHaveCount(Math.min(total, 50)); // pages hold 50 rows
 
-    // Department: pick the first real department; every visible row must show it in the Department column (6th cell).
+    // Department: pick the first real department; every visible row must show it in the Department column (7th cell, after the tick box).
     const dept = page.getByLabel("Filter by department");
     const options = await dept.locator("option").allTextContents();
     const name = options.find((o) => o && !/^(All departments|No department)$/.test(o))!;
@@ -27,17 +27,17 @@ test.describe("admin users page filters", () => {
     expect(afterDept.shown).toBeGreaterThan(0);
     expect(afterDept.shown).toBeLessThanOrEqual(total);
     await expect(rows).toHaveCount(Math.min(afterDept.shown, 50));
-    for (const text of await rows.locator("td:nth-child(6)").allTextContents()) expect(text).toContain(name);
+    for (const text of await rows.locator("td:nth-child(7)").allTextContents()) expect(text).toContain(name);
 
     // Role on top of the department narrows further (or equal).
     const role = page.getByLabel("Filter by role");
     const roles = (await role.locator("option").allTextContents()).filter((o) => o !== "All roles");
     await role.selectOption({ label: roles[0] });
-    for (const text of await rows.locator("td:nth-child(3)").allTextContents()) expect(text.trim()).toBe(roles[0]);
+    for (const text of await rows.locator("td:nth-child(4)").allTextContents()) expect(text.trim()).toBe(roles[0]);
 
     // Max units
     await page.getByLabel("Filter by maximum units").selectOption("unset");
-    for (const text of await rows.locator("td:nth-child(7)").allTextContents()) expect(text.trim()).toMatch(/^(—|-|)$/);
+    for (const text of await rows.locator("td:nth-child(8)").allTextContents()) expect(text.trim()).toMatch(/^(—|-|[\d.]+\/—.*)$/);
 
     // Clear filters restores everything.
     await page.getByRole("button", { name: "Clear filters" }).click();

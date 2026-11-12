@@ -39,6 +39,8 @@ export function normalizeEquivalenceRemark(remarks: string | undefined): GradeEq
 
 export type GradingSystemV1 = {
   categories: GradingCategoryV1[];
+  /** How a component's columns combine: add the points (default) or average each column's score/max. */
+  componentMethod?: "points" | "average";
   /** Minimum final % (0–100) to mark passed in computed output. */
   passingGrade?: number;
   /** Inclusive ranges; first match wins — avoid overlaps. */
@@ -160,7 +162,7 @@ export function normalizeGradingSystemFromUnknown(raw: unknown): GradingSystemV1
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return { categories: [] };
   }
-  const root = parsed as { categories?: unknown; passingGrade?: unknown; gradeEquivalence?: unknown };
+  const root = parsed as { categories?: unknown; passingGrade?: unknown; gradeEquivalence?: unknown; componentMethod?: unknown };
 
   const categories = Array.isArray(root.categories)
     ? root.categories.map((cat, ci) => {
@@ -194,6 +196,7 @@ export function normalizeGradingSystemFromUnknown(raw: unknown): GradingSystemV1
 
   const eq = normalizeEquivalenceRows(root.gradeEquivalence);
   const out: GradingSystemV1 = { categories };
+  if (root.componentMethod === "average" || root.componentMethod === "points") out.componentMethod = root.componentMethod;
   if (passingGrade !== undefined) out.passingGrade = passingGrade;
   if (eq.length > 0) out.gradeEquivalence = eq;
   return out;

@@ -156,3 +156,7 @@ Built the first complete vertical slice of the migrated grade module under the e
 - Access emails: a student already emailed from another subject (same code, `emailSentAt`) is counted as "already sent" and skipped unless "resend"; sending marks all the student's records with that code as sent. The email text no longer names one subject.
 - New `GradeSubject.publicViewEnabled` (default false for new subjects; existing ones stay visible; migrations `20260630000000_grade_public_view`, `20260630000001_grade_public_view_off_for_new`), checkbox "Let students view this subject on the public grade page" in Grade settings > Passing grade & student access. Test `gradesOneCode.spec.ts`.
 
+## Component method: add points or average percentages (2026-11-12, uncommitted)
+- `gradingSystem.componentMethod`: `"points"` (default, nothing stored for older subjects) = a component's score = total earned / total max of its columns; `"average"` = each column's score / its OWN max first, then the average of those, so every column weighs the same whatever its max (like `=AVERAGE(L6/$L$5, M6/$M$5, ...)`). Category and final weighting are unchanged. Set per subject with the radio buttons above the weights in Grade settings, saved by "Save formula".
+- Mirrored in `computeFinal` (`gradeSubjectService.ts`) and `computeFinalGradeClient.ts`. Test `gradesAverage.spec.ts`.
+

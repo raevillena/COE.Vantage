@@ -125,7 +125,7 @@ export async function listFacultyLoads(query: ListFacultyLoadsQuery, callerRole?
   });
 }
 
-/** Credited units loaded per faculty for a term (lab units count 3x). A subject taught to the same class on several days counts once. */
+/** Credited units loaded per faculty for a term (lab units count 3x). Counts the hours the person actually has in a subject and class (so lecture only or laboratory only is credited alone), up to what the whole subject is worth. */
 export async function getLoadedUnitsByFaculty(
   academicYearId: string,
   semester: number,
@@ -138,16 +138,26 @@ export async function getLoadedUnitsByFaculty(
       facultyId: { not: null },
       ...(departmentId ? { faculty: { departmentId } } : {}),
     },
-    select: { facultyId: true, subjectId: true, studentClassId: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
+    select: { facultyId: true, subjectId: true, studentClassId: true, dayOfWeek: true, startTime: true, endTime: true, subject: { select: { units: true, isLab: true, lecUnits: true, labUnits: true } } },
   });
-  const seen = new Set<string>();
-  const totals: Record<string, number> = {};
+  // A person may teach only the lecture or only the laboratory of a subject, so the credit is the hours they actually have
+  // for that subject in that class (credit equals weekly contact hours), never more than the whole subject is worth.
+  const groups = new Map<string, { facultyId: string; credit: number; slots: Map<string, number> }>();
   for (const l of loads) {
     if (!l.facultyId) continue;
     const key = `${l.facultyId}|${l.subjectId}|${l.studentClassId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    totals[l.facultyId] = (totals[l.facultyId] ?? 0) + creditedLoadUnits(l.subject);
+    const group = groups.get(key) ?? { facultyId: l.facultyId, credit: creditedLoadUnits(l.subject), slots: new Map<string, number>() };
+    const [sh, sm] = l.startTime.split(":").map(Number);
+    const [eh, em] = l.endTime.split(":").map(Number);
+    const hours = (eh * 60 + em - (sh * 60 + sm)) / 60;
+    // the same time slot twice (co-instructor or split rows) is one slot; a block that ends before it starts counts as nothing
+    if (Number.isFinite(hours) && hours > 0) group.slots.set(`${l.dayOfWeek}|${l.startTime}|${l.endTime}`, hours);
+    groups.set(key, group);
+  }
+  const totals: Record<string, number> = {};
+  for (const g of groups.values()) {
+    const taught = [...g.slots.values()].reduce((sum, h) => sum + h, 0);
+    totals[g.facultyId] = (totals[g.facultyId] ?? 0) + Math.min(g.credit, taught);
   }
   return totals;
 }
